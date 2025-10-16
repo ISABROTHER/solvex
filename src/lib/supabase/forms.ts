@@ -11,25 +11,34 @@ export const submitCareerApplication = async (data: {
   appliedRoles: string[];
 }) => {
   try {
-    const position = data.appliedRoles[0];
+    const applications = [];
+    const errors = [];
 
-    const result = await submitJobApplication({
-      job_position_id: position,
-      full_name: `${data.firstName} ${data.lastName}`,
-      email: data.email,
-      phone: data.phone,
-      country_code: data.countryCode,
-      cover_letter: data.coverLetter,
-      portfolio_url: data.portfolioUrl,
-      linkedin_url: null,
-      status: 'pending'
-    });
+    for (const positionId of data.appliedRoles) {
+      const result = await submitJobApplication({
+        job_position_id: positionId,
+        full_name: `${data.firstName} ${data.lastName}`,
+        email: data.email,
+        phone: data.phone,
+        country_code: data.countryCode,
+        cover_letter: data.coverLetter,
+        portfolio_url: data.portfolioUrl || null,
+        linkedin_url: null,
+        status: 'pending'
+      });
 
-    if (result.error) {
-      return { data: null, success: false, error: result.error.message };
+      if (result.error) {
+        errors.push(result.error.message);
+      } else {
+        applications.push(result.data);
+      }
     }
 
-    return { data: result.data, success: true, error: null };
+    if (errors.length > 0) {
+      return { data: null, success: false, error: errors[0] };
+    }
+
+    return { data: applications, success: true, error: null };
   } catch (error) {
     return { data: null, success: false, error: error instanceof Error ? error.message : 'Failed to submit application' };
   }
