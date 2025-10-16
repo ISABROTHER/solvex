@@ -3,11 +3,18 @@ import React, { useMemo, useState, useEffect } from "react";
 import Card from "../components/Card";
 import { Search, SlidersHorizontal, X, Mail, Phone, Link as LinkIcon, Loader as Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from 'framer-motion';
-import { getAllJobApplications, updateJobApplicationStatus, createMember } from "../../../../lib/supabase/operations";
+import { getAllJobApplications, updateJobApplicationStatus, createMember, onJobApplicationsChange } from "../../../../lib/supabase/operations";
 import type { Database } from "../../../../lib/supabase/database.types";
 
-type Application = Database['public']['Tables']['career_applications']['Row'];
-type ApplicantStatus = Application['status'];
+type JobApplication = Database['public']['Tables']['job_applications']['Row'];
+type Application = JobApplication & {
+  job_positions?: {
+    title: string;
+    team_name: string;
+  } | null;
+  position?: string;
+};
+type ApplicantStatus = JobApplication['status'];
 
 const statusBadge = (s: ApplicantStatus) => ({
   pending: "bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200",
@@ -32,12 +39,25 @@ const ApplicationsTab: React.FC = () => {
       const { data, error: fetchError } = await getAllJobApplications();
       if (fetchError) {
         setError("Failed to fetch applications.");
+        console.error('Failed to fetch applications:', fetchError);
       } else if (data) {
-        setRows(data);
+        const mapped = data.map(app => ({
+          ...app,
+          position: app.job_positions?.title || 'N/A'
+        }));
+        setRows(mapped);
       }
       setLoading(false);
     };
     fetchApplications();
+
+    const subscription = onJobApplicationsChange(() => {
+      fetchApplications();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
   
 
@@ -57,25 +77,26 @@ const ApplicationsTab: React.FC = () => {
     setRows(prev => prev.map(r => (r.id === applicant.id ? { ...r, status: newStatus } : r)));
     if (detail?.id === applicant.id) setDetail(null);
 
-    // If 'accepted', always create a new member record
+    // If 'accepted', create a new member record if needed
     if (newStatus === 'accepted') {
       try {
+        const positionTitle = applicant.job_positions?.title || applicant.position || 'Team Member';
         const { error: createError } = await createMember({
           full_name: applicant.full_name,
           email: applicant.email,
           phone: applicant.phone,
-          role_title: applicant.position,
+          role_title: positionTitle,
           status: 'Active',
           application_id: applicant.id,
         });
 
-        if (createError) throw createError;
-
-        console.log("Member Created", `${applicant.full_name} has been added to the Teams tab.`);
+        if (createError) {
+          console.error('Failed to create member:', createError);
+        } else {
+          console.log("Member Created", `${applicant.full_name} has been added to the Teams tab.`);
+        }
       } catch (memberError) {
-        setError("Failed to create new team member.");
-        setRows(originalRows);
-        return;
+        console.error('Member creation error:', memberError);
       }
     }
 
