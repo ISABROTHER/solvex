@@ -3,7 +3,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import Card from "../components/Card";
 import { Search, SlidersHorizontal, X, Mail, Phone, Link as LinkIcon, Loader as Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from 'framer-motion';
-import { getCareerApplications, updateCareerApplicationStatus, createMember } from "../../../../lib/supabase/operations";
+import { getAllJobApplications, updateJobApplicationStatus, createMember } from "../../../../lib/supabase/operations";
 import type { Database } from "../../../../lib/supabase/database.types";
 
 type Application = Database['public']['Tables']['career_applications']['Row'];
@@ -29,7 +29,7 @@ const ApplicationsTab: React.FC = () => {
     const fetchApplications = async () => {
       setLoading(true);
       setError(null);
-      const { data, error: fetchError } = await getCareerApplications();
+      const { data, error: fetchError } = await getAllJobApplications();
       if (fetchError) {
         setError("Failed to fetch applications.");
       } else if (data) {
@@ -80,7 +80,7 @@ const ApplicationsTab: React.FC = () => {
     }
 
     // Finally, update the application status itself
-    const { error: updateError } = await updateCareerApplicationStatus(applicant.id, newStatus);
+    const { error: updateError } = await updateJobApplicationStatus(applicant.id, newStatus);
     if (updateError) {
       setError("Failed to update application status.");
       setRows(originalRows); // Revert UI

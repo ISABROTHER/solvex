@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ApplicationFormModal from '../components/forms/ApplicationFormModal';
-import { careerTeamsData, type CareerTeam, type CareerRole } from '../data/forms/career-roles.data';
+import { getOpenJobPositions, type JobPosition } from '../lib/supabase/operations';
+
+interface CareerTeam {
+  title: string;
+  roles: JobPosition[];
+  imageUrl: string;
+}
 
 const CareerPod: React.FC<{ team: CareerTeam, onClick: (team: CareerTeam) => void, isTouchDevice: boolean }> = ({ team, onClick, isTouchDevice }) => {
   const cardVariants = {
@@ -40,9 +46,38 @@ const CareersPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [anchorId, setAnchorId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [careerTeamsData, setCareerTeamsData] = useState<CareerTeam[]>([]);
 
   useEffect(() => {
     setIsTouchDevice('ontouchstart' in window);
+  }, []);
+
+  useEffect(() => {
+    const fetchJobs = async () => {
+      const { data, error } = await getOpenJobPositions();
+      if (!error && data && data.length > 0) {
+        const grouped = new Map<string, JobPosition[]>();
+        data.forEach((position: JobPosition) => {
+          const teamName = position.team_name;
+          if (!grouped.has(teamName)) {
+            grouped.set(teamName, []);
+          }
+          grouped.get(teamName)!.push(position);
+        });
+
+        const teams: CareerTeam[] = Array.from(grouped.entries()).map(([teamName, positions]) => ({
+          title: teamName,
+          roles: positions,
+          imageUrl: positions[0]?.team_image_url || 'https://images.pexels.com/photos/7490890/pexels-photo-7490890.jpeg'
+        }));
+
+        setCareerTeamsData(teams);
+      }
+      setLoading(false);
+    };
+
+    fetchJobs();
   }, []);
 
   const handleApplyClick = (team: CareerTeam) => {
@@ -51,8 +86,16 @@ const CareersPage: React.FC = () => {
     setTimeout(() => setIsModalOpen(true), 50);
   };
 
-  const allAvailableRoles = useMemo(() => careerTeamsData.flatMap(team => team.roles), []);
+  const allAvailableRoles = useMemo(() => careerTeamsData.flatMap(team => team.roles), [careerTeamsData]);
   const rolesForModal = selectedTeam?.roles || allAvailableRoles;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-10 h-10 animate-spin text-[#FF5722]" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -95,7 +138,7 @@ const CareersPage: React.FC = () => {
                   <motion.ul className="space-y-6" variants={{ open: { transition: { staggerChildren: 0.07 } } }} initial="closed" animate="open" exit="closed">
                     {selectedTeam.roles.map((role, index) => (
                       <motion.li key={index} variants={{ open: { opacity: 1, y: 0 }, closed: { opacity: 0, y: 10 } }}>
-                        <p className="font-semibold text-lg text-gray-900">{role.name}</p>
+                        <p className="font-semibold text-lg text-gray-900">{role.title}</p>
                         <p className="text-base text-gray-600 mt-1">{role.description}</p>
                       </motion.li>
                     ))}

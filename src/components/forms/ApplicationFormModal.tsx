@@ -7,14 +7,14 @@ import CountryDropdown from './CountryDropdown';
 import { submitCareerApplication } from '../../lib/supabase/forms';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// Types moved here for self-containment, as original file is removed
-interface CareerRole { name: string; description: string; }
+import type { JobPosition } from '../../lib/supabase/operations';
+
 interface FormValidationErrors { [key: string]: string; }
 
 interface ApplicationFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  availableRoles: CareerRole[];
+  availableRoles: JobPosition[];
   anchorId?: string | null;
 }
 
@@ -124,11 +124,14 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ isOpen, onC
                     <label htmlFor="roles" className="block text-sm font-medium text-gray-700 mb-1">Role(s) you are applying for*</label>
                     <Select
                       isMulti id="roles" name="roles"
-                      options={availableRoles.map(r => ({ value: r.name, label: r.name }))}
+                      options={availableRoles.map(r => ({ value: r.id, label: r.title }))}
                       styles={{...customSelectStyles, control: (base, state) => ({ ...customSelectStyles.control(base, state), borderColor: errors.roles ? '#EF4444' : '#D1D5DB' })}}
                       placeholder="Select one or more roles..."
                       onChange={(options) => setSelectedRoles((options || []).map(o => o.value))}
-                      value={selectedRoles.map(r => ({ value: r, label: r }))}
+                      value={selectedRoles.map(r => {
+                        const role = availableRoles.find(ar => ar.id === r);
+                        return { value: r, label: role?.title || r };
+                      })}
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

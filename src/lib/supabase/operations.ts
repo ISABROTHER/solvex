@@ -194,11 +194,159 @@ export const updateServiceRequestStatus = async (id: string, newStatus: ServiceR
   return supabase.from('service_requests').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
 };
 
-export const getJobTeamsAndPositions = async (...args: any[]) => ({ data: { teams: [], positions: [] }, error: null });
-export const updateJobTeam = async (...args: any[]) => ({ data: null, error: null });
-export const updateJobPosition = async (...args: any[]) => ({ data: null, error: null });
-export const getCareerApplications = async (...args: any[]) => ({ data: [], error: null });
-export const updateCareerApplicationStatus = async (...args: any[]) => ({ data: null, error: null });
+// --- JOB POSITIONS AND APPLICATIONS OPERATIONS ---
+
+export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
+export type JobPositionInsert = Database['public']['Tables']['job_positions']['Insert'];
+export type JobPositionUpdate = Database['public']['Tables']['job_positions']['Update'];
+export type JobApplication = Database['public']['Tables']['job_applications']['Row'];
+export type JobApplicationInsert = Database['public']['Tables']['job_applications']['Insert'];
+export type JobApplicationUpdate = Database['public']['Tables']['job_applications']['Update'];
+
+/**
+ * Fetches all open job positions (for public careers page)
+ */
+export const getOpenJobPositions = async () => {
+  const { data, error } = await supabase
+    .from('job_positions')
+    .select('*')
+    .eq('is_open', true)
+    .order('team_name', { ascending: true })
+    .order('title', { ascending: true });
+
+  return { data: data || [], error };
+};
+
+/**
+ * Fetches all job positions (for admin dashboard)
+ */
+export const getAllJobPositions = async () => {
+  const { data, error } = await supabase
+    .from('job_positions')
+    .select('*')
+    .order('team_name', { ascending: true })
+    .order('title', { ascending: true });
+
+  return { data: data || [], error };
+};
+
+/**
+ * Creates a new job position
+ */
+export const createJobPosition = async (position: JobPositionInsert) => {
+  return supabase
+    .from('job_positions')
+    .insert(position)
+    .select()
+    .single();
+};
+
+/**
+ * Updates a job position
+ */
+export const updateJobPosition = async (id: string, updates: JobPositionUpdate) => {
+  return supabase
+    .from('job_positions')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+};
+
+/**
+ * Deletes a job position
+ */
+export const deleteJobPosition = async (id: string) => {
+  return supabase
+    .from('job_positions')
+    .delete()
+    .eq('id', id);
+};
+
+/**
+ * Submits a job application
+ */
+export const submitJobApplication = async (application: JobApplicationInsert) => {
+  return supabase
+    .from('job_applications')
+    .insert(application)
+    .select()
+    .single();
+};
+
+/**
+ * Fetches all job applications (for admin dashboard)
+ */
+export const getAllJobApplications = async () => {
+  const { data, error } = await supabase
+    .from('job_applications')
+    .select(`
+      *,
+      job_positions (
+        title,
+        team_name
+      )
+    `)
+    .order('created_at', { ascending: false });
+
+  return { data: data || [], error };
+};
+
+/**
+ * Fetches applications for a specific job position
+ */
+export const getApplicationsByPosition = async (positionId: string) => {
+  const { data, error } = await supabase
+    .from('job_applications')
+    .select('*')
+    .eq('job_position_id', positionId)
+    .order('created_at', { ascending: false });
+
+  return { data: data || [], error };
+};
+
+/**
+ * Updates a job application status
+ */
+export const updateJobApplicationStatus = async (id: string, status: string) => {
+  return supabase
+    .from('job_applications')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+};
+
+/**
+ * Deletes a job application
+ */
+export const deleteJobApplication = async (id: string) => {
+  return supabase
+    .from('job_applications')
+    .delete()
+    .eq('id', id);
+};
+
+/**
+ * Real-time subscription for job positions changes
+ */
+export const onJobPositionsChange = (callback: () => void) => {
+  return supabase
+    .channel('public:job_positions')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'job_positions' }, callback)
+    .subscribe();
+};
+
+/**
+ * Real-time subscription for job applications changes
+ */
+export const onJobApplicationsChange = (callback: () => void) => {
+  return supabase
+    .channel('public:job_applications')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'job_applications' }, callback)
+    .subscribe();
+};
+
 export const createMember = async (...args: any[]) => ({ data: null, error: null });
 export const getTeams = async () => ({ data: [], error: null });
 export const getMembers = async () => ({ data: [], error: null });
