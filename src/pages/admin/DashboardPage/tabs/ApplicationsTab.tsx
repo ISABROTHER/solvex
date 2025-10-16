@@ -27,10 +27,12 @@ const statusBadge = (s: ApplicantStatus) => ({
 const ApplicationsTab: React.FC = () => {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<ApplicantStatus | "All">("All");
+  const [jobTitle, setJobTitle] = useState<string>("All");
   const [rows, setRows] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Application | null>(null);
+  const [jobTitles, setJobTitles] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchApplications = async () => {
@@ -46,6 +48,10 @@ const ApplicationsTab: React.FC = () => {
           position: app.job_positions?.title || 'N/A'
         }));
         setRows(mapped);
+
+        // Extract unique job titles for filtering
+        const uniqueTitles = Array.from(new Set(mapped.map(app => app.position).filter(Boolean)));
+        setJobTitles(uniqueTitles.sort());
       }
       setLoading(false);
     };
@@ -66,9 +72,23 @@ const ApplicationsTab: React.FC = () => {
       const searchString = q.toLowerCase();
       const matchesQ = !q || [r.full_name, r.email, r.position].some(field => field?.toLowerCase().includes(searchString));
       const matchesStatus = status === "All" || r.status === status;
-      return matchesQ && matchesStatus;
+      const matchesJobTitle = jobTitle === "All" || r.position === jobTitle;
+      return matchesQ && matchesStatus && matchesJobTitle;
     });
-  }, [rows, q, status]);
+  }, [rows, q, status, jobTitle]);
+
+  // Group applications by job title for display
+  const groupedByJobTitle = useMemo(() => {
+    const groups: { [key: string]: Application[] } = {};
+    filtered.forEach(app => {
+      const title = app.position || 'N/A';
+      if (!groups[title]) {
+        groups[title] = [];
+      }
+      groups[title].push(app);
+    });
+    return groups;
+  }, [filtered]);
 
   const handleUpdateStatus = async (applicant: Application, newStatus: ApplicantStatus) => {
     const originalRows = [...rows];
@@ -111,10 +131,19 @@ const ApplicationsTab: React.FC = () => {
   return (
     <div className="space-y-6">
       <Card title="Job Applications" right={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search..." className="h-9 w-40 sm:w-56 rounded-lg border border-gray-200 bg-gray-50 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300" />
+          </div>
+          <div className="relative">
+            <SlidersHorizontal className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <select value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} className="h-9 appearance-none rounded-lg border border-gray-200 bg-gray-50 pl-9 pr-7 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300">
+              <option value="All">All Positions</option>
+              {jobTitles.map(title => (
+                <option key={title} value={title}>{title}</option>
+              ))}
+            </select>
           </div>
           <div className="relative">
             <SlidersHorizontal className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -132,36 +161,46 @@ const ApplicationsTab: React.FC = () => {
         {loading && <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 text-gray-400 animate-spin" /></div>}
         {error && <div className="text-center py-20 text-red-600">{error}</div>}
         {!loading && !error && (
-          <div className="overflow-x-auto -mx-6">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50"><tr className="text-left text-gray-600">
-                  <th className="px-6 py-3 font-semibold">Name</th>
-                  <th className="px-6 py-3 font-semibold">Contact</th>
-                  <th className="px-6 py-3 font-semibold">Role(s) Applied For</th>
-                  <th className="px-6 py-3 font-semibold">Applied</th>
-                  <th className="px-6 py-3 font-semibold text-center">Status</th>
-                  <th className="px-6 py-3 font-semibold text-right">Actions</th>
-              </tr></thead>
-              <tbody className="divide-y divide-gray-200">
-                {filtered.map((r) => (
-                  <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-gray-800">{r.full_name}</td>
-                    <td className="px-6 py-4 text-gray-600">{r.email}</td>
-                    <td className="px-6 py-4 text-gray-600">{r.position}</td>
-                    <td className="px-6 py-4 text-gray-600">{new Date(r.created_at).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 text-center capitalize">
-                      <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(r.status)}`}>{r.status}</span>
-                    </td>
-                    <td className="px-6 py-4"><div className="flex justify-end">
-                      <button className="rounded-md border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 transition-colors" onClick={() => setDetail(r)}>View</button>
-                    </div></td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
-                  <tr><td className="px-6 py-10 text-center text-gray-500" colSpan={6}>No applications match your filters.</td></tr>
-                )}
-              </tbody>
-            </table>
+          <div className="space-y-6">
+            {Object.entries(groupedByJobTitle).map(([title, applications]) => (
+              <div key={title} className="border-b pb-6 last:border-b-0">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                    {applications.length} {applications.length === 1 ? 'Application' : 'Applications'}
+                  </span>
+                </div>
+                <div className="overflow-x-auto -mx-6">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50"><tr className="text-left text-gray-600">
+                        <th className="px-6 py-3 font-semibold">Name</th>
+                        <th className="px-6 py-3 font-semibold">Contact</th>
+                        <th className="px-6 py-3 font-semibold">Applied</th>
+                        <th className="px-6 py-3 font-semibold text-center">Status</th>
+                        <th className="px-6 py-3 font-semibold text-right">Actions</th>
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {applications.map((r) => (
+                        <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-gray-800">{r.full_name}</td>
+                          <td className="px-6 py-4 text-gray-600">{r.email}</td>
+                          <td className="px-6 py-4 text-gray-600">{new Date(r.created_at).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-center capitalize">
+                            <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(r.status)}`}>{r.status}</span>
+                          </td>
+                          <td className="px-6 py-4"><div className="flex justify-end">
+                            <button className="rounded-md border bg-white px-3 py-1.5 font-medium hover:bg-gray-100 transition-colors" onClick={() => setDetail(r)}>View</button>
+                          </div></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div className="text-center py-20 text-gray-500">No applications match your filters.</div>
+            )}
           </div>
         )}
       </Card>
