@@ -73,7 +73,7 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ isOpen, onC
     setError('');
     
     try {
-      const { error: submitError } = await submitCareerApplication({
+      const response = await submitCareerApplication({
         firstName: formData.firstName,
         lastName: formData.surname,
         email: formData.email,
@@ -84,7 +84,9 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ isOpen, onC
         appliedRoles: selectedRoles,
       });
 
-      if (submitError) throw submitError;
+      console.log('Application submission response:', response);
+
+      if (response.error) throw new Error(response.error);
       
       setSubmittedData({ firstName: formData.firstName, appliedRoles: selectedRoles });
       setShowConfirmation(true);
