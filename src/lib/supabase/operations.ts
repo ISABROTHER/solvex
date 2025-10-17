@@ -312,6 +312,10 @@ export const restoreService = async (id: string) => {
  * Rental Equipment Operations
  */
 
+export type RentalGear = Database['public']['Tables']['rental_gear']['Row'];
+export type RentalGearInsert = Database['public']['Tables']['rental_gear']['Insert'];
+export type RentalGearUpdate = Database['public']['Tables']['rental_gear']['Update'];
+
 export type RentalItemDisplay = {
   id: string;
   title: string;
