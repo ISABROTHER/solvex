@@ -31,10 +31,11 @@ export type ServiceUpdate = Database['public']['Tables']['services']['Update'];
  * Fetches all teams for internal management.
  */
 export const getTeams = async () => {
-  // Returns the full response object: { data, error, count, status, statusText }
   return supabase
     .from('teams')
-    .select('*') 
+    .select('*')
+    .eq('is_deleted', false)
+    .order('display_order', { ascending: true })
     .order('name', { ascending: true });
 };
 
