@@ -18,8 +18,8 @@ export interface Database {
           price_per_day: number
           is_available: boolean
           image_url: string | null
-          video_url: string | null
-          features: string[] | null
+          video_url: string | null // ADDED
+          features: Json | null // ADDED
           created_at: string
           updated_at: string
         }
@@ -31,8 +31,8 @@ export interface Database {
           price_per_day: number
           is_available?: boolean
           image_url?: string | null
-          video_url?: string | null
-          features?: string[] | null
+          video_url?: string | null // ADDED
+          features?: Json | null // ADDED
           created_at?: string
           updated_at?: string
         }
@@ -44,8 +44,8 @@ export interface Database {
           price_per_day?: number
           is_available?: boolean
           image_url?: string | null
-          video_url?: string | null
-          features?: string[] | null
+          video_url?: string | null // ADDED
+          features?: Json | null // ADDED
           created_at?: string
           updated_at?: string
         }
@@ -60,8 +60,8 @@ export interface Database {
           description: string | null
           sub_services: string[] | null
           outcome: string | null
-          status: 'draft' | 'published'
-          is_deleted: boolean
+          status: string | null
+          is_deleted: boolean | null
           deleted_at: string | null
           image_fit: string | null
           image_position: string | null
@@ -78,8 +78,8 @@ export interface Database {
           description?: string | null
           sub_services?: string[] | null
           outcome?: string | null
-          status?: 'draft' | 'published'
-          is_deleted?: boolean
+          status?: string | null
+          is_deleted?: boolean | null
           deleted_at?: string | null
           image_fit?: string | null
           image_position?: string | null
@@ -96,8 +96,8 @@ export interface Database {
           description?: string | null
           sub_services?: string[] | null
           outcome?: string | null
-          status?: 'draft' | 'published'
-          is_deleted?: boolean
+          status?: string | null
+          is_deleted?: boolean | null
           deleted_at?: string | null
           image_fit?: string | null
           image_position?: string | null
@@ -106,31 +106,85 @@ export interface Database {
           updated_at?: string
         }
       }
-      clients: {
+      // NOTE: rental_equipment has been superseded by rental_gear
+      rental_equipment: {
         Row: {
           id: string
-          full_name: string | null
-          email: string | null
-          tier: string | null
-          is_active: boolean
+          title: string
+          subtitle: string | null
+          category: string | null
+          price: number
+          images: string[] | null
+          features: string[] | null
+          video_url: string | null
+          status: string
           created_at: string
           updated_at: string
         }
         Insert: {
-          id: string
-          full_name?: string | null
-          email?: string | null
-          tier?: string | null
-          is_active?: boolean
+          id?: string
+          title: string
+          subtitle?: string | null
+          category?: string | null
+          price: number
+          images?: string[] | null
+          features?: string[] | null
+          video_url?: string | null
+          status?: string
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
+          title?: string
+          subtitle?: string | null
+          category?: string | null
+          price?: number
+          images?: string[] | null
+          features?: string[] | null
+          video_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      clients: {
+        Row: {
+          id: string
+          user_id: string | null
+          company: string | null
+          industry: string | null
+          is_active: boolean | null
+          full_name: string | null
+          email: string | null
+          phone: string | null
+          tier: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          user_id?: string | null
+          company?: string | null
+          industry?: string | null
+          is_active?: boolean | null
           full_name?: string | null
           email?: string | null
+          phone?: string | null
           tier?: string | null
-          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          company?: string | null
+          industry?: string | null
+          is_active?: boolean | null
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          tier?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -138,28 +192,237 @@ export interface Database {
       service_requests: {
         Row: {
           id: string
-          client_id: string
-          service_type: string | null
-          status: string
-          requested_at: string
+          client_id: string | null
+          type: string
+          title: string
+          description: string | null
+          status: string | null
+          priority: string | null
+          service_key: string | null
+          project_title: string | null
+          brief: string | null
+          attachments: Json
+          requested_at: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          client_id: string
-          service_type?: string | null
-          status?: string
-          requested_at?: string
+          client_id?: string | null
+          type: string
+          title: string
+          description?: string | null
+          status?: string | null
+          priority?: string | null
+          service_key?: string | null
+          project_title?: string | null
+          brief?: string | null
+          attachments?: Json
+          requested_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          client_id?: string
-          service_type?: string | null
-          status?: string
-          requested_at?: string
+          client_id?: string | null
+          type?: string
+          title?: string
+          description?: string | null
+          status?: string | null
+          priority?: string | null
+          service_key?: string | null
+          project_title?: string | null
+          brief?: string | null
+          attachments?: Json
+          requested_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      career_applications: {
+        Row: {
+          id: string
+          full_name: string
+          email: string
+          phone: string | null
+          position: string
+          experience_years: number | null
+          portfolio_url: string | null
+          cover_letter: string | null
+          resume_url: string | null
+          status: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          full_name: string
+          email: string
+          phone?: string | null
+          position: string
+          experience_years?: number | null
+          portfolio_url?: string | null
+          cover_letter?: string | null
+          resume_url?: string | null
+          status?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          full_name?: string
+          email?: string
+          phone?: string | null
+          position?: string
+          experience_years?: number | null
+          portfolio_url?: string | null
+          cover_letter?: string | null
+          resume_url?: string | null
+          status?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      teams: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          team_name: string | null
+          code: string | null
+          lead_member_id: string | null
+          email_alias: string | null
+          is_active: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          team_name?: string | null
+          code?: string | null
+          lead_member_id?: string | null
+          email_alias?: string | null
+          is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          team_name?: string | null
+          code?: string | null
+          lead_member_id?: string | null
+          email_alias?: string | null
+          is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      members: {
+        Row: {
+          id: string
+          team_id: string | null
+          profile_id: string | null
+          role: string | null
+          full_name: string | null
+          email: string | null
+          phone: string | null
+          role_title: string | null
+          status: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          team_id?: string | null
+          profile_id?: string | null
+          role?: string | null
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          role_title?: string | null
+          status?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          team_id?: string | null
+          profile_id?: string | null
+          role?: string | null
+          full_name?: string | null
+          email?: string | null
+          phone?: string | null
+          role_title?: string | null
+          status?: string | null
+          created_at?: string
+        }
+      }
+      rentals: {
+        Row: {
+          id: string
+          name: string
+          category: string
+          description: string | null
+          price: number
+          duration: string | null
+          image: string | null
+          specs: Json
+          is_available: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          category: string
+          description?: string | null
+          price: number
+          duration?: string | null
+          image?: string | null
+          specs?: Json
+          is_available?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          category?: string
+          description?: string | null
+          price?: number
+          duration?: string | null
+          image?: string | null
+          specs?: Json
+          is_available?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      // === NEWLY ADDED TABLES ===
+      job_teams: {
+        Row: {
+          id: string
+          name: string
+          image_url: string | null
+          is_active: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          image_url?: string | null
+          is_active?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          image_url?: string | null
+          is_active?: boolean | null
           created_at?: string
           updated_at?: string
         }
@@ -167,94 +430,32 @@ export interface Database {
       job_positions: {
         Row: {
           id: string
-          title: string
+          team_id: string | null
+          name: string
           description: string | null
-          team_name: string | null
-          team_image_url: string | null
           is_open: boolean | null
-          status: string | null
-          requirements: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          title: string
+          team_id?: string | null
+          name: string
           description?: string | null
-          team_name?: string | null
-          team_image_url?: string | null
           is_open?: boolean | null
-          status?: string | null
-          requirements?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          title?: string
+          team_id?: string | null
+          name?: string
           description?: string | null
-          team_name?: string | null
-          team_image_url?: string | null
           is_open?: boolean | null
-          status?: string | null
-          requirements?: string | null
           created_at?: string
           updated_at?: string
         }
       }
-      job_applications: {
-        Row: {
-          id: string
-          job_position_id: string | null
-          full_name: string
-          email: string
-          phone: string
-          country_code: string
-          cover_letter: string | null
-          linkedin_url: string | null
-          portfolio_url: string | null
-          status: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          job_position_id?: string | null
-          full_name: string
-          email: string
-          phone: string
-          country_code: string
-          cover_letter?: string | null
-          linkedin_url?: string | null
-          portfolio_url?: string | null
-          status?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          job_position_id?: string | null
-          full_name?: string
-          email?: string
-          phone?: string
-          country_code?: string
-          cover_letter?: string | null
-          linkedin_url?: string | null
-          portfolio_url?: string | null
-          status?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      [_ in never]: never
-    }
-    Enums: {
-      [_ in never]: never
     }
   }
 }
