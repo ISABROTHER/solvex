@@ -97,54 +97,41 @@ const SettingsTab: React.FC = () => {
         { name: "Content & Production Team", image_url: "https://images.pexels.com/photos/12249084/pexels-photo-12249084.jpeg" }
       ];
 
-      // 1. Upsert Teams (ensures unique IDs are created/returned)
-      const { data: teams, error: teamsError } = await supabase
-        .from('job_teams')
-        .upsert(jobTeamsData, { onConflict: 'name' }) 
-        .select('id, name');
+      // 1. Upsert Teams (using teams table)
+      const { error: teamsError } = await supabase
+        .from('teams')
+        .upsert(jobTeamsData.map(t => ({ name: t.name, image_url: t.image_url, display_order: 0 })), { onConflict: 'name' });
 
       if (teamsError) throw teamsError;
-      if (!teams) throw new Error("Failed to retrieve upserted teams.");
-
-      const teamMap = new Map(teams.map(t => [t.name, t.id]));
       
       // 2. Define Positions with their corresponding Team ID
       const positionsData = [
           // Strategy & Planning Team
-          { name: "Brand Strategist", description: "Lead strategic initiatives and provide expert consultation to drive business growth and innovation.", team_name: "Strategy & Planning Team" },
-          { name: "Advertising Specialist", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team" },
-          { name: "Product Innovator", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team" },
-          
+          { title: "Brand Strategist", description: "Lead strategic initiatives and provide expert consultation to drive business growth and innovation.", team_name: "Strategy & Planning Team", status: "open" },
+          { title: "Advertising Specialist", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team", status: "open" },
+          { title: "Product Innovator", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team", status: "open" },
+
           // Technology Team
-          { name: "Software Developer/Engineer", description: "Build and maintain web applications using modern technologies and best practices.", team_name: "Technology and Innovation Team" },
-          { name: "Cloud Architect/DevOps Engineer", description: "Create intuitive and engaging user experiences through thoughtful design and user research.", team_name: "Technology and Innovation Team" },
-          { name: "Artificial Intelligence Specialist", description: "Focus on exploring, prototyping, and integrating cutting-edge technologies relevant to their clients' needs.", team_name: "Technology and Innovation Team" },
-          
+          { title: "Software Developer/Engineer", description: "Build and maintain web applications using modern technologies and best practices.", team_name: "Technology and Innovation Team", status: "open" },
+          { title: "Cloud Architect/DevOps Engineer", description: "Create intuitive and engaging user experiences through thoughtful design and user research.", team_name: "Technology and Innovation Team", status: "open" },
+          { title: "Artificial Intelligence Specialist", description: "Focus on exploring, prototyping, and integrating cutting-edge technologies relevant to their clients' needs.", team_name: "Technology and Innovation Team", status: "open" },
+
           // Marketing Team
-          { name: "Digital Marketer", description: "Drive digital marketing campaigns and strategies to increase brand awareness and customer acquisition.", team_name: "Marketing Team" },
-          { name: "Influencer / Brand Ambassador", description: "Builds visibility for clients by creating content that amplifies clients' brand campaigns and engages target audiences.", team_name: "Marketing Team" },
-          { name: "Content Creator", description: "Produce engaging content across various platforms to connect with our audience and tell our story.", team_name: "Marketing Team" },
-          
+          { title: "Digital Marketer", description: "Drive digital marketing campaigns and strategies to increase brand awareness and customer acquisition.", team_name: "Marketing Team", status: "open" },
+          { title: "Influencer / Brand Ambassador", description: "Builds visibility for clients by creating content that amplifies clients' brand campaigns and engages target audiences.", team_name: "Marketing Team", status: "open" },
+          { title: "Content Creator", description: "Produce engaging content across various platforms to connect with our audience and tell our story.", team_name: "Marketing Team", status: "open" },
+
           // Content & Production Team
-          { name: "Video Editor / Videographer", description: "Produces, edits and enhances video content to deliver polished, high-impact campaigns.", team_name: "Content & Production Team" },
-          { name: "Photographer", description: "Product, lifestyle, and brand photography.", team_name: "Content & Production Team" },
-          { name: "Graphic Designer", description: "Develop visual concepts and designs that communicate ideas and inspire audiences.", team_name: "Content & Production Team" },
-          { name: "Motion Graphics Designer", description: "Produces animations and visuals for ads, social media and brand storytelling.", team_name: "Content & Production Team" }
+          { title: "Video Editor / Videographer", description: "Produces, edits and enhances video content to deliver polished, high-impact campaigns.", team_name: "Content & Production Team", status: "open" },
+          { title: "Photographer", description: "Product, lifestyle, and brand photography.", team_name: "Content & Production Team", status: "open" },
+          { title: "Graphic Designer", description: "Develop visual concepts and designs that communicate ideas and inspire audiences.", team_name: "Content & Production Team", status: "open" },
+          { title: "Motion Graphics Designer", description: "Produces animations and visuals for ads, social media and brand storytelling.", team_name: "Content & Production Team", status: "open" }
       ];
 
-      // 3. Map positions to their IDs and prepare for Upsert
-      const positionsForUpsert = positionsData
-        .map(p => ({
-          team_id: teamMap.get(p.team_name),
-          name: p.name,
-          description: p.description
-        }))
-        .filter(p => p.team_id);
-
+      // 3. Upsert Positions
       const { error: positionsError } = await supabase
           .from('job_positions')
-          // FIX: The ON CONFLICT now explicitly matches the UNIQUE constraint added via SQL: (team_id, name)
-          .upsert(positionsForUpsert, { onConflict: 'team_id, name', ignoreDuplicates: false }); 
+          .upsert(positionsData, { onConflict: 'team_name, title' }); 
       
       if (positionsError) throw positionsError;
       // --- END TEAM & JOB POSITIONS SEEDING ---
