@@ -23,8 +23,11 @@ const EditEquipmentModal = ({ isOpen, onClose, equipment, onSave }) => {
   }, [equipment]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
   };
 
   const handleSave = () => {
@@ -50,6 +53,10 @@ const EditEquipmentModal = ({ isOpen, onClose, equipment, onSave }) => {
           <div><label className="font-medium">Price Per Day (GHS)</label><input type="number" name="price_per_day" value={formData.price_per_day || 0} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" /></div>
           <div><label className="font-medium">Image URL</label><input type="text" name="image_url" value={formData.image_url || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" /></div>
           <div><label className="font-medium">Video URL</label><input type="text" name="video_url" value={formData.video_url || ''} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md" /></div>
+          <div className="flex items-center gap-2">
+            <input type="checkbox" id="is_available" name="is_available" checked={formData.is_available || false} onChange={handleChange} className="w-4 h-4 text-blue-600 rounded" />
+            <label htmlFor="is_available" className="font-medium">Available for Rent</label>
+          </div>
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="px-4 py-2 font-semibold text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>

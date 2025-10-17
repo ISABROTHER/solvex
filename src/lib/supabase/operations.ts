@@ -126,6 +126,18 @@ export const restoreJobPosition = async (id: string) => {
 /**
  * Teams Operations
  */
+export type Team = {
+  id: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  display_order: number;
+  is_deleted: boolean;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export const getAllTeams = async () => {
   return supabase
     .from('teams')
