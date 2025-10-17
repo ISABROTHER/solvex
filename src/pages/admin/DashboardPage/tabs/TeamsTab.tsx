@@ -11,7 +11,6 @@ import {
   onJobPositionsChange,
   onJobApplicationsChange,
   type JobPosition,
-  type JobApplication,
   type JobPositionInsert
 } from "../../../../lib/supabase/operations";
 import { motion, AnimatePresence } from "framer-motion";
@@ -124,6 +123,11 @@ const TeamsTab: React.FC = () => {
       }
       
       if (result.error) throw result.error;
+
+      // NEW CHECK: If updating and no data is returned, the ID was invalid or deleted
+      if (isUpdating && (!result.data || result.data.length === 0)) {
+        throw new Error("Job position not found or unable to update.");
+      }
 
       // Success feedback
       addToast({ type: 'success', title: `${action} Successful`, message: `${newPosition.title} has been saved.` });
