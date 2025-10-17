@@ -29,6 +29,7 @@ export const getOpenJobPositions = async () => {
     .from('job_positions')
     .select('*')
     .eq('status', 'open')
+    .eq('is_deleted', false)
     .order('team_name', { ascending: true })
     .order('title', { ascending: true });
 };
@@ -71,6 +72,40 @@ export const deleteJobPosition = async (id: string) => {
     .from('job_positions')
     .delete()
     .eq('id', id);
+};
+
+export const softDeleteJobPosition = async (id: string) => {
+  const result = await supabase
+    .from('job_positions')
+    .update({
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as any)
+    .eq('id', id)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
+};
+
+export const restoreJobPosition = async (id: string) => {
+  const result = await supabase
+    .from('job_positions')
+    .update({
+      is_deleted: false,
+      deleted_at: null,
+      updated_at: new Date().toISOString()
+    } as any)
+    .eq('id', id)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 /**

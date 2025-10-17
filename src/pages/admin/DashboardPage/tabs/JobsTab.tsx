@@ -1,13 +1,15 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import Card from '../components/Card';
-import { PlusCircle, Edit2, Trash2, Loader2, X, Save, Users } from 'lucide-react';
+import { PlusCircle, Edit2, Trash2, Loader2, X, Save, Users, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   getAllJobPositions,
   createJobPosition,
   updateJobPosition,
   deleteJobPosition,
+  softDeleteJobPosition,
+  restoreJobPosition,
   type JobPosition,
   type JobPositionInsert
 } from '../../../../lib/supabase/operations';
@@ -32,6 +34,7 @@ const JobsTab: React.FC = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   const [formData, setFormData] = useState<EditFormData>({
     title: '',
     team_name: '',
@@ -57,7 +60,17 @@ const JobsTab: React.FC = () => {
     setLoading(false);
   };
 
-  const groupedPositions: GroupedPositions = positions.reduce((acc, pos) => {
+  const activePositions = positions.filter(p => !p.is_deleted);
+  const deletedPositions = positions.filter(p => p.is_deleted);
+
+  const groupedPositions: GroupedPositions = activePositions.reduce((acc, pos) => {
+    const teamName = pos.team_name || 'Uncategorized';
+    if (!acc[teamName]) acc[teamName] = [];
+    acc[teamName].push(pos);
+    return acc;
+  }, {} as GroupedPositions);
+
+  const groupedDeletedPositions: GroupedPositions = deletedPositions.reduce((acc, pos) => {
     const teamName = pos.team_name || 'Uncategorized';
     if (!acc[teamName]) acc[teamName] = [];
     acc[teamName].push(pos);
@@ -150,12 +163,36 @@ const JobsTab: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this position? All related applications will remain but be orphaned.')) return;
+    if (!confirm('Are you sure you want to delete this position? It can be restored later.')) return;
 
-    const { error: deleteError } = await deleteJobPosition(id);
+    const { error: deleteError } = await softDeleteJobPosition(id);
     if (deleteError) {
       setError('Failed to delete position.');
       console.error('Delete error:', deleteError);
+      return;
+    }
+
+    setPositions(prev => prev.map(p => p.id === id ? { ...p, is_deleted: true, deleted_at: new Date().toISOString() } : p));
+  };
+
+  const handleRestore = async (id: string) => {
+    const { error: restoreError } = await restoreJobPosition(id);
+    if (restoreError) {
+      setError('Failed to restore position.');
+      console.error('Restore error:', restoreError);
+      return;
+    }
+
+    setPositions(prev => prev.map(p => p.id === id ? { ...p, is_deleted: false, deleted_at: null } : p));
+  };
+
+  const handlePermanentDelete = async (id: string) => {
+    if (!confirm('PERMANENTLY delete this position? This cannot be undone!')) return;
+
+    const { error: deleteError } = await deleteJobPosition(id);
+    if (deleteError) {
+      setError('Failed to permanently delete position.');
+      console.error('Permanent delete error:', deleteError);
       return;
     }
 
@@ -201,7 +238,18 @@ const JobsTab: React.FC = () => {
   return (
     <>
       <div className="space-y-8">
-        <div className="flex justify-end">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showDeleted}
+                onChange={(e) => setShowDeleted(e.target.checked)}
+                className="w-4 h-4 text-[#FF5722] rounded focus:ring-[#FF5722]"
+              />
+              Show Deleted Positions ({deletedPositions.length})
+            </label>
+          </div>
           <button
             onClick={() => handleCreate()}
             className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
@@ -311,6 +359,57 @@ const JobsTab: React.FC = () => {
               </div>
             </Card>
           ))
+        )}
+
+        {showDeleted && deletedPositions.length > 0 && (
+          <div className="mt-8">
+            <h3 className="text-lg font-bold text-gray-700 mb-4">Deleted Positions</h3>
+            {Object.entries(groupedDeletedPositions).map(([teamName, teamPositions]) => (
+              <Card key={`deleted-${teamName}`} title={
+                <div className="flex items-center gap-2">
+                  <Trash2 size={18} className="text-gray-400" />
+                  <span className="text-gray-500">{teamName} ({teamPositions.length} deleted)</span>
+                </div>
+              }>
+                <div className="space-y-3">
+                  {teamPositions.map((pos) => (
+                    <div key={pos.id} className="flex items-start justify-between p-4 rounded-lg bg-red-50 border border-red-200 opacity-70">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h4 className="font-semibold text-gray-700 line-through">{pos.title}</h4>
+                          <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-red-100 text-red-800">
+                            Deleted
+                          </span>
+                        </div>
+                        {pos.description && (
+                          <p className="text-sm text-gray-500 mb-2 line-clamp-2">{pos.description}</p>
+                        )}
+                        <p className="text-xs text-gray-400">
+                          Deleted {pos.deleted_at ? new Date(pos.deleted_at).toLocaleDateString() : 'recently'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <button
+                          onClick={() => handleRestore(pos.id)}
+                          className="p-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded-md transition-colors"
+                          title="Restore position"
+                        >
+                          <RotateCcw size={16} />
+                        </button>
+                        <button
+                          onClick={() => handlePermanentDelete(pos.id)}
+                          className="p-2 text-red-600 hover:text-red-800 hover:bg-red-200 rounded-md transition-colors"
+                          title="Delete permanently"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
         )}
       </div>
 
