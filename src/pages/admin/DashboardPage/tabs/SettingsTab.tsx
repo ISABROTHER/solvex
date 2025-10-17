@@ -99,7 +99,7 @@ const SettingsTab: React.FC = () => {
 
       // 1. Upsert Teams (ensures unique IDs are created/returned)
       const { data: teams, error: teamsError } = await supabase
-        .from('job_teams') // Use the correct new table
+        .from('job_teams')
         .upsert(jobTeamsData, { onConflict: 'name' }) 
         .select('id, name');
 
@@ -135,14 +135,15 @@ const SettingsTab: React.FC = () => {
       // 3. Map positions to their IDs and prepare for Upsert
       const positionsForUpsert = positionsData
         .map(p => ({
-          ...p,
           team_id: teamMap.get(p.team_name),
-          name: p.name, // The unique key for upserting positions
+          name: p.name,
+          description: p.description
         }))
-        .filter(p => p.team_id); // Filter out positions without a valid team ID
+        .filter(p => p.team_id);
 
       const { error: positionsError } = await supabase
-          .from('job_positions') // Use the correct new table
+          .from('job_positions')
+          // FIX: The ON CONFLICT now explicitly matches the UNIQUE constraint added via SQL: (team_id, name)
           .upsert(positionsForUpsert, { onConflict: 'team_id, name', ignoreDuplicates: false }); 
       
       if (positionsError) throw positionsError;
