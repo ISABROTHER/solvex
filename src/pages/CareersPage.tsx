@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ApplicationFormModal from '../components/forms/ApplicationFormModal';
-import { getOpenJobPositions, type JobPosition } from '../lib/supabase/operations';
+import { getOpenJobPositions, getActiveTeams, type JobPosition } from '../lib/supabase/operations';
 
 interface CareerTeam {
   title: string;
@@ -55,22 +55,37 @@ const CareersPage: React.FC = () => {
 
   useEffect(() => {
     const fetchJobs = async () => {
-      const { data, error } = await getOpenJobPositions();
-      if (!error && data && data.length > 0) {
-        const grouped = new Map<string, JobPosition[]>();
-        data.forEach((position: JobPosition) => {
-          const teamName = position.team_name;
-          if (!grouped.has(teamName)) {
-            grouped.set(teamName, []);
+      const [positionsResult, teamsResult] = await Promise.all([
+        getOpenJobPositions(),
+        getActiveTeams()
+      ]);
+
+      if (!positionsResult.error && !teamsResult.error && positionsResult.data && teamsResult.data) {
+        const teamsMap = new Map(teamsResult.data.map((t: any) => [t.id, t]));
+
+        const grouped = new Map<string, { team: any; positions: JobPosition[] }>();
+
+        positionsResult.data.forEach((position: any) => {
+          const team = position.team_id ? teamsMap.get(position.team_id) : null;
+          const teamKey = team?.id || position.team_name || 'Uncategorized';
+
+          if (!grouped.has(teamKey)) {
+            grouped.set(teamKey, {
+              team: team || { name: position.team_name, image_url: position.team_image_url },
+              positions: []
+            });
           }
-          grouped.get(teamName)!.push(position);
+          grouped.get(teamKey)!.positions.push(position);
         });
 
-        const teams: CareerTeam[] = Array.from(grouped.entries()).map(([teamName, positions]) => ({
-          title: teamName,
-          roles: positions,
-          imageUrl: positions[0]?.team_image_url || 'https://images.pexels.com/photos/7490890/pexels-photo-7490890.jpeg'
-        }));
+        const teams: CareerTeam[] = Array.from(grouped.values())
+          .filter(g => g.positions.length > 0)
+          .sort((a, b) => (a.team.display_order || 999) - (b.team.display_order || 999))
+          .map(({ team, positions }) => ({
+            title: team.name,
+            roles: positions,
+            imageUrl: team.image_url || 'https://images.pexels.com/photos/7490890/pexels-photo-7490890.jpeg'
+          }));
 
         setCareerTeamsData(teams);
       }

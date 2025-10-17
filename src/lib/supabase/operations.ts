@@ -109,6 +109,92 @@ export const restoreJobPosition = async (id: string) => {
 };
 
 /**
+ * Teams Operations
+ */
+export const getAllTeams = async () => {
+  return supabase
+    .from('teams')
+    .select('*')
+    .order('display_order', { ascending: true })
+    .order('name', { ascending: true });
+};
+
+export const getActiveTeams = async () => {
+  return supabase
+    .from('teams')
+    .select('*')
+    .eq('is_deleted', false)
+    .order('display_order', { ascending: true })
+    .order('name', { ascending: true });
+};
+
+export const createTeam = async (team: any) => {
+  const result = await supabase
+    .from('teams')
+    .insert(team as any)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
+};
+
+export const updateTeam = async (id: string, updates: any) => {
+  const result = await supabase
+    .from('teams')
+    .update({ ...updates, updated_at: new Date().toISOString() } as any)
+    .eq('id', id)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
+};
+
+export const softDeleteTeam = async (id: string) => {
+  const result = await supabase
+    .from('teams')
+    .update({
+      is_deleted: true,
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as any)
+    .eq('id', id)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
+};
+
+export const restoreTeam = async (id: string) => {
+  const result = await supabase
+    .from('teams')
+    .update({
+      is_deleted: false,
+      deleted_at: null,
+      updated_at: new Date().toISOString()
+    } as any)
+    .eq('id', id)
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
+};
+
+export const deleteTeam = async (id: string) => {
+  return supabase
+    .from('teams')
+    .delete()
+    .eq('id', id);
+};
+
+/**
  * Job Applications Operations
  */
 
