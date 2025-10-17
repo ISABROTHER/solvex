@@ -45,8 +45,7 @@ const ServicesTab: React.FC = () => {
 
   useEffect(() => {
     fetchAllData();
-    const channel = onServicesChange((payload) => {
-      console.log('Realtime event received!', payload);
+    const channel = onServicesChange(() => {
       fetchAllData();
     });
 

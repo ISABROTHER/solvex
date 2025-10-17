@@ -164,6 +164,88 @@ export interface Database {
           updated_at?: string
         }
       }
+      job_positions: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          team_name: string | null
+          team_image_url: string | null
+          is_open: boolean | null
+          status: string | null
+          requirements: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          team_name?: string | null
+          team_image_url?: string | null
+          is_open?: boolean | null
+          status?: string | null
+          requirements?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          team_name?: string | null
+          team_image_url?: string | null
+          is_open?: boolean | null
+          status?: string | null
+          requirements?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      job_applications: {
+        Row: {
+          id: string
+          job_position_id: string | null
+          full_name: string
+          email: string
+          phone: string
+          country_code: string
+          cover_letter: string | null
+          linkedin_url: string | null
+          portfolio_url: string | null
+          status: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          job_position_id?: string | null
+          full_name: string
+          email: string
+          phone: string
+          country_code: string
+          cover_letter?: string | null
+          linkedin_url?: string | null
+          portfolio_url?: string | null
+          status?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          job_position_id?: string | null
+          full_name?: string
+          email?: string
+          phone?: string
+          country_code?: string
+          cover_letter?: string | null
+          linkedin_url?: string | null
+          portfolio_url?: string | null
+          status?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
