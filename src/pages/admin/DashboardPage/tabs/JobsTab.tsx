@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import Card from '../components/Card';
-import { PlusCircle, Edit2, Trash2, Loader2, X, Save } from 'lucide-react';
+import { PlusCircle, Edit2, Trash2, Loader2, X, Save, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   getAllJobPositions,
@@ -30,6 +30,8 @@ const JobsTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [editingPosition, setEditingPosition] = useState<JobPosition | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [editingTeamName, setEditingTeamName] = useState<string | null>(null);
+  const [newTeamName, setNewTeamName] = useState('');
   const [formData, setFormData] = useState<EditFormData>({
     title: '',
     team_name: '',
@@ -160,6 +162,40 @@ const JobsTab: React.FC = () => {
     setPositions(prev => prev.filter(p => p.id !== id));
   };
 
+  const handleRenameTeam = async (oldTeamName: string) => {
+    if (!newTeamName.trim() || newTeamName === oldTeamName) {
+      setEditingTeamName(null);
+      setNewTeamName('');
+      return;
+    }
+
+    setError(null);
+    const positionsToUpdate = positions.filter(p => p.team_name === oldTeamName);
+
+    for (const position of positionsToUpdate) {
+      const { error: updateError } = await updateJobPosition(position.id, {
+        team_name: newTeamName.trim()
+      });
+
+      if (updateError) {
+        setError(`Failed to rename team: ${updateError.message}`);
+        console.error('Rename team error:', updateError);
+        return;
+      }
+    }
+
+    setPositions(prev => prev.map(p =>
+      p.team_name === oldTeamName
+        ? { ...p, team_name: newTeamName.trim() }
+        : p
+    ));
+
+    setEditingTeamName(null);
+    setNewTeamName('');
+  };
+
+  const availableTeams = Object.keys(groupedPositions);
+
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
 
   return (
@@ -187,7 +223,46 @@ const JobsTab: React.FC = () => {
           </Card>
         ) : (
           Object.entries(groupedPositions).map(([teamName, teamPositions]) => (
-            <Card key={teamName} title={`${teamName} (${teamPositions.length} ${teamPositions.length === 1 ? 'position' : 'positions'})`} right={
+            <Card key={teamName} title={
+              editingTeamName === teamName ? (
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="text"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleRenameTeam(teamName);
+                      if (e.key === 'Escape') { setEditingTeamName(null); setNewTeamName(''); }
+                    }}
+                    className="px-3 py-1 border border-gray-300 rounded-lg text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#FF5722]"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => handleRenameTeam(teamName)}
+                    className="p-1.5 text-green-600 hover:bg-green-100 rounded-md transition-colors"
+                  >
+                    <Save size={16} />
+                  </button>
+                  <button
+                    onClick={() => { setEditingTeamName(null); setNewTeamName(''); }}
+                    className="p-1.5 text-gray-600 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Users size={20} className="text-gray-500" />
+                  <span>{teamName} ({teamPositions.length} {teamPositions.length === 1 ? 'position' : 'positions'})</span>
+                  <button
+                    onClick={() => { setEditingTeamName(teamName); setNewTeamName(teamName); }}
+                    className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-md transition-colors"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                </div>
+              )
+            } right={
               <button
                 onClick={() => handleCreate(teamName)}
                 className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-black transition-colors"
@@ -278,12 +353,24 @@ const JobsTab: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Team Name*</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.team_name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, team_name: e.target.value }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF5722]"
+                    >
+                      <option value="">Select or type new team...</option>
+                      {availableTeams.map(team => (
+                        <option key={team} value={team}>{team}</option>
+                      ))}
+                    </select>
+                  </div>
                   <input
                     type="text"
                     value={formData.team_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, team_name: e.target.value }))}
-                    placeholder="e.g., Technology and Innovation Team"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF5722]"
+                    placeholder="Or type a new team name..."
+                    className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#FF5722]"
                   />
                 </div>
 
