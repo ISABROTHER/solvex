@@ -66,7 +66,7 @@ const CareersPage: React.FC = () => {
         const grouped = new Map<string, { team: any; positions: JobPosition[] }>();
 
         positionsResult.data.forEach((position: any) => {
-          const team = position.team_id ? teamsMap.get(position.team_id) : null;
+          const team = position.team_id ? (teamsMap.get(position.team_id) as any) : null;
           const teamKey = team?.id || position.team_name || 'Uncategorized';
 
           if (!grouped.has(teamKey)) {

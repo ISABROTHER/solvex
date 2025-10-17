@@ -430,28 +430,40 @@ export interface Database {
       job_positions: {
         Row: {
           id: string
-          team_id: string | null
-          name: string
+          title: string
           description: string | null
-          is_open: boolean | null
+          team_name: string
+          team_id: string | null
+          requirements: string | null
+          status: string | null
+          is_deleted: boolean | null
+          deleted_at: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
-          team_id?: string | null
-          name: string
+          title: string
           description?: string | null
-          is_open?: boolean | null
+          team_name: string
+          team_id?: string | null
+          requirements?: string | null
+          status?: string | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
-          team_id?: string | null
-          name?: string
+          title?: string
           description?: string | null
-          is_open?: boolean | null
+          team_name?: string
+          team_id?: string | null
+          requirements?: string | null
+          status?: string | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
           created_at?: string
           updated_at?: string
         }
