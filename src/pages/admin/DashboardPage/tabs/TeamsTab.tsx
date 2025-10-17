@@ -1,8 +1,8 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
-import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; // Import Save, Image, ListOrdered
-import { getTeams, getMembers, createTeam, updateTeam } from "../../../../lib/supabase/operations"; // Import CRUD functions
+import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; 
+import { getTeams, getMembers, createTeam, updateTeam } from "../../../../lib/supabase/operations";
 import { supabase } from "../../../../lib/supabase/client";
 import type { Database } from "../../../../lib/supabase/database.types"; 
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,25 +16,24 @@ type Member = (MemberRow & {
 });
 
 // ----------------------------------------------------
-// --- START NEW COMPONENT: Team Edit Modal (CRUD) ---
+// --- START: Team Edit Modal (CRUD) ---
 // ----------------------------------------------------
 const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
-  // Fix: Ensure all fields used in the form are initialized in state
   const [formData, setFormData] = useState({
-    name: team.name || '',
-    description: team.description || '',
-    image_url: team.image_url || '',
-    display_order: team.display_order || 0, // Assuming this field exists for ordering
-    id: team.id,
+    name: team?.name || '',
+    description: team?.description || '',
+    image_url: team?.image_url || '',
+    display_order: team?.display_order || 0,
+    id: team?.id,
   });
 
   useEffect(() => {
     setFormData({
-      name: team.name || '',
-      description: team.description || '',
-      image_url: team.image_url || '',
-      display_order: team.display_order || 0,
-      id: team.id,
+      name: team?.name || '',
+      description: team?.description || '',
+      image_url: team?.image_url || '',
+      display_order: team?.display_order || 0,
+      id: team?.id,
     });
   }, [team]);
 
@@ -52,7 +51,7 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
     onClose();
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !team) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -98,7 +97,7 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
   );
 };
 // ----------------------------------------------------
-// --- END NEW COMPONENT: Team Edit Modal ---
+// --- END: Team Edit Modal ---
 // ----------------------------------------------------
 
 
@@ -117,25 +116,24 @@ const TeamsTab: React.FC = () => {
     setLoading(true);
     setError(null);
     
-    const [teamsResult, membersResult] = await Promise.all([getTeams(), getMembers()]);
+    // Using Promise.allSettled allows the component to load even if one API call fails
+    const [teamsResult, membersResult] = await Promise.allSettled([getTeams(), getMembers()]);
 
-    if (teamsResult.error) {
-        setError("Failed to fetch teams. Check RLS policies on 'teams' table.");
-        console.error("Team Fetch Error:", teamsResult.error);
+    if (teamsResult.status === 'rejected' || teamsResult.value.error) {
+        setError("Failed to fetch teams. Check RLS on 'teams' table.");
         setTeams([]);
     } else {
-        setTeams(teamsResult.data || []);
+        setTeams(teamsResult.value.data || []);
     }
     
-    if (membersResult.error) {
-        // We allow the tab to load even if members fail, but report the error
-        if (!teamsResult.data) {
-             setError("Failed to fetch all team data. Check RLS policies on 'members' table.");
+    if (membersResult.status === 'rejected' || membersResult.value.error) {
+        // Only override the general error if teams loaded successfully
+        if (teamsResult.status === 'fulfilled' && teamsResult.value.data) {
+             setError("Failed to fetch some members. Check RLS on 'members' table.");
         }
-        console.error("Member Fetch Error:", membersResult.error);
         setMembers([]);
     } else {
-        setMembers(membersResult.data || []);
+        setMembers(membersResult.value.data || []);
     }
 
     setLoading(false);
@@ -144,24 +142,17 @@ const TeamsTab: React.FC = () => {
   useEffect(() => {
     fetchData();
     
-    const channel = supabase.channel('public:members')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'members' },
-        () => fetchData()
-      )
+    // Realtime subscriptions
+    const memberChannel = supabase.channel('public:members')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, () => fetchData())
       .subscribe();
       
     const teamsChannel = supabase.channel('public:teams')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'teams' },
-        () => fetchData()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchData())
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(memberChannel);
       supabase.removeChannel(teamsChannel);
     };
   }, [fetchData]);
@@ -182,9 +173,9 @@ const TeamsTab: React.FC = () => {
     const grouped = teams.map(team => ({
         ...team,
         members: memberMap.get(team.id) || []
-    })).filter(team => team.members.length > 0); 
+    }));
 
-    if (memberMap.has(null) && memberMap.get(null).length > 0) {
+    if (memberMap.has(null) && memberMap.get(null)?.length > 0) {
         grouped.push({
             id: 'unassigned',
             name: 'Unassigned',
@@ -200,7 +191,7 @@ const TeamsTab: React.FC = () => {
         });
     }
 
-    return grouped.sort((a, b) => a.name.localeCompare(b.name));
+    return grouped.sort((a, b) => a.name.localeCompare(b.name)).filter(team => team.members?.length > 0);
   }, [teams, members]);
 
 
@@ -211,11 +202,9 @@ const TeamsTab: React.FC = () => {
       try {
         let result;
         if (isUpdating) {
-            // Only send fields that exist in the database table for Update
             const { members, ...updatePayload } = teamData;
             result = await updateTeam(teamData.id, updatePayload);
         } else {
-            // Remove the temporary ID/members array for insertion
             const { id, members, ...insertPayload } = teamData;
             result = await createTeam(insertPayload);
         }
@@ -264,10 +253,11 @@ const TeamsTab: React.FC = () => {
       )}
       
       {groupedMembers.map(({ name, members: teamMembers, id: teamId, description }) => (
-        <Card key={teamId} title={`${name} (${teamMembers.length})`} right={
+        <Card key={teamId} title={`${name} (${teamMembers?.length || 0})`} right={
             <div className="flex items-center gap-2">
                 <button
                     onClick={() => {
+                        // Find the real team object from the state
                         const team = teams.find(t => t.id === teamId) || { id: teamId, name, description };
                         setEditingTeam(team); 
                         setIsTeamModalOpen(true);
@@ -290,7 +280,7 @@ const TeamsTab: React.FC = () => {
         }>
           {description && <p className="text-sm text-gray-600 mb-4">{description}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {teamMembers.map((member) => (
+            {teamMembers?.map((member) => (
               <div
                 key={member.id}
                 onClick={() => setSelectedMember(member)}
@@ -298,11 +288,11 @@ const TeamsTab: React.FC = () => {
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center font-bold text-gray-600">
-                    {member.full_name?.charAt(0)}
+                    {member.full_name?.charAt(0) || 'N'}
                   </div>
                   <div className="overflow-hidden">
-                    <p className="font-semibold text-gray-800 truncate">{member.full_name}</p>
-                    <p className="text-xs text-gray-500 truncate">{member.role_title}</p>
+                    <p className="font-semibold text-gray-800 truncate">{member.full_name || 'Unknown'}</p>
+                    <p className="text-xs text-gray-500 truncate">{member.role_title || 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -328,12 +318,12 @@ const TeamsTab: React.FC = () => {
               <div className="p-6 overflow-auto space-y-6 text-sm">
                 <div className="flex items-center gap-4">
                   <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center font-bold text-2xl text-gray-600">
-                    {selectedMember.full_name?.charAt(0)}
+                    {selectedMember.full_name?.charAt(0) || 'N'}
                   </div>
                   <div>
-                    <div className="font-bold text-lg">{selectedMember.full_name}</div>
-                    <div className="text-gray-500">{selectedMember.role_title}</div>
-                    <div className={`mt-1 text-xs font-semibold px-2 py-0.5 rounded-full inline-block ${selectedMember.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{selectedMember.status}</div>
+                    <div className="font-bold text-lg">{selectedMember.full_name || 'Unknown Member'}</div>
+                    <div className="text-gray-500">{selectedMember.role_title || 'N/A'}</div>
+                    <div className={`mt-1 text-xs font-semibold px-2 py-0.5 rounded-full inline-block ${selectedMember.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{selectedMember.status || 'N/A'}</div>
                   </div>
                 </div>
                 <div className="border-t pt-6 space-y-4">
