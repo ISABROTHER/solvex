@@ -98,13 +98,17 @@ const SettingsTab: React.FC = () => {
       ];
 
       // 1. Upsert Teams (using teams table)
-      const { error: teamsError } = await supabase
+      const { data: upsertedTeams, error: teamsError } = await supabase
         .from('teams')
-        .upsert(jobTeamsData.map(t => ({ name: t.name, image_url: t.image_url, display_order: 0 })), { onConflict: 'name' });
+        .upsert(jobTeamsData.map((t, idx) => ({ name: t.name, image_url: t.image_url, display_order: idx + 1 })), { onConflict: 'name' })
+        .select('id, name');
 
       if (teamsError) throw teamsError;
-      
-      // 2. Define Positions with their corresponding Team ID
+
+      // Create a map of team name to team id
+      const teamMap = new Map((upsertedTeams || []).map(t => [t.name, t.id]));
+
+      // 2. Define Positions
       const positionsData = [
           // Strategy & Planning Team
           { title: "Brand Strategist", description: "Lead strategic initiatives and provide expert consultation to drive business growth and innovation.", team_name: "Strategy & Planning Team", status: "open" },
@@ -128,10 +132,15 @@ const SettingsTab: React.FC = () => {
           { title: "Motion Graphics Designer", description: "Produces animations and visuals for ads, social media and brand storytelling.", team_name: "Content & Production Team", status: "open" }
       ];
 
-      // 3. Upsert Positions
+      // 3. Upsert Positions with team_id
+      const positionsWithTeamId = positionsData.map(p => ({
+        ...p,
+        team_id: teamMap.get(p.team_name) || null
+      }));
+
       const { error: positionsError } = await supabase
           .from('job_positions')
-          .upsert(positionsData, { onConflict: 'team_name, title' }); 
+          .upsert(positionsWithTeamId, { onConflict: 'team_name, title' }); 
       
       if (positionsError) throw positionsError;
       // --- END TEAM & JOB POSITIONS SEEDING ---
