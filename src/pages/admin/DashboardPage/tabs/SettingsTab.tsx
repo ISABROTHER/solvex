@@ -16,16 +16,16 @@ const SettingsTab: React.FC = () => {
     setSyncMessage('');
 
     try {
-      // --- LIVE RENTAL EQUIPMENT SEEDING (FIXED JSON ARRAY SYNTAX) ---
+      // --- LIVE RENTAL EQUIPMENT SEEDING ---
       const equipmentData = [
         {
           name: "DJI Osmo Pocket 3 Creator Combo",
           description: "Compact and capable 4K pocket gimbal camera.",
           category: "Camera",
-          price_per_day: 100, // Use price_per_day
-          image_url: 'https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcSoYt3SQZ4JdARHvsnt5YNwEcLOgCK3ChpttRQ11k2-aVn6OiYSfJq7Upf10YZUtSUsxy8FFVDNiyxYdGfzaU2lk6uvdPM5dsGQaoFwVRdQBPHn9qb82eu4ww', // Use image_url
-          features: ['1-Inch CMOS & 4K/120fps', '2-Inch Rotatable Screen', '3-Axis Gimbal Mechanical Stabilization'], // Array syntax is correct
-          video_url: 'https://www.youtube.com/embed/MZq_2OJ5kOo', // Use video_url
+          price_per_day: 100, 
+          image_url: 'https://encrypted-tbn1.gstatic.com/shopping?q=tbn:ANd9GcSoYt3SQZ4JdARHvsnt5YNwEcLOgCK3ChpttRQ11k2-aVn6OiYSfJq7Upf10YZUtSUsxy8FFVDNiyxYdGfzaU2lk6uvdPM5dsGQaoFwVRdQBPHn9qb82eu4ww', 
+          features: ['1-Inch CMOS & 4K/120fps', '2-Inch Rotatable Screen', '3-Axis Gimbal Mechanical Stabilization'], 
+          video_url: 'https://www.youtube.com/embed/MZq_2OJ5kOo', 
           is_available: true
         },
         {
@@ -80,16 +80,15 @@ const SettingsTab: React.FC = () => {
         }
       ];
 
-      // Upsert equipment data into the rental_gear table
       const { error: equipmentError } = await supabase
-        .from('rental_gear') // Corrected table name
+        .from('rental_gear')
         .upsert(equipmentData, { onConflict: 'name', ignoreDuplicates: false });
 
       if (equipmentError) throw equipmentError;
       // --- END RENTAL EQUIPMENT SEEDING ---
 
 
-      // --- TEAM & JOB POSITIONS SEEDING (Logic remains, just ensuring continuity) ---
+      // --- TEAM & JOB POSITIONS SEEDING (FIXED LOGIC) ---
 
       const jobTeamsData = [
         { name: "Strategy & Planning Team", image_url: "https://images.pexels.com/photos/7490890/pexels-photo-7490890.jpeg" },
@@ -98,30 +97,66 @@ const SettingsTab: React.FC = () => {
         { name: "Content & Production Team", image_url: "https://images.pexels.com/photos/12249084/pexels-photo-12249084.jpeg" }
       ];
 
-      const teams: Array<{ id: string; name: string; image_url: string }> = [];
-      for (const teamData of jobTeamsData) {
-        const { data: newTeam, error: insertError } = await supabase
-          .from('teams')
-          .upsert([{ name: teamData.name }], { onConflict: 'name' }) 
-          .select()
-          .single();
+      // 1. Upsert Teams (ensures unique IDs are created/returned)
+      const { data: teams, error: teamsError } = await supabase
+        .from('job_teams') // Use the correct new table
+        .upsert(jobTeamsData, { onConflict: 'name' }) 
+        .select('id, name');
+
+      if (teamsError) throw teamsError;
+      if (!teams) throw new Error("Failed to retrieve upserted teams.");
+
+      const teamMap = new Map(teams.map(t => [t.name, t.id]));
+      
+      // 2. Define Positions with their corresponding Team ID
+      const positionsData = [
+          // Strategy & Planning Team
+          { name: "Brand Strategist", description: "Lead strategic initiatives and provide expert consultation to drive business growth and innovation.", team_name: "Strategy & Planning Team" },
+          { name: "Advertising Specialist", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team" },
+          { name: "Product Innovator", description: "Analyze business processes and requirements to identify opportunities for improvement and optimization.", team_name: "Strategy & Planning Team" },
           
-        if (newTeam) {
-            teams.push(newTeam);
-        } else if (insertError) {
-             console.warn("Teams upsert error:", insertError.message);
-        }
-      }
+          // Technology Team
+          { name: "Software Developer/Engineer", description: "Build and maintain web applications using modern technologies and best practices.", team_name: "Technology and Innovation Team" },
+          { name: "Cloud Architect/DevOps Engineer", description: "Create intuitive and engaging user experiences through thoughtful design and user research.", team_name: "Technology and Innovation Team" },
+          { name: "Artificial Intelligence Specialist", description: "Focus on exploring, prototyping, and integrating cutting-edge technologies relevant to their clients' needs.", team_name: "Technology and Innovation Team" },
+          
+          // Marketing Team
+          { name: "Digital Marketer", description: "Drive digital marketing campaigns and strategies to increase brand awareness and customer acquisition.", team_name: "Marketing Team" },
+          { name: "Influencer / Brand Ambassador", description: "Builds visibility for clients by creating content that amplifies clients' brand campaigns and engages target audiences.", team_name: "Marketing Team" },
+          { name: "Content Creator", description: "Produce engaging content across various platforms to connect with our audience and tell our story.", team_name: "Marketing Team" },
+          
+          // Content & Production Team
+          { name: "Video Editor / Videographer", description: "Produces, edits and enhances video content to deliver polished, high-impact campaigns.", team_name: "Content & Production Team" },
+          { name: "Photographer", description: "Product, lifestyle, and brand photography.", team_name: "Content & Production Team" },
+          { name: "Graphic Designer", description: "Develop visual concepts and designs that communicate ideas and inspire audiences.", team_name: "Content & Production Team" },
+          { name: "Motion Graphics Designer", description: "Produces animations and visuals for ads, social media and brand storytelling.", team_name: "Content & Production Team" }
+      ];
+
+      // 3. Map positions to their IDs and prepare for Upsert
+      const positionsForUpsert = positionsData
+        .map(p => ({
+          ...p,
+          team_id: teamMap.get(p.team_name),
+          name: p.name, // The unique key for upserting positions
+        }))
+        .filter(p => p.team_id); // Filter out positions without a valid team ID
+
+      const { error: positionsError } = await supabase
+          .from('job_positions') // Use the correct new table
+          .upsert(positionsForUpsert, { onConflict: 'team_id, name', ignoreDuplicates: false }); 
+      
+      if (positionsError) throw positionsError;
+      // --- END TEAM & JOB POSITIONS SEEDING ---
+
 
       setSyncStatus('success');
-      setSyncMessage('Database successfully synced with fresh data! (Rentals & Teams)');
+      setSyncMessage('Database successfully synced with fresh data! (Rentals & Job Postings)');
     } catch (error) {
       console.error('Database sync error:', error);
       setSyncStatus('error');
-      setSyncMessage(`Sync failed: ${(error as Error).message}. Check your Supabase migrations.`);
+      setSyncMessage(`Sync failed: ${(error as Error).message}. Ensure you ran the required SQL.`);
     } finally {
       setIsSyncing(false);
-      // Clear status after 5 seconds
       setTimeout(() => {
         setSyncStatus('idle');
         setSyncMessage('');
