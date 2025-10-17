@@ -58,16 +58,6 @@ export const createMember = async (member: Partial<Database['public']['Tables'][
     return supabase.from('members').insert(member).select().single();
 };
 
-// Placeholder for team CRUD (to complete the TeamsTab functionality later)
-export const createTeam = async (team: Partial<Database['public']['Tables']['teams']['Insert']>) => {
-    return supabase.from('teams').insert(team).select().single();
-};
-
-export const updateTeam = async (id: string, updates: Partial<Database['public']['Tables']['teams']['Update']>) => {
-    return supabase.from('teams').update(updates).eq('id', id).select().single();
-};
-
-
 // --- RENTAL EQUIPMENT OPERATIONS (Keep all other functions unchanged) ---
 
 /**
@@ -195,10 +185,6 @@ export const getJobTeamsAndPositions = async () => {
   return { data: result, error: null };
 };
 
-export const updateJobPosition = async (id: string, updates: Partial<Database['public']['Tables']['job_positions']['Update']>) => {
-  return supabase.from('job_positions').update(updates).eq('id', id);
-};
-
 // --- CLIENT/ADMIN REQUEST & USER OPERATIONS (Keeping the correct, fixed version) ---
 
 export const getOrCreateClientForUser = async (userId: string, email?: string, fullName?: string) => {
@@ -276,3 +262,345 @@ export type ServiceRequestStatus =
   | "completed"
   | "cancelled"
   | "pending";
+
+// ============================================================
+// COMPREHENSIVE DATA FETCHING FOR APPLICATIONS TAB
+// ============================================================
+
+export type Team = Database['public']['Tables']['teams']['Row'];
+export type TeamInsert = Database['public']['Tables']['teams']['Insert'];
+export type TeamUpdate = Database['public']['Tables']['teams']['Update'];
+
+export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
+export type JobPositionInsert = Database['public']['Tables']['job_positions']['Insert'];
+export type JobPositionUpdate = Database['public']['Tables']['job_positions']['Update'];
+
+export type JobApplication = Database['public']['Tables']['job_applications']['Row'];
+export type JobApplicationInsert = Database['public']['Tables']['job_applications']['Insert'];
+export type JobApplicationUpdate = Database['public']['Tables']['job_applications']['Update'];
+
+export const getAllTeams = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('display_order', { ascending: true })
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching teams:', error);
+      return { data: null, error };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Unexpected error fetching teams:', error);
+    return { data: null, error };
+  }
+};
+
+export const getTeamsWithPositions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .select(`
+        *,
+        job_positions (*)
+      `)
+      .eq('is_deleted', false)
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching teams with positions:', error);
+      return { data: null, error };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Unexpected error fetching teams with positions:', error);
+    return { data: null, error };
+  }
+};
+
+export const getAllJobPositions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('job_positions')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('team_name', { ascending: true })
+      .order('title', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching job positions:', error);
+      return { data: null, error };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Unexpected error fetching job positions:', error);
+    return { data: null, error };
+  }
+};
+
+export const getActiveJobPositions = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('job_positions')
+      .select('*')
+      .eq('is_deleted', false)
+      .eq('status', 'open')
+      .order('team_name', { ascending: true })
+      .order('title', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching active job positions:', error);
+      return { data: null, error };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Unexpected error fetching active job positions:', error);
+    return { data: null, error };
+  }
+};
+
+export const getAllJobApplications = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('job_applications')
+      .select(`
+        *,
+        job_positions (
+          id,
+          title,
+          team_name,
+          team_id,
+          status
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching job applications:', error);
+      return { data: null, error };
+    }
+
+    return { data: data || [], error: null };
+  } catch (error) {
+    console.error('Unexpected error fetching job applications:', error);
+    return { data: null, error };
+  }
+};
+
+export const createTeam = async (team: TeamInsert) => {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .insert(team)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating team:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error creating team:', error);
+    return { data: null, error };
+  }
+};
+
+export const updateTeam = async (id: string, updates: TeamUpdate) => {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating team:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error updating team:', error);
+    return { data: null, error };
+  }
+};
+
+export const deleteTeam = async (id: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('teams')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error deleting team:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error deleting team:', error);
+    return { data: null, error };
+  }
+};
+
+export const createJobPosition = async (position: JobPositionInsert) => {
+  try {
+    const { data, error } = await supabase
+      .from('job_positions')
+      .insert(position)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating job position:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error creating job position:', error);
+    return { data: null, error };
+  }
+};
+
+export const updateJobPosition = async (id: string, updates: JobPositionUpdate) => {
+  try {
+    const { data, error } = await supabase
+      .from('job_positions')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating job position:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error updating job position:', error);
+    return { data: null, error };
+  }
+};
+
+export const deleteJobPosition = async (id: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('job_positions')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error deleting job position:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error deleting job position:', error);
+    return { data: null, error };
+  }
+};
+
+export const createJobApplication = async (application: JobApplicationInsert) => {
+  try {
+    const { data, error } = await supabase
+      .from('job_applications')
+      .insert(application)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating job application:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error creating job application:', error);
+    return { data: null, error };
+  }
+};
+
+export const updateJobApplicationStatus = async (id: string, status: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('job_applications')
+      .update({
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating application status:', error);
+      return { data: null, error };
+    }
+
+    return { data, error: null };
+  } catch (error) {
+    console.error('Unexpected error updating application status:', error);
+    return { data: null, error };
+  }
+};
+
+export const onTeamsChange = (callback: () => void) => {
+  return supabase
+    .channel('teams_changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'teams' },
+      callback
+    )
+    .subscribe();
+};
+
+export const onJobPositionsChange = (callback: () => void) => {
+  return supabase
+    .channel('job_positions_changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'job_positions' },
+      callback
+    )
+    .subscribe();
+};
+
+export const onJobApplicationsChange = (callback: () => void) => {
+  return supabase
+    .channel('job_applications_changes')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'job_applications' },
+      callback
+    )
+    .subscribe();
+};
+
+export const getOpenJobPositions = getActiveJobPositions;
+export const getActiveTeams = getAllTeams;
+export const submitJobApplication = createJobApplication;
