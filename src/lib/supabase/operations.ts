@@ -42,20 +42,28 @@ export const getJobPositionById = async (id: string) => {
 };
 
 export const createJobPosition = async (position: JobPositionInsert) => {
-  return supabase
+  const result = await supabase
     .from('job_positions')
     .insert(position as any)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const updateJobPosition = async (id: string, updates: JobPositionUpdate) => {
-  return supabase
+  const result = await supabase
     .from('job_positions')
     .update({ ...updates, updated_at: new Date().toISOString() } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const deleteJobPosition = async (id: string) => {
@@ -84,20 +92,28 @@ export const getAllJobApplications = async () => {
 };
 
 export const submitJobApplication = async (application: JobApplicationInsert) => {
-  return supabase
+  const result = await supabase
     .from('job_applications')
     .insert(application as any)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const updateJobApplicationStatus = async (id: string, status: string) => {
-  return supabase
+  const result = await supabase
     .from('job_applications')
     .update({ status, updated_at: new Date().toISOString() } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const onJobApplicationsChange = (callback: () => void) => {
@@ -159,24 +175,32 @@ export const getServices = async () => {
 };
 
 export const createService = async (service: any) => {
-  return supabase
+  const result = await supabase
     .from('services')
     .insert(service as any)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const updateService = async (id: string, updates: any) => {
-  return supabase
+  const result = await supabase
     .from('services')
     .update({ ...updates, updated_at: new Date().toISOString() } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const softDeleteService = async (id: string) => {
-  return supabase
+  const result = await supabase
     .from('services')
     .update({
       is_deleted: true,
@@ -184,12 +208,16 @@ export const softDeleteService = async (id: string) => {
       updated_at: new Date().toISOString()
     } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const restoreService = async (id: string) => {
-  return supabase
+  const result = await supabase
     .from('services')
     .update({
       is_deleted: false,
@@ -197,8 +225,12 @@ export const restoreService = async (id: string) => {
       updated_at: new Date().toISOString()
     } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const getDeletedServices = async () => {
@@ -261,12 +293,16 @@ export const getAllRentalEquipment = async () => {
 };
 
 export const updateRentalEquipment = async (id: string, updates: any) => {
-  return supabase
+  const result = await supabase
     .from('rental_gear')
     .update({ ...updates, updated_at: new Date().toISOString() } as any)
     .eq('id', id)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const onRentalGearChange = (callback: () => void) => {
@@ -285,11 +321,15 @@ export const onRentalGearChange = (callback: () => void) => {
 };
 
 export const createRentalEquipment = async (equipment: any) => {
-  return supabase
+  const result = await supabase
     .from('rental_gear')
     .insert(equipment as any)
-    .select()
-    .single();
+    .select();
+
+  if (result.data && result.data.length > 0) {
+    return { data: result.data[0], error: result.error };
+  }
+  return result;
 };
 
 export const deleteRentalEquipment = async (id: string) => {
