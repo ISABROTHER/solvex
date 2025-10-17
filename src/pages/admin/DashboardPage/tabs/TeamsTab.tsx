@@ -11,6 +11,7 @@ import {
   onJobPositionsChange,
   onJobApplicationsChange,
   type JobPosition,
+  type JobApplication,
   type JobPositionInsert
 } from "../../../../lib/supabase/operations";
 import { motion, AnimatePresence } from "framer-motion";
@@ -123,11 +124,6 @@ const TeamsTab: React.FC = () => {
       }
       
       if (result.error) throw result.error;
-
-      // NEW CHECK: If updating and no data is returned, the ID was invalid or deleted
-      if (isUpdating && (!result.data || result.data.length === 0)) {
-        throw new Error("Job position not found or unable to update.");
-      }
 
       // Success feedback
       addToast({ type: 'success', title: `${action} Successful`, message: `${newPosition.title} has been saved.` });
@@ -489,7 +485,7 @@ const TeamsTab: React.FC = () => {
                     <h4 className="font-semibold text-gray-800 mb-2">Portfolio</h4>
                     <a href={selectedApplication.portfolio_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">{selectedApplication.portfolio_url}</a>
                   </div>
-                )}
+                )} 
 
                 <div>
                   <h4 className="font-semibold text-gray-800 mb-2">Submission Date</h4>
