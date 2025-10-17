@@ -1,10 +1,10 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
-import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; // Added Save, Image, ListOrdered
+import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; // Import Save, Image, ListOrdered
 import { getTeams, getMembers, createTeam, updateTeam } from "../../../../lib/supabase/operations"; // Import CRUD functions
 import { supabase } from "../../../../lib/supabase/client";
-import type { Database } from "../../../../lib/supabase/database.types"; // Single, required import for Database type
+import type { Database } from "../../../../lib/supabase/database.types"; 
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../../../../contexts/ToastContext";
 
@@ -24,7 +24,7 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
     name: team.name || '',
     description: team.description || '',
     image_url: team.image_url || '',
-    display_order: team.display_order || 0, // Assuming this exists or falls back to 0
+    display_order: team.display_order || 0, // Assuming this field exists for ordering
     id: team.id,
   });
 
@@ -128,7 +128,7 @@ const TeamsTab: React.FC = () => {
     }
     
     if (membersResult.error) {
-        // Only set error if teams load but members fail
+        // We allow the tab to load even if members fail, but report the error
         if (!teamsResult.data) {
              setError("Failed to fetch all team data. Check RLS policies on 'members' table.");
         }
@@ -152,7 +152,6 @@ const TeamsTab: React.FC = () => {
       )
       .subscribe();
       
-    // Set up subscription for teams table as well for real-time team CRUD updates
     const teamsChannel = supabase.channel('public:teams')
       .on(
         'postgres_changes',
@@ -175,10 +174,8 @@ const TeamsTab: React.FC = () => {
       if (!memberMap.has(teamId)) {
         memberMap.set(teamId, []);
       }
-      // Extract the team name from the joined object or default to 'Unassigned'
       const teamName = (member.teams && member.teams.name) ? member.teams.name : 'Unassigned';
       
-      // We must cast the joined result to the expected Member type, providing a consistent structure
       memberMap.get(teamId)!.push({ ...member, teams: { name: teamName } });
     });
 
@@ -187,18 +184,14 @@ const TeamsTab: React.FC = () => {
         members: memberMap.get(team.id) || []
     })).filter(team => team.members.length > 0); 
 
-    // Handle members without a team_id (teamId is null)
     if (memberMap.has(null) && memberMap.get(null).length > 0) {
-        // Create a synthetic 'Unassigned' team object
         grouped.push({
             id: 'unassigned',
             name: 'Unassigned',
             description: 'Members not yet assigned to a functional team.',
             members: memberMap.get(null),
-            // Default required fields (casting is necessary here as this object didn't come from DB)
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            // Add other fields from DB schema as null/default if necessary
             team_name: 'Unassigned',
             code: null,
             lead_member_id: null,
@@ -207,7 +200,6 @@ const TeamsTab: React.FC = () => {
         });
     }
 
-    // Sort teams by name
     return grouped.sort((a, b) => a.name.localeCompare(b.name));
   }, [teams, members]);
 
@@ -219,13 +211,168 @@ const TeamsTab: React.FC = () => {
       try {
         let result;
         if (isUpdating) {
-            result = await updateTeam(teamData.id, teamData);
+            // Only send fields that exist in the database table for Update
+            const { members, ...updatePayload } = teamData;
+            result = await updateTeam(teamData.id, updatePayload);
         } else {
-            // Remove the temporary ID for insertion
-            const { id, ...insertData } = teamData;
-            result = await createTeam(insertData);
+            // Remove the temporary ID/members array for insertion
+            const { id, members, ...insertPayload } = teamData;
+            result = await createTeam(insertPayload);
         }
 
         if (result.error) throw result.error;
         addToast({ type: 'success', title: `Team ${action} Successful`, message: `Team "${teamData.name}" has been saved.` });
-        fetchData(); // R
+        fetchData(); // Re-fetch data to update the UI
+      } catch (error) {
+        addToast({ type: 'error', title: `${action} Failed`, message: `Failed to save team. Error: ${error.message || 'Unknown'}` });
+      }
+  }
+
+
+  if (loading) {
+    return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
+  }
+
+  return (
+    <div className="space-y-8">
+      {error && (
+        <Card>
+          <div className="text-center py-5 text-red-600 flex flex-col items-center gap-3">
+             <AlertCircle className="w-6 h-6" />
+             <p className="font-semibold">{error}</p>
+             <p className="text-sm text-gray-600">Ensure the **Teams and Members tables** were created and RLS policies grant **SELECT** access to the authenticated user.</p>
+             <p className="text-xs text-blue-500">Run **"Sync Now"** in Settings to attempt auto-fixing permissions.</p>
+          </div>
+        </Card>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          onClick={() => { setEditingTeam({}); setIsTeamModalOpen(true); }}
+          className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg text-sm font-semibold hover:bg-[#E64A19] transition-colors"
+        >
+          <PlusCircle size={16} />
+          Add New Team
+        </button>
+      </div>
+
+      {groupedMembers.length === 0 && !error && (
+        <Card>
+          <p className="text-center text-gray-500 py-8">No members are currently assigned to any team.</p>
+          <p className="text-center text-sm text-gray-600 mt-2">Go to the **Settings Tab** and click **"Sync Now"** to load initial member data.</p>
+        </Card>
+      )}
+      
+      {groupedMembers.map(({ name, members: teamMembers, id: teamId, description }) => (
+        <Card key={teamId} title={`${name} (${teamMembers.length})`} right={
+            <div className="flex items-center gap-2">
+                <button
+                    onClick={() => {
+                        const team = teams.find(t => t.id === teamId) || { id: teamId, name, description };
+                        setEditingTeam(team); 
+                        setIsTeamModalOpen(true);
+                    }}
+                    disabled={teamId === 'unassigned'}
+                    className="p-2 text-gray-500 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+                    title={teamId === 'unassigned' ? 'Cannot edit unassigned group' : 'Edit Team'}
+                >
+                    <Edit2 size={16} />
+                </button>
+                <button
+                    onClick={() => alert('Add New Member form would open here.')}
+                    className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-black"
+                    title="Add Member to Team"
+                >
+                    <PlusCircle size={16} />
+                    Member
+                </button>
+            </div>
+        }>
+          {description && <p className="text-sm text-gray-600 mb-4">{description}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {teamMembers.map((member) => (
+              <div
+                key={member.id}
+                onClick={() => setSelectedMember(member)}
+                className="group cursor-pointer rounded-lg border bg-gray-50 p-4 transition-all hover:bg-white hover:shadow-md hover:-translate-y-1"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center font-bold text-gray-600">
+                    {member.full_name?.charAt(0)}
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="font-semibold text-gray-800 truncate">{member.full_name}</p>
+                    <p className="text-xs text-gray-500 truncate">{member.role_title}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ))}
+
+      {/* Member Detail Modal (Slide-over panel) */}
+      <AnimatePresence>
+        {selectedMember && (
+          <div className="fixed inset-0 z-50">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40" onClick={() => setSelectedMember(null)} />
+            <motion.div
+              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="absolute right-0 top-0 h-full w-full max-w-lg bg-white shadow-xl flex flex-col"
+            >
+              <div className="flex-shrink-0 p-6 flex items-center justify-between border-b">
+                <h3 className="text-xl font-semibold">Member Details</h3>
+                <button className="p-2 rounded-full hover:bg-gray-100" onClick={() => setSelectedMember(null)}><X size={20} /></button>
+              </div>
+              <div className="p-6 overflow-auto space-y-6 text-sm">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center font-bold text-2xl text-gray-600">
+                    {selectedMember.full_name?.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="font-bold text-lg">{selectedMember.full_name}</div>
+                    <div className="text-gray-500">{selectedMember.role_title}</div>
+                    <div className={`mt-1 text-xs font-semibold px-2 py-0.5 rounded-full inline-block ${selectedMember.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{selectedMember.status}</div>
+                  </div>
+                </div>
+                <div className="border-t pt-6 space-y-4">
+                  <h4 className="font-semibold text-gray-800">Contact Information</h4>
+                  <div className="flex items-center gap-3">
+                    <Mail size={16} className="text-gray-400" />
+                    <a href={`mailto:${selectedMember.email}`} className="text-blue-600 hover:underline">{selectedMember.email}</a>
+                  </div>
+                  {selectedMember.phone && <div className="flex items-center gap-3">
+                    <Phone size={16} className="text-gray-400" />
+                    <a href={`tel:${selectedMember.phone}`} className="text-blue-600 hover:underline">{selectedMember.phone}</a>
+                  </div>}
+                </div>
+                 <div className="border-t pt-6 space-y-2">
+                  <h4 className="font-semibold text-gray-800">Details</h4>
+                  <p><strong>Team:</strong> {selectedMember.teams?.name || 'Unassigned'}</p>
+                  <p><strong>Date Joined:</strong> {new Date(selectedMember.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="flex-shrink-0 p-6 border-t mt-auto flex gap-3 bg-gray-50">
+                <a href={`mailto:${selectedMember.email}`} className="flex-1 text-center rounded-lg bg-blue-600 text-white px-4 py-2 font-semibold hover:bg-blue-700 transition-colors">Email Member</a>
+                <button onClick={() => alert('Implement Member Update/Offboard')} className="flex-1 text-center rounded-lg border bg-white px-4 py-2 font-semibold hover:bg-gray-100 transition-colors">Update Status</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Team Edit/Create Modal */}
+      {editingTeam && (
+        <TeamEditModal
+          isOpen={isTeamModalOpen}
+          onClose={() => setIsTeamModalOpen(false)}
+          team={editingTeam}
+          onSave={handleSaveTeam}
+        />
+      )}
+    </div>
+  );
+};
+
+export default TeamsTab;
