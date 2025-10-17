@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
-import { Loader2, Plus, X, Pencil, Trash2, Eye, Users, Briefcase } from "lucide-react";
+import { Loader2, Plus, X, Pencil, Trash2, Eye, Users, Briefcase, Save, Image, ListOrdered } from "lucide-react";
 import {
   getAllJobPositions,
   getAllJobApplications,
@@ -11,40 +11,129 @@ import {
   onJobPositionsChange,
   onJobApplicationsChange,
   type JobPosition,
-  type JobApplication,
-  type JobPositionInsert
+  type JobPositionInsert,
+  getAllTeams,
+  updateTeam,
+  createTeam,
+  type Team
 } from "../../../../lib/supabase/operations";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence }f from "framer-motion";
+import { useToast } from "../../../../contexts/ToastContext";
+
+// Define TeamFormState including description, image_url, and display_order
+type TeamFormState = Partial<Team>;
+
+// Define the state type for the Job Position input form
+type PositionFormState = Partial<JobPositionInsert> & {
+  requirementsText: string;
+};
+
+// ----------------------------------------------------
+// --- START NEW COMPONENT: Team Edit Modal ---
+// ----------------------------------------------------
+const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
+  const [formData, setFormData] = useState(team);
+
+  useEffect(() => {
+    setFormData(team);
+  }, [team]);
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({ 
+      ...prev, 
+      [name]: type === 'checkbox' ? checked : (name === 'display_order' ? parseInt(value) || 0 : value) 
+    }));
+  };
+
+  const handleSave = () => {
+    onSave(formData);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex-shrink-0 p-6 flex justify-between items-center border-b">
+          <h3 className="text-xl font-bold text-gray-900">{team.id ? `Edit Team: ${team.name}` : 'Create New Team'}</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={20} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Team Name*</label>
+            <input type="text" name="name" value={formData.name || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1"><Image className="w-4 h-4 inline mr-1" /> Image URL</label>
+            <input type="url" name="image_url" value={formData.image_url || ''} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1"><ListOrdered className="w-4 h-4 inline mr-1" /> Display Order</label>
+            <input type="number" name="display_order" value={formData.display_order || 0} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea name="description" value={formData.description || ''} onChange={handleChange} rows={3} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]"></textarea>
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 p-6 border-t flex justify-end gap-3 bg-gray-50">
+          <button onClick={handleSave} className="flex items-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">
+            <Save size={16} />
+            {team.id ? 'Save Changes' : 'Create Team'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+// ----------------------------------------------------
+// --- END NEW COMPONENT: Team Edit Modal ---
+// ----------------------------------------------------
+
 
 const TeamsTab: React.FC = () => {
   const [positions, setPositions] = useState<JobPosition[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]); 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedApplication, setSelectedApplication] = useState<any | null>(null);
   const [isAddingPosition, setIsAddingPosition] = useState(false);
   const [editingPosition, setEditingPosition] = useState<JobPosition | null>(null);
-  const [newPosition, setNewPosition] = useState<Partial<JobPositionInsert>>({
+  const [isTeamModalOpen, setIsTeamModalOpen] = useState(false); 
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null); 
+  const { addToast } = useToast();
+  
+  // Initialize newPosition state using the custom type
+  const [newPosition, setNewPosition] = useState<PositionFormState>({
     title: '',
     description: '',
     team_name: '',
     team_image_url: '',
-    is_open: true
+    is_open: true,
+    requirementsText: ''
   });
 
   const fetchData = useCallback(async () => {
     setError(null);
-    const [positionsResult, applicationsResult] = await Promise.all([
+    const [positionsResult, applicationsResult, teamsResult] = await Promise.all([
       getAllJobPositions(),
-      getAllJobApplications()
+      getAllJobApplications(),
+      getAllTeams() 
     ]);
 
-    if (positionsResult.error || applicationsResult.error) {
+    if (positionsResult.error || applicationsResult.error || teamsResult.error) {
       setError("Failed to fetch job data.");
-      console.error(positionsResult.error || applicationsResult.error);
+      console.error(positionsResult.error || applicationsResult.error || teamsResult.error);
     } else {
       setPositions(positionsResult.data || []);
       setApplications(applicationsResult.data || []);
+      setTeams(teamsResult.data || []); 
     }
     setLoading(false);
   }, []);
@@ -52,50 +141,89 @@ const TeamsTab: React.FC = () => {
   useEffect(() => {
     fetchData();
 
-    const positionsChannel = onJobPositionsChange(() => fetchData());
+    const positionsChannel = onJobPositionsChange(() => fetchData()); 
     const applicationsChannel = onJobApplicationsChange(() => fetchData());
 
     return () => {
       positionsChannel.unsubscribe();
       applicationsChannel.unsubscribe();
-    }; 
+    };
   }, [fetchData]);
 
   const groupedPositions = useMemo(() => {
-    const grouped = new Map<string, JobPosition[]>();
+    const grouped = new Map<string, { team: Team | null; positions: JobPosition[] }>();
+    const teamMap = new Map(teams.map(t => [t.name, t])); 
 
     positions.forEach(position => {
       const teamName = position.team_name || 'Unassigned';
+      const team = teamMap.get(teamName);
+      
       if (!grouped.has(teamName)) {
-        grouped.set(teamName, []);
+        grouped.set(teamName, { team: team || null, positions: [] });
       }
-      grouped.get(teamName)!.push(position);
+      grouped.get(teamName)!.positions.push(position);
     });
 
-    return Array.from(grouped.entries()).map(([teamName, teamPositions]) => ({
-      teamName,
-      positions: teamPositions,
-      openPositions: teamPositions.filter(p => p.is_open).length
-    }));
-  }, [positions]);
+    return Array.from(grouped.entries())
+      .map(([teamName, { team, positions: teamPositions }]) => ({
+        teamName,
+        team,
+        positions: teamPositions,
+        openPositions: teamPositions.filter(p => p.is_open).length
+      }))
+      // Sort by display_order if team exists, otherwise push to end
+      .sort((a, b) => (a.team?.display_order || 999) - (b.team?.display_order || 999)); 
 
+  }, [positions, teams]); 
+
+  const resetFormState = () => setNewPosition({ title: '', description: '', team_name: '', team_image_url: '', is_open: true, requirementsText: '' });
+  
   const handleSavePosition = async () => {
     if (!newPosition.title || !newPosition.description || !newPosition.team_name) {
+      addToast({ type: 'warning', title: 'Missing Fields', message: 'Please fill in all required fields (Title, Description, Team Name).' });
       return;
     }
+    
+    const requirementsArray = newPosition.requirementsText 
+      ? newPosition.requirementsText.split('\n').map(s => s.trim()).filter(Boolean) 
+      : [];
+
+    const payload = {
+        title: newPosition.title,
+        description: newPosition.description,
+        team_name: newPosition.team_name,
+        team_image_url: newPosition.team_image_url,
+        is_open: newPosition.is_open,
+        requirements: requirementsArray
+    }
+    
+    const isUpdating = !!editingPosition;
+    const action = isUpdating ? 'Update' : 'Creation';
 
     try {
-      if (editingPosition) {
-        await updateJobPosition(editingPosition.id, newPosition);
+      let result;
+      if (isUpdating) {
+        result = await updateJobPosition(editingPosition.id, payload);
       } else {
-        await createJobPosition(newPosition as JobPositionInsert);
+        result = await createJobPosition(payload);
       }
+      
+      if (result.error) throw result.error;
+
+      if (isUpdating && (!result.data || result.data.length === 0)) {
+        throw new Error("Job position not found or unable to update.");
+      }
+
+      addToast({ type: 'success', title: `${action} Successful`, message: `${newPosition.title} has been saved.` });
+
       setIsAddingPosition(false);
       setEditingPosition(null);
-      setNewPosition({ title: '', description: '', team_name: '', team_image_url: '', is_open: true });
-      fetchData();
+      resetFormState();
+      fetchData(); 
+      
     } catch (error) {
-      console.error('Failed to save position:', error);
+      console.error(`Failed to execute ${action} on position:`, error);
+      addToast({ type: 'error', title: `${action} Failed`, message: `Failed to save position. Error: ${error.message || 'Unknown'}` });
     }
   };
 
@@ -106,7 +234,8 @@ const TeamsTab: React.FC = () => {
       description: position.description,
       team_name: position.team_name,
       team_image_url: position.team_image_url,
-      is_open: position.is_open
+      is_open: position.is_open,
+      requirementsText: position.requirements ? position.requirements.join('\n') : ''
     });
     setIsAddingPosition(true);
   };
@@ -121,6 +250,45 @@ const TeamsTab: React.FC = () => {
   const getApplicationsForPosition = (positionId: string) => {
     return applications.filter(app => app.job_position_id === positionId);
   };
+  
+  // --- NEW HANDLERS FOR TEAM MANAGEMENT ---
+  const handleEditTeam = (team: Team) => {
+      setEditingTeam(team);
+      setIsTeamModalOpen(true);
+  }
+  
+  const handleCreate = (teamName) => {
+    // Logic to pre-fill the Team Name when creating a new position from a group header
+    resetFormState();
+    setNewPosition(prev => ({ ...prev, team_name: teamName }));
+    setIsAddingPosition(true);
+  }
+
+  const handleSaveTeam = async (teamData: TeamFormState) => {
+      const isUpdating = !!teamData.id;
+      const action = isUpdating ? 'Update' : 'Create';
+
+      try {
+        let result;
+        if (isUpdating) {
+            // Note: updateTeam implementation needed in operations.ts for this to work fully
+            result = await updateTeam(teamData.id, teamData);
+        } else {
+            // Note: createTeam implementation needed in operations.ts for this to work fully
+            result = await createTeam(teamData);
+        }
+
+        if (result.error) throw result.error;
+
+        addToast({ type: 'success', title: `${action} Successful`, message: `Team ${teamData.name} has been saved.` });
+        fetchData(); // Refetch teams and positions
+      } catch (error) {
+        addToast({ type: 'error', title: `${action} Failed`, message: `Failed to save team. Error: ${error.message || 'Unknown'}` });
+        console.error('Team save error:', error);
+      }
+  }
+  // --- END NEW HANDLERS FOR TEAM MANAGEMENT ---
+
 
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
@@ -137,13 +305,22 @@ const TeamsTab: React.FC = () => {
           <h2 className="text-2xl font-bold text-gray-900">Job Positions & Applications</h2>
           <p className="text-sm text-gray-500 mt-1">Manage career opportunities and review applications</p>
         </div>
-        <button
-          onClick={() => setIsAddingPosition(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
-        >
-          <Plus size={20} />
-          Add Position
-        </button>
+        <div className="flex gap-2">
+            <button
+              onClick={() => { setEditingTeam({name: '', description: '', image_url: ''}); setIsTeamModalOpen(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+            >
+              <Plus size={20} />
+              Add Team
+            </button>
+            <button
+              onClick={() => { resetFormState(); setIsAddingPosition(true); }}
+              className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
+            >
+              <Plus size={20} />
+              Add Position
+            </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -182,9 +359,38 @@ const TeamsTab: React.FC = () => {
         </Card>
       </div>
 
-      {groupedPositions.map(({ teamName, positions: teamPositions, openPositions }) => (
-        <Card key={teamName} title={`${teamName} (${openPositions} open positions)`}>
+      {groupedPositions.map(({ teamName, positions: teamPositions, openPositions, team }) => (
+        <Card key={teamName} title={
+            <div className="flex items-center gap-3">
+                <Users size={20} className="text-gray-500" />
+                <span className="font-bold text-gray-900">{teamName} ({openPositions} open positions)</span>
+            </div>
+        } right={
+            <div className="flex items-center gap-2">
+                {team && (
+                    <button
+                        onClick={() => handleEditTeam(team)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                        title="Edit Team Details"
+                    >
+                        <Pencil size={16} />
+                    </button>
+                )}
+                <button
+                    onClick={() => { handleCreate(teamName); }}
+                    className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-black"
+                >
+                    <Plus size={16} />
+                    Add Position
+                </button>
+            </div>
+        }>
           <div className="space-y-4">
+            {team && team.description && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    Team Description: {team.description}
+                </div>
+            )}
             {teamPositions.map((position) => {
               const positionApplications = getApplicationsForPosition(position.id);
               return (
@@ -275,7 +481,7 @@ const TeamsTab: React.FC = () => {
               onClick={() => {
                 setIsAddingPosition(false);
                 setEditingPosition(null);
-                setNewPosition({ title: '', description: '', team_name: '', team_image_url: '', is_open: true });
+                resetFormState();
               }}
             />
             <motion.div
@@ -292,7 +498,7 @@ const TeamsTab: React.FC = () => {
                   onClick={() => {
                     setIsAddingPosition(false);
                     setEditingPosition(null);
-                    setNewPosition({ title: '', description: '', team_name: '', team_image_url: '', is_open: true });
+                    resetFormState();
                   }}
                 >
                   <X size={20} />
@@ -327,6 +533,16 @@ const TeamsTab: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Key Requirements (One per line)</label>
+                  <textarea
+                    value={newPosition.requirementsText}
+                    onChange={(e) => setNewPosition({ ...newPosition, requirementsText: e.target.value })}
+                    rows={5}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    placeholder="Enter one requirement per line (e.g., Degree in Marketing)"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Team Image URL</label>
                   <input
                     type="url"
@@ -351,7 +567,7 @@ const TeamsTab: React.FC = () => {
                   onClick={() => {
                     setIsAddingPosition(false);
                     setEditingPosition(null);
-                    setNewPosition({ title: '', description: '', team_name: '', team_image_url: '', is_open: true });
+                    resetFormState();
                   }}
                   className="flex-1 text-center rounded-lg border bg-white px-4 py-2 font-semibold hover:bg-gray-100"
                 >
@@ -369,6 +585,16 @@ const TeamsTab: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* --- Team Edit Modal --- */}
+      {editingTeam && (
+        <TeamEditModal
+          isOpen={isTeamModalOpen}
+          onClose={() => setIsTeamModalOpen(false)}
+          team={editingTeam}
+          onSave={handleSaveTeam}
+        />
+      )}
+      {/* --- Application Detail Modal --- */}
       <AnimatePresence>
         {selectedApplication && (
           <div className="fixed inset-0 z-50">
