@@ -214,7 +214,7 @@ const TeamsTab: React.FC = () => {
         throw new Error("Job position not found or unable to update.");
       }
 
-      addToast({ type: 'success', title: `${action} Successful`, message: `${newPosition.title} has been saved.` });
+      addToast({ type: 'success', title: `Position ${action} Successful`, message: `Position "${newPosition.title}" has been saved.` });
 
       setIsAddingPosition(false);
       setEditingPosition(null);
@@ -278,7 +278,7 @@ const TeamsTab: React.FC = () => {
 
         if (result.error) throw result.error;
 
-        addToast({ type: 'success', title: `${action} Successful`, message: `Team ${teamData.name} has been saved.` });
+        addToast({ type: 'success', title: `Team ${action} Successful`, message: `Team "${teamData.name}" has been saved.` });
         fetchData(); // Refetch teams and positions
       } catch (error) {
         addToast({ type: 'error', title: `${action} Failed`, message: `Failed to save team. Error: ${error.message || 'Unknown'}` });

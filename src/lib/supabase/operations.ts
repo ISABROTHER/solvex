@@ -381,14 +381,43 @@ export const onServicesChange = (callback: () => void) => {
  * Rental Equipment Operations
  */
 
-export type RentalItemDisplay = Database['public']['Tables']['rental_gear']['Row'];
+export type RentalItemDisplay = {
+  id: string;
+  title: string;
+  subtitle: string;
+  images: string[];
+  status: string;
+  price: number;
+  category: string;
+  description: string;
+  features: string[];
+  videoUrl?: string;
+};
 
 export const getRentalEquipment = async () => {
-  return supabase
+  const result = await supabase
     .from('rental_gear')
     .select('*')
     .eq('is_available', true)
     .order('created_at', { ascending: false });
+
+  if (result.data) {
+    const transformed = result.data.map((item: any) => ({
+      id: item.id,
+      title: item.name,
+      subtitle: item.category,
+      images: item.image_url ? [item.image_url] : [],
+      status: item.is_available ? 'Available' : 'Unavailable',
+      price: parseFloat(item.price_per_day) || 0,
+      category: item.category,
+      description: item.description || '',
+      features: item.features || [],
+      videoUrl: item.video_url
+    }));
+    return { ...result, data: transformed };
+  }
+
+  return result;
 };
 
 export const onJobPositionsChange = (callback: () => void) => {
