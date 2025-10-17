@@ -163,7 +163,7 @@ const HomePage = () => {
   };
   
   // Helper function to create a clean slug from the title
-  const createSlug = (title: string) => title.toLowerCase().replace(/\s/g, '-').replace(/[^a-z0-9-]/g, '');
+  const createSlug = (title: string) => title?.toLowerCase().replace(/\s/g, '-').replace(/[^a-z0-9-]/g, '') || '';
 
 
   return (
@@ -441,17 +441,17 @@ const HomePage = () => {
               {rentalEquipmentData.slice(0, 6).map((rental) => (
                 <div key={rental.id} className="snap-center shrink-0 w-[82%]">
                   <Link
-                    to={`/rentals/${createSlug(rental.title)}`} // Use slug for detail page
+                    to={`/rentals/${createSlug(rental.name)}`}
                     className="group relative rounded-xl overflow-hidden shadow-md cursor-pointer transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1 block"
                   >
                     <img
-                      src={rental.images?.[0]}
-                      alt={rental.title}
+                      src={rental.image_url}
+                      alt={rental.name}
                       className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                     <div className="relative h-64 p-4 flex flex-col justify-end text-white">
-                      <h3 className="text-base font-bold">{rental.title}</h3>
+                      <h3 className="text-base font-bold">{rental.name}</h3>
                     </div>
                   </Link>
                 </div>
@@ -476,7 +476,7 @@ const HomePage = () => {
           <div className="hidden md:grid grid-cols-3 lg:grid-cols-6 gap-4">
             {rentalEquipmentData.slice(0, 6).map((rental, index) => (
               <Link
-                to={`/rentals/${createSlug(rental.title)}`} // Use slug for detail page
+                to={`/rentals/${createSlug(rental.name)}`}
                 key={rental.id}
                 className={`group relative rounded-xl overflow-hidden shadow-md cursor-pointer transform transition-all duration-300 hover:shadow-xl hover:-translate-y-1 opacity-0 ${
                   isRentalsVisible ? "animate-slide-up" : ""
@@ -484,13 +484,13 @@ const HomePage = () => {
                 style={{ animationDelay: `${index * 100}ms` }}
               >
                 <img
-                  src={rental.images?.[0]}
-                  alt={rental.title}
+                  src={rental.image_url}
+                  alt={rental.name}
                   className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                 <div className="relative h-64 p-4 flex flex-col justify-end text-white">
-                  <h3 className="text-base font-bold">{rental.title}</h3>
+                  <h3 className="text-base font-bold">{rental.name}</h3>
                 </div>
               </Link>
             ))}
