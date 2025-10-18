@@ -1,13 +1,13 @@
-// src/pages/client/DashboardPage.tsx
-import React, { useState } from 'react';
+import React from 'react'; // Removed useState as it's no longer needed for the modal
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Updated icons: Removed MessageSquare, CheckCircle. Added WalletMinimal. Kept Clock, CreditCard, User, FilePlus.
-import { FilePlus, Clock, CreditCard, User, WalletMinimal } from 'lucide-react';
+// Updated icons: Removed WalletMinimal. Kept Clock, CreditCard, User, FilePlus.
+import { FilePlus, MessageSquare, Clock, CheckCircle, CreditCard, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
-import PaymentReceivingModal from './PaymentReceivingModal'; // Keep modal import
+// Removed the import for PaymentReceivingModal as it's not used
+// import PaymentReceivingModal from './PaymentReceivingModal';
 
 const container = {
   hidden: { opacity: 0 },
@@ -21,21 +21,18 @@ const Metric: React.FC<{
     icon: React.ElementType;
     colorBg?: string;
     iconColor?: string;
-    onClick?: () => void;
     className?: string;
-    clickable?: boolean;
+    // Removed onClick and clickable props as they are not used now
 }> = ({
   label,
   value,
   icon: Icon,
   colorBg = 'bg-amber-100',
   iconColor = 'text-amber-600',
-  onClick,
   className = '',
-  clickable = false,
-}) => {
-  const content = (
-      <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 transition-all duration-200 ease-in-out ${clickable ? 'hover:shadow-xl hover:border-gray-200 hover:-translate-y-0.5' : ''} ${className}`}>
+}) => (
+      // Reverted to always be a div
+      <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 ${className}`}>
         <div className={`${colorBg} p-3 rounded-full flex items-center justify-center flex-shrink-0`}>
           <Icon className={`w-5 h-5 ${iconColor}`} />
         </div>
@@ -46,27 +43,18 @@ const Metric: React.FC<{
       </div>
   );
 
-  return onClick ? (
-    <button onClick={onClick} className="text-left w-full focus:outline-none focus:ring-2 focus:ring-[#FF5722] focus:ring-offset-2 rounded-2xl">
-      {content}
-    </button>
-  ) : (
-    content
-  );
-};
-
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const { client, requests } = useClientMock();
   const userName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  // Removed modal state
 
   const stats = {
     pending: requests.filter(r => r.status === 'Pending').length,
-    // active: requests.filter(r => r.status === 'In Progress').length, // Removed
-    // completed: requests.filter(r => r.status === 'Completed').length, // Removed
-    tier: client.tier, // Keep tier data if needed elsewhere
+    active: requests.filter(r => r.status === 'In Progress').length, // Added back for potential future use or consistency
+    completed: requests.filter(r => r.status === 'Completed').length, // Added back
+    tier: client.tier,
   };
 
   const paymentDisplayValue = "PAYMENTS";
@@ -78,12 +66,9 @@ const DashboardPage: React.FC = () => {
     requestedAt: req.createdAt,
   }));
 
-  const handlePaymentClick = () => {
-    setIsPaymentModalOpen(true);
-  };
+  // Removed modal handler
 
   return (
-    <>
       <div className="min-h-screen bg-gradient-to-b from-stone-50 via-orange-50 to-amber-50 p-4 sm:p-6 lg:p-8">
         <motion.div className="max-w-6xl mx-auto space-y-6" initial="hidden" animate="show" variants={container}>
           <motion.header variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -91,7 +76,6 @@ const DashboardPage: React.FC = () => {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Hey {userName}</h1>
               <p className="text-sm text-gray-600 mt-1">Here's what's happening with your projects and requests.</p>
             </div>
-            {/* Kept New Request / Profile links in header */}
             <div className="flex gap-3">
               <Link
                 to="/client/new"
@@ -111,37 +95,50 @@ const DashboardPage: React.FC = () => {
           </motion.header>
 
           <motion.section variants={fadeUp}>
-            {/* --- Updated Metrics Grid --- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Changed to 2 columns */}
+             {/* Reverted Metrics Grid to 4 columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" iconColor="text-sky-600" />
-              {/* Removed Active and Completed Metrics */}
+              {/* Added back Active and Completed */}
+              <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
+              <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
               <Metric
-                label="Payments" // Changed label
-                value={paymentDisplayValue}
-                icon={CreditCard}
+                label="Account Tier" // Label reverted
+                value={stats.tier} // Value reverted to show actual tier
+                icon={User} // Icon reverted
                 colorBg="bg-gray-100"
                 iconColor="text-gray-600"
-                onClick={handlePaymentClick} // Still opens modal
-                clickable={true}
               />
             </div>
-            {/* --- End Updated Metrics Grid --- */}
           </motion.section>
 
           <motion.section variants={fadeUp}>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
-              {/* --- Updated Quick Actions --- */}
-              <div className="flex"> {/* Only one button now */}
-                <button
-                  onClick={handlePaymentClick} // Make this button also open the payment modal
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              {/* Reverted Quick Actions */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  to="/client/new"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-[#FF5722] text-white py-3 rounded-lg font-medium"
                 >
-                  <WalletMinimal size={16} /> {/* New Icon */}
-                  Payments & Invoices
-                </button>
+                  <FilePlus size={16} />
+                  Submit Request
+                </Link>
+                <Link
+                  to="/client/requests"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg"
+                >
+                  <Clock size={16} />
+                  View Requests
+                </Link>
+                <Link
+                  to="/contact"
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg"
+                >
+                  <MessageSquare size={16} />
+                  Contact Support
+                </Link>
               </div>
-              {/* --- End Updated Quick Actions --- */}
+              {/* --- End Reverted Quick Actions --- */}
             </div>
           </motion.section>
 
@@ -176,13 +173,7 @@ const DashboardPage: React.FC = () => {
         </motion.div>
       </div>
 
-      {/* Render the modal */}
-      <PaymentReceivingModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        clientName={userName}
-      />
-    </>
+     {/* Removed the modal invocation */}
   );
 };
 
