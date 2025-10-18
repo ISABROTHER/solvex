@@ -1,5 +1,3 @@
-// src/pages/client/useClientMock.ts
-
 import { useState } from 'react';
 import { Client, ServiceRequest, Message, ServiceRequestStatus } from './client';
 
@@ -12,16 +10,9 @@ const mockClient: Client = {
   tier: 'VIP',
   avatarUrl: `https://api.dicebear.com/8.x/initials/svg?seed=Alex`,
   notifications: { email: true, sms: false, inApp: true },
-  stats: { totalRequests: 8, onTimePercentage: 98, lastActivity: '2025-10-02T10:00:00Z' },
-  // --- Added Mock Data ---
-  location: 'Accra, Ghana', // Added location
-  phone: '+233 24 123 4567', // Ensure phone exists for "Mobile Number"
-  emergencyContactName: 'Jane Doe', // Added emergency contact name
-  emergencyContactMobile: '+233 55 987 6543', // Added emergency contact mobile
-  // --- End Added Mock Data ---
+  stats: { totalRequests: 8, onTimePercentage: 98, lastActivity: '2025-10-02T10:00:00Z' }
 };
 
-// ... (rest of the file remains the same)
 const mockRequests: ServiceRequest[] = [
   { id: 'req-001', serviceType: 'Brand Strategy', projectTitle: 'Q4 Brand Refresh', status: 'Completed', brief: 'Complete overhaul of brand guidelines for the new quarter.', createdAt: '2025-08-01T10:00:00Z', updatedAt: '2025-09-15T14:30:00Z', timeline: '3-4 Weeks' },
   { id: 'req-002', serviceType: 'Advertising', projectTitle: 'Holiday Social Media Campaign', status: 'In Progress', brief: 'Develop and launch a social media ad campaign for the holiday season.', createdAt: '2025-09-10T11:00:00Z', updatedAt: '2025-10-01T09:00:00Z', timeline: 'Ongoing' },
@@ -35,7 +26,7 @@ const mockMessages: Message[] = [
 ];
 
 export const useClientMock = () => {
-  const [clientData] = useState<Client>(mockClient); // Renamed to avoid conflict
+  const [client] = useState<Client>(mockClient);
   const [requests, setRequests] = useState<ServiceRequest[]>(mockRequests);
   const [messages, setMessages] = useState<Message[]>(mockMessages);
 
@@ -66,7 +57,7 @@ export const useClientMock = () => {
   }
 
   return {
-    client: clientData, // Return renamed variable
+    client,
     requests,
     messages,
     addMessage,

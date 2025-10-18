@@ -9,35 +9,35 @@
 }
 
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
   }
 }
 
 @keyframes fade-in-left {
-  from {
-    opacity: 0;
-    transform: translateX(-20px);
+  from { 
+    opacity: 0; 
+    transform: translateX(-20px); 
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  to { 
+    opacity: 1; 
+    transform: translateX(0); 
   }
 }
 
 @keyframes fade-in-right {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
+  from { 
+    opacity: 0; 
+    transform: translateX(20px); 
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  to { 
+    opacity: 1; 
+    transform: translateX(0); 
   }
 }
 
@@ -110,5 +110,3 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
-
-/* REMOVED any incorrect import/reference to .ts files here */

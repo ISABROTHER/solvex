@@ -1,5 +1,3 @@
-// src/pages/client/client.ts
-
 export type ServiceRequestStatus = 'Pending' | 'In Progress' | 'In Review' | 'Completed';
 
 export interface Client {
@@ -12,12 +10,6 @@ export interface Client {
   avatarUrl: string;
   notifications: { email: boolean; sms: boolean; inApp: boolean };
   stats: { totalRequests: number; onTimePercentage: number; lastActivity: string };
-  // --- Added Fields ---
-  location?: string; // e.g., "Accra, Ghana"
-  phone?: string; // Existing, will be labelled "Mobile Number"
-  emergencyContactName?: string;
-  emergencyContactMobile?: string;
-  // --- End Added Fields ---
 }
 
 export interface ServiceRequest {
