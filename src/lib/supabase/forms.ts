@@ -1,22 +1,27 @@
 // src/lib/supabase/forms.ts
-import { supabase } from './client'; // Import the main client
+import { supabase } from './client';
 
 interface AccessRequestData {
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
   company?: string;
   reason?: string;
 }
 
+// Add other form data interfaces as needed (e.g., ContactInquiryData)
+
 export const supabaseForms = {
   submitAccessRequest: async (data: AccessRequestData) => {
-    // Ensure 'access_requests' table exists in Supabase
     const { error } = await supabase
       .from('access_requests')
       .insert([
         {
-          full_name: data.name,
+          first_name: data.firstName,
+          last_name: data.lastName,
           email: data.email,
+          phone: data.phone,
           company_name: data.company,
           reason: data.reason,
           status: 'pending',
@@ -25,10 +30,7 @@ export const supabaseForms = {
     return { error };
   },
 
-  // Keep other form functions (submitContactInquiry, etc.) here
-  // submitContactInquiry: async (...) => { ... }
-  // submitCareerApplication: async (...) => { ... }
-  // submitRentalBooking: async (...) => { ... }
+  // Add other submission functions here, e.g.:
+  // submitContactInquiry: async (data: ContactInquiryData) => { ... },
+  // submitCareerApplication: async (data: CareerApplicationData) => { ... },
 };
-
-// --- REMOVE any Supabase client creation code from this file ---
