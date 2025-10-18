@@ -1,88 +1,71 @@
-// src/pages/client/NewRequestPage.tsx
+// ... other imports ...
+import { useForm, SubmitHandler } from 'react-hook-form';
+import * as React from 'react'; // Ensure React is imported for useEffect/useState
 
-// ... (imports and schema definition) ...
+// ... schema ...
 
 const NewRequestPage: React.FC = () => {
-  // ... (state, react-hook-form setup) ...
-  const [showCustomService, setShowCustomService] = useState(false);
+  // ... hooks setup ...
+  const [showCustomService, setShowCustomService] = React.useState(false); // State variable
+
   const {
-    // ... (other form methods) ...
-    watch,
+    register,
+    handleSubmit,
+    watch, // <-- Used to monitor the dropdown value
     setValue,
+    formState: { errors },
   } = useForm<RequestFormData>({
-    resolver: zodResolver(requestSchema),
-    // ... (defaultValues) ...
+    // ... resolver and defaultValues ...
   });
 
-  const selectedServiceType = watch('serviceType');
+  const selectedServiceType = watch('serviceType'); // <-- Watches the dropdown
 
-  // Handle showing/hiding the custom service input
+  // Effect hook to show/hide the input
   React.useEffect(() => {
-    if (selectedServiceType === 'Other') {
-      setShowCustomService(true);
+    if (selectedServiceType === 'Other') { // Check if 'Other' is selected
+      setShowCustomService(true);         // Show the input
     } else {
-      setShowCustomService(false);
-      setValue('customServiceType', ''); // Clear custom input if 'Other' is deselected
+      setShowCustomService(false);        // Hide the input
+      setValue('customServiceType', '');  // Clear the input value
     }
-  }, [selectedServiceType, setValue]);
+  }, [selectedServiceType, setValue]); // Runs when selectedServiceType changes
 
-  const onSubmit: SubmitHandler<RequestFormData> = async (data) => {
-    // ... (submission logic) ...
-    // Use custom service type if 'Other' is selected and custom input is filled
-    const finalServiceType = data.serviceType === 'Other' && data.customServiceType
-        ? data.customServiceType
-        : data.serviceType;
-    // ... (rest of submission logic using finalServiceType) ...
-  };
+  // ... onSubmit function ...
 
   return (
-    // ... (page structure) ...
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-white p-6 sm:p-8 rounded-lg shadow border border-gray-100">
+    // ... page structure ...
+        <form onSubmit={handleSubmit(onSubmit)} /* ... */>
           {/* Service Type Dropdown */}
           <div>
-            <label htmlFor="serviceType" className="block text-sm font-medium leading-6 text-gray-900">
-              Service Type <span className="text-red-600">*</span>
-            </label>
-            <select
-              id="serviceType"
-              {...register('serviceType')}
-              className={`mt-2 block w-full rounded-md border-0 py-2 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-[#FF5722] sm:text-sm sm:leading-6 ${errors.serviceType ? 'ring-red-500' : ''}`}
-            >
-              <option value="" disabled>Select a service...</option>
-              {SERVICES_DATA.map((service) => (
-                <option key={service.id} value={service.title}>{service.title}</option>
-              ))}
-              {/* --- This is the custom option --- */}
+            {/* ... dropdown code ... */}
+            <select {...register('serviceType')} /* ... */>
+              {/* ... options ... */}
               <option value="Other">Other (Please specify)</option>
             </select>
-            {errors.serviceType && <p className="mt-1 text-xs text-red-600">{errors.serviceType.message}</p>}
+            {/* ... error display ... */}
           </div>
 
-          {/* --- Custom Service Type Input (Conditional) --- */}
-          {showCustomService && (
+          {/* --- Custom Service Type Input (Conditional Rendering) --- */}
+          {showCustomService && ( // <-- Only renders when showCustomService is true
             <div>
-              <label htmlFor="customServiceType" className="block text-sm font-medium leading-6 text-gray-900">
+              <label htmlFor="customServiceType" /* ... */>
                 Custom Service Type <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
                 id="customServiceType"
                 {...register('customServiceType')}
-                className={`mt-2 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-[#FF5722] sm:text-sm sm:leading-6 ${errors.customServiceType ? 'ring-red-500' : ''}`}
-                placeholder="e.g., Custom Software Development"
+                /* ... className and placeholder ... */
               />
-               {/* Conditionally validate custom input if 'Other' is selected */}
-               {selectedServiceType === 'Other' && errors.serviceType && !watch('customServiceType') && (
-                   <p className="mt-1 text-xs text-red-600">Please specify the service type.</p>
-               )}
-               {errors.customServiceType && <p className="mt-1 text-xs text-red-600">{errors.customServiceType.message}</p>}
+              {/* ... error display ... */}
             </div>
           )}
           {/* --- End Conditional Input --- */}
 
-          {/* ... (rest of the form fields: Project Title, Brief, Timeline, Submit Button) ... */}
+          {/* ... rest of form ... */}
         </form>
-    // ... (rest of component) ...
+      </div>
+    // ...
   );
 };
 
