@@ -68,13 +68,23 @@ const PaymentReceivingModal: React.FC<PaymentReceivingModalProps> = ({ isOpen, o
               <div className="mt-6 border-t pt-4">
                 <h4 className="font-medium text-gray-500 text-sm mb-2">Example: Recent Payouts</h4>
                 <p className="text-sm text-gray-500 italic">Payout history will appear here.</p>
-                {/* <div className="p-3 border rounded-md"> ... Payout item ... </div> */}
+                {/* Example Payout Item Structure */}
+                {/*
+                <div className="p-3 border rounded-md mt-2 bg-gray-50">
+                   <div className="flex justify-between items-center">
+                     <span className="font-medium text-gray-800">GHS 500.00 - Project Alpha</span>
+                     <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Completed</span>
+                   </div>
+                   <p className="text-xs text-gray-500 mt-1">Paid on: Oct 15, 2025</p>
+                </div>
+                 */}
               </div>
                <div className="mt-4 border-t pt-4">
                  <h4 className="font-medium text-gray-500 text-sm mb-2">Example: Receiving Details</h4>
                  <button className="text-sm text-[#FF5722] hover:underline flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
                    <BuildingColumns size={14}/> Manage Bank Account (Coming Soon)
                  </button>
+                 {/* <p className="text-sm text-gray-600 mt-2">Bank: Example Bank | Account: **** **** **** 1234</p> */}
                </div>
                <p className="text-xs text-gray-500 mt-6 text-center">
                  For current payment inquiries, please contact your account manager.
