@@ -573,4 +573,4 @@ export const getActiveTeams = getAllTeams;
  * Submits a job application.
  * UPDATED: Alias points to the correct function using the new table name.
  */
-export const submitJobApplication = createJobApplication; // <<< UPDATED ALIAS
+export const submitJobApplication = createJobApplication; // <<< UPDATED ALIAS 
