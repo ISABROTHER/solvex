@@ -22,8 +22,7 @@ export type TabKey =
   | "partners"
   | "applications"
   | "settings";
-  // NOTE: The separate entries for 'teams', 'equipment', 'services', and 'jobs' 
-  // are removed from the main TabKey definition.
+  // Removed: 'teams', 'equipment', 'services', 'jobs'
 
 const DashboardPage: React.FC = () => {
   const [tab, setTab] = useState<TabKey>("home");
@@ -76,9 +75,9 @@ const DashboardPage: React.FC = () => {
           {tab === "home" && <HomeTab />}
           {tab === "clients" && <ClientsTab />}
           {tab === "projects" && <ProjectsTab />}
-          {/* Removed direct rendering for TeamsTab, EquipmentTab, ServicesTab, JobsTab */}
           {tab === "partners" && <PartnersTab />}
           {tab === "applications" && <ApplicationsTab />}
+          {/* Renders the SettingsTab with the four features passed as props */}
           {tab === "settings" && (
             <SettingsTab 
               jobsTab={<JobsTab />}
