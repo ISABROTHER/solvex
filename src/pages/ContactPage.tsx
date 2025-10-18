@@ -261,7 +261,7 @@ const ContactPage: React.FC = () => {
                 Absolutely! We offer various maintenance and support packages to ensure your brand continues to perform optimally after launch.
               </p>
             </div>
-          </div> 
+          </div>
         </div>
       </section>
     </div>
