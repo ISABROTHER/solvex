@@ -9,8 +9,8 @@ import { useToast } from "../../../../contexts/ToastContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Define the joined type for clarity
-type ApplicationRow = Database['public']['Tables']['career_applications']['Row'] & {
-    job_positions: { name: string, description: string | null, team_id: string | null } | null;
+type ApplicationRow = Database['public']['Tables']['job_applications']['Row'] & {
+    job_positions: { id: string, title: string, team_name: string | null, team_id: string | null, status: string | null } | null;
 };
 
 // Simplified application type for the component state
@@ -46,7 +46,7 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
                 <div className="flex justify-between items-start p-6 border-b">
                     <div>
                         <h3 className="text-2xl font-bold text-gray-900">{application.full_name}</h3>
-                        <p className="text-lg text-[#FF5722] mt-1">{application.job_positions?.name || application.position}</p>
+                        <p className="text-lg text-[#FF5722] mt-1">{application.job_positions?.title || application.position}</p>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={24} /></button>
                 </div>
@@ -135,7 +135,7 @@ const ApplicationsTab: React.FC = () => {
         const { data, error: fetchError } = await getCareerApplications();
 
         if (fetchError) {
-            setError("Failed to fetch applications. Check RLS policies on 'career_applications'.");
+            setError("Failed to fetch applications. Check RLS policies on 'job_applications'.");
             console.error("Applications Fetch Error:", fetchError);
             setApplications([]);
         } else {
@@ -183,7 +183,7 @@ const ApplicationsTab: React.FC = () => {
             app.full_name?.toLowerCase().includes(lowerCaseSearch) ||
             app.email?.toLowerCase().includes(lowerCaseSearch) ||
             app.position?.toLowerCase().includes(lowerCaseSearch) ||
-            app.job_positions?.name?.toLowerCase().includes(lowerCaseSearch)
+            app.job_positions?.title?.toLowerCase().includes(lowerCaseSearch)
         );
     }, [applications, searchTerm]);
 
@@ -235,7 +235,7 @@ const ApplicationsTab: React.FC = () => {
                                 filteredApplications.map((app) => {
                                     const statusKey = app.status || 'pending';
                                     const statusInfo = STATUS_OPTIONS[statusKey];
-                                    const teamName = app.job_positions?.name || 'N/A'; // Using position name as fallback for team/context
+                                    const teamName = app.job_positions?.title || 'N/A';
                                     
                                     return (
                                         <tr key={app.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedApplication(app)}>
