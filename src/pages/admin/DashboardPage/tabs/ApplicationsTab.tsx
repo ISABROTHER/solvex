@@ -46,7 +46,7 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
                 <div className="flex justify-between items-start p-6 border-b">
                     <div>
                         <h3 className="text-2xl font-bold text-gray-900">{application.full_name}</h3>
-                        <p className="text-lg text-[#FF5722] mt-1">{application.job_positions?.title || application.position}</p>
+                        <p className="text-lg text-[#FF5722] mt-1">{application.job_positions?.title || 'Position'}</p>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={24} /></button>
                 </div>
@@ -90,10 +90,10 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
                     <div className="md:col-span-2 space-y-6">
                         <Card title="Candidate Overview">
                             <div className="space-y-3 text-sm">
-                                <p><strong>Position Applied:</strong> {application.position}</p>
-                                <p><strong>Experience:</strong> {application.experience_years} years</p>
+                                <p><strong>Position Applied:</strong> {application.job_positions?.title || 'N/A'}</p>
                                 <p><strong>Submitted:</strong> {new Date(application.created_at).toLocaleDateString()}</p>
-                                <p><strong>Team:</strong> {application.job_positions?.team_id || 'N/A'}</p>
+                                <p><strong>Team:</strong> {application.job_positions?.team_name || 'N/A'}</p>
+                                {application.country_code && <p><strong>Country:</strong> {application.country_code}</p>}
                             </div>
                         </Card>
 
@@ -103,13 +103,13 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
 
                         <Card title="Attachments & Portfolio">
                             <div className="flex flex-wrap gap-4 text-sm">
-                                {application.resume_url && <a href={application.resume_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white bg-gray-800 px-3 py-1 rounded-lg hover:bg-gray-700 transition-colors">
-                                    Resume/CV <ExternalLink size={14} />
+                                {application.linkedin_url && <a href={application.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white bg-gray-800 px-3 py-1 rounded-lg hover:bg-gray-700 transition-colors">
+                                    LinkedIn <ExternalLink size={14} />
                                 </a>}
                                 {application.portfolio_url && <a href={application.portfolio_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white bg-[#FF5722] px-3 py-1 rounded-lg hover:bg-[#E64A19] transition-colors">
                                     Portfolio <ExternalLink size={14} />
                                 </a>}
-                                {(!application.resume_url && !application.portfolio_url) && <p className="text-gray-500">No attachments or portfolio links.</p>}
+                                {(!application.linkedin_url && !application.portfolio_url) && <p className="text-gray-500">No links provided.</p>}
                             </div>
                         </Card>
                     </div>
