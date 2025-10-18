@@ -7,7 +7,7 @@ import {
   getAllJobPositions,
   updateJobPosition,
   createJobPosition,
-  softDeleteJobPosition,
+  deleteJobPosition,
   getAllTeams,
 } from '../../../../lib/supabase/operations';
 import type { JobPosition, Team } from '../../../../lib/supabase/operations';
@@ -137,7 +137,7 @@ const JobsTab: React.FC = () => {
       // Optimistic delete
       setPositions(prev => prev.filter(p => p.id !== position.id));
       
-      const { error: deleteError } = await softDeleteJobPosition(position.id);
+      const { error: deleteError } = await deleteJobPosition(position.id);
       
       if (deleteError) {
           addToast({ type: 'error', title: 'Delete Failed', message: deleteError.message });

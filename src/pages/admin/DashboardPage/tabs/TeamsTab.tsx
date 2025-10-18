@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
 import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; 
-import { getAllTeams, getMembers, createTeam, updateTeam, softDeleteTeam } from "../../../../lib/supabase/operations"; // Added softDeleteTeam
+import { getAllTeams, getMembers, createTeam, updateTeam, deleteTeam } from "../../../../lib/supabase/operations";
 import { supabase } from "../../../../lib/supabase/client";
 import type { Database } from "../../../../lib/supabase/database.types"; 
 import { motion, AnimatePresence } from "framer-motion";
@@ -238,7 +238,7 @@ const TeamsTab: React.FC = () => {
       if (!window.confirm(`WARNING: This will soft-delete the team "${team.name}" and set the 'team_id' of all ${team.members.length} associated job postings to 'null' (Uncategorized). Are you sure?`)) return;
       
       try {
-        const { error } = await softDeleteTeam(team.id);
+        const { error } = await deleteTeam(team.id);
 
         if (error) throw error;
         
