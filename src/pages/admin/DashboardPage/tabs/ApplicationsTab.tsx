@@ -1,7 +1,8 @@
+// src/pages/admin/DashboardPage/tabs/ApplicationsTab.tsx
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
-import { Loader2, Mail, Phone, ExternalLink, Calendar, Search, RefreshCw, AlertCircle, Briefcase, User, MapPin } from "lucide-react";
+import { Loader2, Mail, Phone, ExternalLink, Calendar, Search, RefreshCw, AlertCircle, Briefcase, User, MapPin, X } from "lucide-react";
 import { getCareerApplications, updateCareerApplicationStatus } from "../../../../lib/supabase/operations";
 import { supabase } from "../../../../lib/supabase/client";
 import type { Database } from "../../../../lib/supabase/database.types";
@@ -9,8 +10,9 @@ import { useToast } from "../../../../contexts/ToastContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 // Define the joined type for clarity
+// NOTE: The joined object is now aliased as 'job_position' in operations.ts
 type ApplicationRow = Database['public']['Tables']['job_applications']['Row'] & {
-    job_positions: { id: string, title: string, team_name: string | null, team_id: string | null, status: string | null } | null;
+    job_position: { title: string, description: string | null, team_name: string | null, team_id: string | null } | null;
 };
 
 // Simplified application type for the component state
@@ -35,6 +37,10 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
         const newStatus = e.target.value;
         onUpdateStatus(application.id, newStatus);
     };
+    
+    // Use job_position for linked data, falling back to old 'position' text field
+    const positionTitle = application.job_position?.title || application.position || 'N/A';
+    const teamName = application.job_position?.team_name || 'N/A';
 
     return (
         <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -46,7 +52,7 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
                 <div className="flex justify-between items-start p-6 border-b">
                     <div>
                         <h3 className="text-2xl font-bold text-gray-900">{application.full_name}</h3>
-                        <p className="text-lg text-[#FF5722] mt-1">{application.job_positions?.title || 'Position'}</p>
+                        <p className="text-lg text-[#FF5722] mt-1">{positionTitle}</p>
                     </div>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={24} /></button>
                 </div>
@@ -90,10 +96,11 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
                     <div className="md:col-span-2 space-y-6">
                         <Card title="Candidate Overview">
                             <div className="space-y-3 text-sm">
-                                <p><strong>Position Applied:</strong> {application.job_positions?.title || 'N/A'}</p>
+                                {/* FIX: Use job_position?.title or fallback */}
+                                <p><strong>Position Applied:</strong> {positionTitle}</p>
+                                <p><strong>Country Code:</strong> {application.country_code || 'N/A'}</p>
                                 <p><strong>Submitted:</strong> {new Date(application.created_at).toLocaleDateString()}</p>
-                                <p><strong>Team:</strong> {application.job_positions?.team_name || 'N/A'}</p>
-                                {application.country_code && <p><strong>Country:</strong> {application.country_code}</p>}
+                                <p><strong>Team:</strong> {teamName}</p>
                             </div>
                         </Card>
 
@@ -103,13 +110,11 @@ const ApplicationDetailModal: React.FC<{ application: Application, isOpen: boole
 
                         <Card title="Attachments & Portfolio">
                             <div className="flex flex-wrap gap-4 text-sm">
-                                {application.linkedin_url && <a href={application.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white bg-gray-800 px-3 py-1 rounded-lg hover:bg-gray-700 transition-colors">
-                                    LinkedIn <ExternalLink size={14} />
-                                </a>}
+                                {/* application.resume_url is missing from your latest schema, using portfolio_url */}
                                 {application.portfolio_url && <a href={application.portfolio_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-white bg-[#FF5722] px-3 py-1 rounded-lg hover:bg-[#E64A19] transition-colors">
                                     Portfolio <ExternalLink size={14} />
                                 </a>}
-                                {(!application.linkedin_url && !application.portfolio_url) && <p className="text-gray-500">No links provided.</p>}
+                                {(!application.portfolio_url) && <p className="text-gray-500">No attachments or portfolio links.</p>}
                             </div>
                         </Card>
                     </div>
@@ -135,7 +140,8 @@ const ApplicationsTab: React.FC = () => {
         const { data, error: fetchError } = await getCareerApplications();
 
         if (fetchError) {
-            setError("Failed to fetch applications. Check RLS policies on 'job_applications'.");
+            // Updated error message to be more generic, as the specific RLS issue should be gone
+            setError("Failed to fetch applications. Check network connection or RLS configuration.");
             console.error("Applications Fetch Error:", fetchError);
             setApplications([]);
         } else {
@@ -148,8 +154,8 @@ const ApplicationsTab: React.FC = () => {
         fetchData();
         
         // Real-time subscription for changes to the applications table
-        const channel = supabase.channel('public:career_applications')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'career_applications' }, () => fetchData())
+        const channel = supabase.channel('public:job_applications') // FIX: Corrected channel name
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'job_applications' }, () => fetchData())
           .subscribe();
 
         return () => {
@@ -163,7 +169,7 @@ const ApplicationsTab: React.FC = () => {
             if (updateError) throw updateError;
             
             addToast({ type: 'success', title: 'Status Updated', message: `Application status set to ${STATUS_OPTIONS[newStatus].label}.` });
-            fetchData(); // Re-fetch to update UI or rely on real-time listener (fetchData ensures full consistency)
+            fetchData(); // Re-fetch to update UI
             if (selectedApplication?.id === id) {
                 // Optimistically update the modal if it's open
                 setSelectedApplication(prev => prev ? { ...prev, status: newStatus } : null);
@@ -183,7 +189,7 @@ const ApplicationsTab: React.FC = () => {
             app.full_name?.toLowerCase().includes(lowerCaseSearch) ||
             app.email?.toLowerCase().includes(lowerCaseSearch) ||
             app.position?.toLowerCase().includes(lowerCaseSearch) ||
-            app.job_positions?.title?.toLowerCase().includes(lowerCaseSearch)
+            app.job_position?.title?.toLowerCase().includes(lowerCaseSearch) // FIX: Use job_position
         );
     }, [applications, searchTerm]);
 
@@ -235,7 +241,10 @@ const ApplicationsTab: React.FC = () => {
                                 filteredApplications.map((app) => {
                                     const statusKey = app.status || 'pending';
                                     const statusInfo = STATUS_OPTIONS[statusKey];
-                                    const teamName = app.job_positions?.title || 'N/A';
+                                    
+                                    // FIX: Robust null check for joined data
+                                    const positionTitle = app.job_position?.title || app.position || 'Unknown Position';
+                                    const teamName = app.job_position?.team_name || 'N/A';
                                     
                                     return (
                                         <tr key={app.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedApplication(app)}>
@@ -243,7 +252,7 @@ const ApplicationsTab: React.FC = () => {
                                                 <p>{app.full_name}</p>
                                                 <p className="text-xs text-gray-500">{app.email}</p>
                                             </td>
-                                            <td className="px-4 py-3 text-gray-600">{app.position}</td>
+                                            <td className="px-4 py-3 text-gray-600">{positionTitle}</td>
                                             <td className="px-4 py-3 text-gray-600">{teamName}</td>
                                             <td className="px-4 py-3">
                                                 <div className={`inline-block px-3 py-1 text-xs font-semibold rounded-full bg-${statusInfo?.color}-100 text-${statusInfo?.color}-800`}>
@@ -280,7 +289,7 @@ const ApplicationsTab: React.FC = () => {
                 <ApplicationDetailModal 
                     isOpen={!!selectedApplication} 
                     onClose={() => setSelectedApplication(null)}
-                    application={selectedApplication as Application}
+                    application={selectedApplication}
                     onUpdateStatus={handleUpdateStatus}
                 />
             </AnimatePresence>
