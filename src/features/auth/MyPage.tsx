@@ -159,14 +159,14 @@ const MyPage: React.FC = () => {
         <div className="flex border-b border-gray-200 mb-6">
           <button
             onClick={() => { setActiveTab('client'); setError(''); /* Clear error on tab switch */ }}
-            className={`flex-1 py-3 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#FF5722] ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#FF5722] text-center ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'}`} {/* Added text-center and transparent border */}
             aria-selected={activeTab === 'client'} // Accessibility
           >
             CLIENT
           </button>
           <button
              onClick={() => { setActiveTab('admin'); setError(''); /* Clear error on tab switch */ }}
-            className={`flex-1 py-3 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`flex-1 py-3 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-inset focus:ring-gray-800 text-center ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500 hover:text-gray-700 border-b-2 border-transparent'}`} {/* Added text-center and transparent border */}
              aria-selected={activeTab === 'admin'} // Accessibility
           >
             ADMIN
@@ -185,5 +185,3 @@ const MyPage: React.FC = () => {
 };
 
 export default MyPage;
-
-// --- Removed BottomNav component definitions ---
