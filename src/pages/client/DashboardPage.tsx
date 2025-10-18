@@ -1,22 +1,21 @@
 // src/pages/client/DashboardPage.tsx
-
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Updated icons: Removed MessageSquare, added Mail. Kept FilePlus, Clock, CheckCircle, User.
-import { FilePlus, Clock, CheckCircle, User, Mail } from 'lucide-react';
+// Updated icons: Reverted Mail back to MessageSquare.
+import { FilePlus, MessageSquare, Clock, CheckCircle, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
-import { COMPANY_INFO } from '../../utils/constants'; // Import COMPANY_INFO
+// Removed COMPANY_INFO import
 
-// --- (Keep container, fadeUp, and Metric component definitions as they are) ---
 const container = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
 };
 const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
+// Metric component remains the same
 const Metric: React.FC<{
     label: string;
     value: React.ReactNode;
@@ -88,7 +87,7 @@ const DashboardPage: React.FC = () => {
           </motion.header>
 
           <motion.section variants={fadeUp}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
               <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
             </div>
@@ -112,15 +111,15 @@ const DashboardPage: React.FC = () => {
                   <Clock size={16} />
                   View Requests
                 </Link>
-                {/* --- Updated Contact Support Button --- */}
-                <a
-                  href={`mailto:${COMPANY_INFO.EMAIL}`} // Use mailto link with email from constants
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors" // Adjusted styling
+                {/* --- Reverted Contact Support Button --- */}
+                <Link
+                  to="/contact" // Changed back to Link pointing to /contact
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg" // Original styling
                 >
-                  <Mail size={16} /> {/* Changed Icon */}
-                  Email Support {/* Simplified Text */}
-                </a>
-                {/* --- End Update --- */}
+                  <MessageSquare size={16} /> {/* Changed Icon back */}
+                  Contact Support {/* Changed Text back */}
+                </Link>
+                {/* --- End Revert --- */}
               </div>
             </div>
           </motion.section>
