@@ -10,8 +10,7 @@ const NAV: { key: TabKey; label: string; icon: React.ComponentType<any> }[] = [
   { key: "projects", label: "Projects", icon: Briefcase },
   { key: "access_requests", label: "Access Requests", icon: UserCheck },
   { key: "partners", label: "Partners", icon: Handshake },
-  { key: "applications", label: "Applications", icon: FileText },
-  // Removed: 'teams', 'equipment', 'services', and 'jobs'
+  { key: "submitted_applications", label: "Submitted Applications", icon: FileText }, // NEW TAB
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
