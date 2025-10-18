@@ -1,149 +1,106 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
 import { useAuth } from './useAuth';
-import { supabase } from '../../lib/supabase/client';
-
-type Tab = 'client' | 'admin';
+import { useLocation, Link } from 'react-router-dom';
 
 const MyPage: React.FC = () => {
-  const navigate = useNavigate();
   const location = useLocation();
-  const { user, role } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>(location.state?.defaultTab || 'client');
+  const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { clientLogin, adminLogin } = useAuth();
 
-  useEffect(() => {
-    if (user) {
-      if (role === 'admin') {
-        navigate('/admin', { replace: true });
-      } else if (role === 'client') {
-        navigate('/client/dashboard', { replace: true });
-      }
-    }
-  }, [user, role, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) throw error;
-
-      if (data.user) {
-        const userRole = data.user.user_metadata?.role || 'client';
-        if (activeTab === 'admin' && userRole !== 'admin') {
-          setError('Invalid admin credentials');
-          await supabase.auth.signOut();
-          return;
-        }
-
-        if (userRole === 'admin') {
-          navigate('/admin', { replace: true });
-        } else {
-          navigate('/client/dashboard', { replace: true });
-        }
+    setError('');
+    
+    // This is where you would add the logic from your plan:
+    // 1. Check email status (invited, pending, not found).
+    // 2. If not invited, show "Access requires approval."
+    // 3. If pending, show "Your request is under review."
+    // 4. If invited, proceed with login.
+    
+    setIsSubmitting(true);
+    setTimeout(() => {
+      if (activeTab === 'client') {
+        // For now, we'll just log in directly.
+        clientLogin();
+      } else {
+        adminLogin();
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during login');
-    } finally {
-      setLoading(false);
-    }
+      setIsSubmitting(false);
+    }, 1000);
   };
 
+  const renderClientForm = () => (
+    <>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">Welcome to your SolveX Studios portal.</p>
+      
+      {error && <p className="text-red-500 text-sm text-center mb-4 bg-red-50 p-3 rounded-md">{error}</p>}
+
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">Email Address</label>
+        <input type="email" id="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="password">Password</label>
+        <input type="password" id="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+
+      <button type="submit" disabled={isSubmitting} className="w-full bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:bg-gray-400">
+        {isSubmitting ? 'Processing...' : 'Login'}
+      </button>
+
+      <div className="text-center mt-6 border-t pt-6">
+        <p className="text-sm text-gray-600 mb-2">Don't have an account yet?</p>
+        <Link to="/request-access" className="w-full block bg-gray-100 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-200 transition-colors">
+          Request Access
+        </Link>
+      </div>
+    </>
+  );
+
+  const renderAdminForm = () => (
+    <>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">Internal access only</p>
+      
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-email">Email Address</label>
+        <input type="email" id="admin-email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <div className="mb-6">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-password">Password</label>
+        <input type="password" id="admin-password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <button type="submit" disabled={isSubmitting} className="w-full bg-gray-800 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400">
+        {isSubmitting ? 'Processing...' : 'Login'}
+      </button>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
-      >
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          <div className="p-8">
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-              <p className="text-gray-600">Sign in to your account</p>
-            </div>
-
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setActiveTab('client')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                  activeTab === 'client'
-                    ? 'bg-[#FF5722] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Client
-              </button>
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
-                  activeTab === 'admin'
-                    ? 'bg-[#FF5722] text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Admin
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              {error && (
-                <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#FF5722] text-white py-3 px-6 rounded-lg font-semibold hover:bg-[#E64A19] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
-            </form>
-          </div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-md w-full">
+        <div className="flex border-b border-gray-200 mb-6">
+          <button onClick={() => { setActiveTab('client'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500'}`}>
+            CLIENT
+          </button>
+          <button onClick={() => { setActiveTab('admin'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500'}`}>
+            ADMIN
+          </button>
         </div>
-      </motion.div>
-    </div>
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <form onSubmit={handleSubmit} noValidate>
+            {activeTab === 'client' ? renderClientForm() : renderAdminForm()}
+          </form>
+        </div>
+      </div> 
+    </div> 
   );
 };
 
