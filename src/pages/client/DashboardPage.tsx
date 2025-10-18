@@ -1,13 +1,12 @@
-import React from 'react'; // Removed useState as it's no longer needed for the modal
+// src/pages/client/DashboardPage.tsx
+import React from 'react'; // Removed useState
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Updated icons: Removed WalletMinimal. Kept Clock, CreditCard, User, FilePlus.
 import { FilePlus, MessageSquare, Clock, CheckCircle, CreditCard, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
-// Removed the import for PaymentReceivingModal as it's not used
-// import PaymentReceivingModal from './PaymentReceivingModal';
+// Removed PaymentReceivingModal import
 
 const container = {
   hidden: { opacity: 0 },
@@ -22,7 +21,6 @@ const Metric: React.FC<{
     colorBg?: string;
     iconColor?: string;
     className?: string;
-    // Removed onClick and clickable props as they are not used now
 }> = ({
   label,
   value,
@@ -31,7 +29,6 @@ const Metric: React.FC<{
   iconColor = 'text-amber-600',
   className = '',
 }) => (
-      // Reverted to always be a div
       <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 ${className}`}>
         <div className={`${colorBg} p-3 rounded-full flex items-center justify-center flex-shrink-0`}>
           <Icon className={`w-5 h-5 ${iconColor}`} />
@@ -52,12 +49,12 @@ const DashboardPage: React.FC = () => {
 
   const stats = {
     pending: requests.filter(r => r.status === 'Pending').length,
-    active: requests.filter(r => r.status === 'In Progress').length, // Added back for potential future use or consistency
-    completed: requests.filter(r => r.status === 'Completed').length, // Added back
+    active: requests.filter(r => r.status === 'In Progress').length,
+    completed: requests.filter(r => r.status === 'Completed').length,
     tier: client.tier,
   };
 
-  const paymentDisplayValue = "PAYMENTS";
+  const paymentDisplayValue = "PAYMENTS"; // Value for display
 
   const recentRequests = requests.slice(0, 5).map(req => ({
     id: req.id,
@@ -95,16 +92,15 @@ const DashboardPage: React.FC = () => {
           </motion.header>
 
           <motion.section variants={fadeUp}>
-             {/* Reverted Metrics Grid to 4 columns */}
+             {/* Reverted Metrics Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" iconColor="text-sky-600" />
-              {/* Added back Active and Completed */}
               <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
               <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
               <Metric
                 label="Account Tier" // Label reverted
-                value={stats.tier} // Value reverted to show actual tier
-                icon={User} // Icon reverted
+                value={stats.tier}   // Value reverted
+                icon={User}           // Icon reverted
                 colorBg="bg-gray-100"
                 iconColor="text-gray-600"
               />
@@ -138,7 +134,6 @@ const DashboardPage: React.FC = () => {
                   Contact Support
                 </Link>
               </div>
-              {/* --- End Reverted Quick Actions --- */}
             </div>
           </motion.section>
 
@@ -171,10 +166,11 @@ const DashboardPage: React.FC = () => {
             </div>
           </motion.section>
         </motion.div>
+         {/* Comment moved inside the closing tag */}
+         {/* Removed the modal invocation */}
+         {/* Removed Fragment shorthand */}
       </div>
-
-     {/* Removed the modal invocation */}
   );
 };
 
-export default DashboardPage; 
+export default DashboardPage;
