@@ -34,7 +34,7 @@ const ContactForm: React.FC<ContactFormProps> = ({ className = '' }) => {
     setError('');
 
     try {
-      const { data, error: submitError } = await submitContactInquiry({
+      const { error: submitError } = await submitContactInquiry({
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,

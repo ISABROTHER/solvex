@@ -7,49 +7,35 @@ import { Home, Loader2 } from 'lucide-react';
 const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
+  const { clientLogin, adminLogin, isLoading, error: authError } = useAuth();
+  const [localError, setLocalError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-   useEffect(() => { setAuthError(null); }, [email, password, activeTab, setAuthError]);
+   useEffect(() => { setLocalError(null); }, [email, password, activeTab]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError(null);
+    setLocalError(null);
     let targetRole: 'client' | 'admin' = activeTab;
 
     try {
-      let result: { success: boolean; role: 'client' | 'admin' | null };
-
       if (targetRole === 'client') {
-        result = await clientLogin(email, password);
+        await clientLogin(email, password);
       } else {
-        result = await adminLogin(email, password);
+        await adminLogin(email, password);
       }
 
-      // Check result from the login function
-      if (result.success && result.role === targetRole) {
-        navigate(targetRole === 'admin' ? '/admin' : '/client');
-      } else if (result.success) {
-        // Logged in, but the role fetched doesn't match the portal tab
-        setAuthError(`Login successful, but your account role ('${result.role || 'unknown'}') does not grant access to the ${targetRole} portal.`);
-        // Optionally add a logout button or automatically logout here
-      } else if (!authError) {
-        // Login explicitly failed without a specific Supabase error message
-         setAuthError('Login failed. Please check your email and password.');
-      }
-      // If login failed and authError was set (e.g., 'Invalid login credentials'), it will display
-
+      navigate(targetRole === 'admin' ? '/admin' : '/client');
     } catch (err: any) {
-      // Catch any unexpected errors during the process
-      setAuthError(err.message || 'An unexpected error occurred during login.');
+      setLocalError(err.message || 'An unexpected error occurred during login.');
     }
   };
 
   const handleTabClick = (tab: 'client' | 'admin') => {
       setActiveTab(tab);
-      setAuthError(null); // Clear errors when switching tabs
+      setLocalError(null);
   };
 
   // --- Render Functions ---
@@ -59,7 +45,7 @@ const MyPage: React.FC = () => {
       <p className="text-center text-gray-500 mb-6 text-sm">Access your project portal.</p>
       {/* Error Display */}
       <div className="min-h-[3.25rem] mb-4 flex items-center justify-center">
-        {authError && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{authError}</p>}
+        {(localError || authError) && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{localError || authError}</p>}
       </div>
       {/* Inputs */}
       <div className="mb-4">
@@ -90,7 +76,7 @@ const MyPage: React.FC = () => {
       <p className="text-center text-gray-500 mb-6 text-sm">Internal use only.</p>
       {/* Error Display */}
        <div className="min-h-[3.25rem] mb-4 flex items-center justify-center">
-        {authError && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{authError}</p>}
+        {(localError || authError) && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{localError || authError}</p>}
        </div>
        {/* Inputs */}
       <div className="mb-4">

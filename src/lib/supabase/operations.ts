@@ -113,14 +113,131 @@ export const createOrUpdateClientProfile = async (
 
 // --- Realtime listener for access requests ---
 export const onAccessRequestsChange = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:access_requests:admin') // Use a unique channel name
-    .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'access_requests' },
-        callback // Call the provided function when changes occur
-     )
+  const channel = supabase
+    .channel('access_requests_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'access_requests' }, callback)
     .subscribe();
+  return channel;
 };
 
-// ... (keep other existing functions) ...
+export type Service = Database['public']['Tables']['services']['Row'];
+
+export const getServices = async () => {
+  return supabase.from('services').select('*').is('deleted_at', null).order('title');
+};
+
+export const createService = async (service: Omit<Service, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>) => {
+  return supabase.from('services').insert(service).select().single();
+};
+
+export const updateService = async (id: string, updates: Partial<Service>) => {
+  return supabase.from('services').update(updates).eq('id', id).select().single();
+};
+
+export const softDeleteService = async (id: string) => {
+  return supabase.from('services').update({ deleted_at: new Date().toISOString() }).eq('id', id).select().single();
+};
+
+export const restoreService = async (id: string) => {
+  return supabase.from('services').update({ deleted_at: null }).eq('id', id).select().single();
+};
+
+export const getDeletedServices = async () => {
+  return supabase.from('services').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
+};
+
+export const onServicesChange = (callback: (payload: any) => void) => {
+  const channel = supabase
+    .channel('services_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, callback)
+    .subscribe();
+  return channel;
+};
+
+export type CareerApplication = Database['public']['Tables']['job_applications']['Row'];
+
+export const getCareerApplications = async (status?: string) => {
+  let query = supabase.from('job_applications').select('*').order('created_at', { ascending: false });
+  if (status) query = query.eq('status', status);
+  return query;
+};
+
+export const updateCareerApplicationStatus = async (id: string, status: string) => {
+  return supabase.from('job_applications').update({ status }).eq('id', id).select().single();
+};
+
+export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
+
+export const getOpenJobPositions = async () => {
+  return supabase.from('job_positions').select('*').eq('status', 'open').is('deleted_at', null).order('title');
+};
+
+export const getActiveTeams = async () => {
+  return supabase.from('teams').select('*').is('deleted_at', null).order('name');
+};
+
+export const getRentalEquipment = async () => {
+  return supabase.from('rental_gear').select('*').eq('is_available', true).order('name');
+};
+
+export const getAllTeams = async () => {
+  return supabase.from('teams').select('*').order('name');
+};
+
+export const getMembers = async (teamId?: string) => {
+  let query = supabase.from('members').select('*');
+  if (teamId) query = query.eq('team_id', teamId);
+  return query.order('created_at');
+};
+
+export type Team = Database['public']['Tables']['teams']['Row'];
+
+export const createTeam = async (team: Omit<Team, 'id' | 'created_at' | 'updated_at'>) => {
+  return supabase.from('teams').insert(team).select().single();
+};
+
+export const updateTeam = async (id: string, updates: Partial<Team>) => {
+  return supabase.from('teams').update(updates).eq('id', id).select().single();
+};
+
+export const deleteTeam = async (id: string) => {
+  return supabase.from('teams').update({ deleted_at: new Date().toISOString(), is_deleted: true }).eq('id', id).select().single();
+};
+
+export type RentalGear = Database['public']['Tables']['rental_gear']['Row'];
+
+export const getAllRentalEquipment = async () => {
+  return supabase.from('rental_gear').select('*').order('name');
+};
+
+export const updateRentalEquipment = async (id: string, updates: Partial<RentalGear>) => {
+  return supabase.from('rental_gear').update(updates).eq('id', id).select().single();
+};
+
+export const deleteRentalEquipment = async (id: string) => {
+  return supabase.from('rental_gear').delete().eq('id', id);
+};
+
+export const onRentalGearChange = (callback: (payload: any) => void) => {
+  const channel = supabase
+    .channel('rental_gear_changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'rental_gear' }, callback)
+    .subscribe();
+  return channel;
+};
+
+export const getAllJobPositions = async () => {
+  return supabase.from('job_positions').select('*').order('title');
+};
+
+export const createJobPosition = async (job: Omit<JobPosition, 'id' | 'created_at' | 'updated_at'>) => {
+  return supabase.from('job_positions').insert(job).select().single();
+};
+
+export const updateJobPosition = async (id: string, updates: Partial<JobPosition>) => {
+  return supabase.from('job_positions').update(updates).eq('id', id).select().single();
+};
+
+export const deleteJobPosition = async (id: string) => {
+  return supabase.from('job_positions').update({ deleted_at: new Date().toISOString(), is_deleted: true }).eq('id', id).select().single();
+};
