@@ -1,28 +1,29 @@
 import React, { useState } from 'react';
 import { useAuth } from './useAuth';
 import { useLocation, Link } from 'react-router-dom';
+import { Home } from 'lucide-react'; // Import the Home icon
 
 const MyPage: React.FC = () => {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
-  
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
+
   const { clientLogin, adminLogin } = useAuth();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+
     // This is where you would add the logic from your plan:
     // 1. Check email status (invited, pending, not found).
     // 2. If not invited, show "Access requires approval."
-    // 3. If pending, show "Your request is under review." 
+    // 3. If pending, show "Your request is under review."
     // 4. If invited, proceed with login.
-    
+
     setIsSubmitting(true);
     setTimeout(() => {
       if (activeTab === 'client') {
@@ -39,7 +40,7 @@ const MyPage: React.FC = () => {
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Welcome to your SolveX Studios portal.</p>
-      
+
       {error && <p className="text-red-500 text-sm text-center mb-4 bg-red-50 p-3 rounded-md">{error}</p>}
 
       <div className="mb-4">
@@ -68,7 +69,7 @@ const MyPage: React.FC = () => {
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Internal access only</p>
-      
+
       <div className="mb-4">
         <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-email">Email Address</label>
         <input type="email" id="admin-email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
@@ -87,6 +88,15 @@ const MyPage: React.FC = () => {
     // Note: added pb-24 so the fixed bottom nav doesn't cover content on mobile
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 pb-24">
       <div className="max-w-md w-full">
+        {/* --- ADDED HOME BUTTON LINK HERE --- */}
+        <div className="mb-4 text-center">
+            <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+                <Home size={16} />
+                Back to Home
+            </Link>
+        </div>
+        {/* --- END OF ADDED HOME BUTTON LINK --- */}
+
         <div className="flex border-b border-gray-200 mb-6">
           <button onClick={() => { setActiveTab('client'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500'}`}>
             CLIENT
@@ -164,4 +174,4 @@ const NavItem: React.FC<NavItemProps> = ({ to, label, ariaLabel, children }) => 
       <span className="mt-1">{label}</span>
     </Link>
   );
-}; 
+};
