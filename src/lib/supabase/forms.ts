@@ -1,5 +1,5 @@
 // src/lib/supabase/forms.ts
-import { supabase } from './client'; // Import the initialized client
+import { supabase } from './client';
 
 interface AccessRequestData {
   firstName: string;
@@ -10,31 +10,29 @@ interface AccessRequestData {
   reason?: string;
 }
 
-// Add interfaces for other forms as needed
+// Add other form data interfaces (Contact, Career, Rental) if needed
 
 export const supabaseForms = {
   /**
-   * Submits data from the Request Access form to the Supabase table.
+   * Submits data from the Request Access form.
    */
   submitAccessRequest: async (data: AccessRequestData) => {
     const { error } = await supabase
-      .from('access_requests') // Corresponds to the SQL table name
+      .from('access_requests')
       .insert([
         {
-          first_name: data.firstName, // Map frontend field to DB column
-          last_name: data.lastName,   // Map frontend field to DB column
+          first_name: data.firstName,
+          last_name: data.lastName,
           email: data.email,
           phone: data.phone,
           company_name: data.company,
           reason: data.reason,
-          status: 'pending', // Default status for new requests
+          status: 'pending',
         },
       ]);
-    return { error }; // Return error object (null on success) 
+    return { error }; // Returns { error: null } on success
   },
 
-  // Keep placeholders or implementations for other forms:
+  // Add other form submission functions below...
   // submitContactInquiry: async (...) => { ... },
-  // submitCareerApplication: async (...) => { ... },
-  // submitRentalBooking: async (...) => { ... },
 };
