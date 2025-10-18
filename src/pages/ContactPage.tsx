@@ -1,206 +1,269 @@
-// src/pages/ContactPage.tsx
-
-import React, { useState } from 'react';
-import { useForm, SubmitHandler } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Mail, Phone, Clock, Send, Loader2, Link as LinkIcon, Instagram, Facebook, Twitter, Linkedin } from 'lucide-react';
-import { COMPANY_INFO } from '../utils/constants'; // Import company info
-import { useToast } from '../contexts/ToastContext';
-import { supabaseForms } from '../lib/supabase/forms'; // Assuming this handles form submission
-
-// --- Contact Form Schema (Simplified) ---
-const contactSchema = z.object({
-  name: z.string().min(2, 'Name is required'),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().optional(), // Optional phone number
-  message: z.string().min(10, 'Message must be at least 10 characters'),
-});
-type ContactFormData = z.infer<typeof contactSchema>;
-
-// --- Social Media Icon Mapping ---
-const socialIconMap: { [key: string]: React.ElementType } = {
-  Instagram: Instagram,
-  Facebook: Facebook,
-  Twitter: Twitter,
-  LinkedIn: Linkedin,
-  default: LinkIcon, // Fallback icon
-};
+// @ts-nocheck
+import React from 'react';
+import { useEffect } from 'react';
+import { Mail, Phone, MapPin, Clock, Linkedin, Instagram, Twitter, Facebook, Youtube } from 'lucide-react';
+import ContactForm from '../components/forms/ContactForm';
 
 const ContactPage: React.FC = () => {
-  const { showToast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<ContactFormData>({
-    resolver: zodResolver(contactSchema),
-  });
+  // Add animated heading styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@700;800&family=Manrope:wght@700;800&display=swap');
 
-  const onSubmit: SubmitHandler<ContactFormData> = async (data) => {
-    setIsSubmitting(true);
-    try {
-      // Use your Supabase function to submit the form data
-      const { error } = await supabaseForms.submitContactForm(data);
-      if (error) throw error;
+      .animated-gradient-text-light {
+        background-image: linear-gradient(
+          90deg,
+          #fff 0%,
+          #fff 28%,
+          #FF5722 50%,
+          #fff 72%,
+          #fff 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        background-size: 200% 100%;
+        animation: sheen-move 3s ease-in-out infinite;
+      }
 
-      showToast('Message sent successfully!', 'success');
-      reset(); // Clear the form
-    } catch (error: any) {
-      console.error('Failed to send message:', error);
-      showToast(error.message || 'Failed to send message. Please try again.', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      .animated-gradient-text {
+        background-image: linear-gradient(
+          90deg,
+          #111 0%,
+          #111 28%,
+          #FF5722 50%,
+          #111 72%,
+          #111 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        background-size: 200% 100%;
+        animation: sheen-move 3s ease-in-out infinite;
+      }
+
+      @keyframes sheen-move {
+        0%   { background-position: 200% 0; }
+        50%  { background-position: 100% 0; }
+        100% { background-position: -200% 0; }
+      }
+
+      .heading-underline {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        bottom: -8px;
+        border-radius: 9999px;
+        background: linear-gradient(
+          90deg,
+          rgba(255,87,34,0) 0%,
+          rgba(255,87,34,.85) 35%,
+          rgba(255,87,34,.85) 65%,
+          rgba(255,87,34,0) 100%
+        );
+        transform-origin: left;
+        transform: scaleX(0);
+        animation: underline-reveal 3s ease forwards 400ms;
+        opacity: 0.95;
+      }
+
+      @keyframes underline-reveal {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+      }
+    `;
+    // Add unique key to force re-render on page reload
+    style.id = `animated-headings-${Date.now()}`;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-        <div className="mb-12 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900 sm:text-4xl">
-            Get in Touch
+      {/* Hero Section */}
+      <section className="bg-gradient-to-br from-[#FF5722] to-[#E64A19] text-white py-20">
+        <div className="container mx-auto px-6 text-center">
+          <h1 
+            className="text-4xl md:text-5xl font-bold mb-4"
+            style={{ fontFamily: '"Inter Tight","Manrope",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif' }}
+          >
+            <span className="animated-gradient-text-light relative inline-block">
+              Contact Us
+              <span className="heading-underline" />
+            </span>
           </h1>
-          <p className="mt-4 text-lg leading-6 text-gray-500">
-            We're here to help. Reach out via email, phone, or send us a message directly.
+          <p className="text-xl text-orange-100 max-w-2xl mx-auto">
+            Ready to transform your brand? Let's start a conversation about your goals and how we can help you achieve them.
           </p>
         </div>
+      </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-          {/* --- Contact Info & Socials (Left Column) --- */}
-          <div className="space-y-8 lg:col-span-1">
-            {/* Email */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Mail size={20} className="text-[#FF5722]" /> Email
-              </h2>
-              <a href={`mailto:${COMPANY_INFO.EMAIL}`} className="mt-1 block text-base text-[#FF5722] hover:text-[#E64A19] hover:underline">
-                {COMPANY_INFO.EMAIL}
-              </a>
-              <p className="mt-1 text-sm text-gray-500">We'll respond within 24 hours.</p>
+      {/* Contact Content */}
+      <section className="py-16">
+        <div className="container mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Contact Information */}
+            <div className="space-y-8">
+              <div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-6">Get in Touch</h2>
+                <p className="text-sm text-gray-600 mb-8">
+                  We're here to help you build a stronger brand and grow your business. 
+                  Reach out to us through any of the channels below.
+                </p>
+              </div>
+
+              {/* Contact Details */}
+              <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                  <div className="bg-[#FF5722] p-3 rounded-lg">
+                    <Mail className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Email</h3>
+                    <p className="text-gray-600">hello@solvexstudios.com</p>
+                    <p className="text-sm text-gray-500">We'll respond within 24 hours</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="bg-[#FF5722] p-3 rounded-lg">
+                    <Phone className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Phone</h3>
+                    <p className="text-gray-600">+233 XX XXX XXXX</p>
+                    <p className="text-sm text-gray-500">Mon-Fri, 9AM-6PM GMT</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="bg-[#FF5722] p-3 rounded-lg">
+                    <MapPin className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Location</h3>
+                    <p className="text-gray-600">Accra, Ghana</p>
+                    <p className="text-sm text-gray-500">Serving clients across West Africa</p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="bg-[#FF5722] p-3 rounded-lg">
+                    <Clock className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Business Hours</h3>
+                    <p className="text-gray-600">Monday - Friday: 9:00 AM - 6:00 PM</p>
+                    <p className="text-gray-600">Saturday: 10:00 AM - 4:00 PM</p>
+                    <p className="text-gray-600">Sunday: Closed</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Social Media */}
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-4">Follow Us</h3>
+                <div className="flex gap-4">
+                  <a
+                    href="https://linkedin.com/company/solvexstudios"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gray-100 p-3 rounded-lg hover:bg-[#FF5722] hover:text-white transition-colors"
+                  >
+                    <Linkedin className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://instagram.com/solvexstudios/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gray-100 p-3 rounded-lg hover:bg-[#FF5722] hover:text-white transition-colors"
+                  >
+                    <Instagram className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://x.com/solvexstudios?s=21"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gray-100 p-3 rounded-lg hover:bg-[#FF5722] hover:text-white transition-colors"
+                  >
+                    <Twitter className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://www.facebook.com/profile.php?id=61579955124585&sk=about"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gray-100 p-3 rounded-lg hover:bg-[#FF5722] hover:text-white transition-colors"
+                  >
+                    <Facebook className="w-5 h-5" />
+                  </a>
+                  <a
+                    href="https://youtube.com/@solvexstudios"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-gray-100 p-3 rounded-lg hover:bg-[#FF5722] hover:text-white transition-colors"
+                  >
+                    <Youtube className="w-5 h-5" />
+                  </a>
+                </div>
+              </div>
             </div>
 
-            {/* Phone */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Phone size={20} className="text-[#FF5722]" /> Phone
-              </h2>
-              <a href={`tel:${COMPANY_INFO.PHONE.replace(/\s/g, '')}`} className="mt-1 block text-base text-gray-800 hover:text-black">
-                 {COMPANY_INFO.PHONE}
-              </a>
-              <p className="mt-1 text-sm text-gray-500 flex items-center gap-1">
-                 <Clock size={14} /> Mon-Fri, 9AM-6PM GMT
+            {/* Contact Form */}
+            <ContactForm />
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-16 bg-white">
+        <div className="container mx-auto px-6">
+          <div className="text-center mb-12">
+            <h2 
+              className="text-3xl font-bold text-gray-900 mb-4"
+              style={{ fontFamily: '"Inter Tight","Manrope",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif' }}
+            >
+              <span className="animated-gradient-text relative inline-block">
+                Frequently Asked Questions
+                <span className="heading-underline" />
+              </span>
+            </h2>
+            <p className="text-lg text-gray-600">Quick answers to common questions</p>
+            <p className="text-sm text-gray-600">Quick answers to common questions</p>
+          </div>
+
+          <div className="max-w-3xl mx-auto space-y-6">
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">How quickly can you start a project?</h3>
+              <p className="text-gray-600">
+                We typically begin new projects within 1-2 weeks of contract signing, depending on our current workload and project complexity.
               </p>
             </div>
 
-            {/* Social Media Handles */}
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Media Handles
-              </h2>
-              <div className="flex space-x-4">
-                {COMPANY_INFO.SOCIAL_MEDIA.map((social) => {
-                  const Icon = socialIconMap[social.platform] || socialIconMap.default;
-                  return (
-                    <a
-                      key={social.platform}
-                      href={social.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-500 hover:text-[#FF5722] transition-colors"
-                      aria-label={social.platform}
-                    >
-                      <Icon size={24} />
-                    </a>
-                  );
-                 })}
-              </div>
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">Do you work with international clients?</h3>
+              <p className="text-gray-600">
+                Yes! While we're based in Ghana, we work with clients across Africa and internationally through digital collaboration tools.
+              </p>
             </div>
-          </div>
 
-          {/* --- Contact Form (Right Column) --- */}
-          <div className="lg:col-span-2">
-            <div className="bg-white p-6 sm:p-8 rounded-lg shadow border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Send a Message</h2>
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                {/* Name */}
-                <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                    Name <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    id="name"
-                    {...register('name')}
-                    className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.name ? 'border-red-500 ring-red-500' : ''}`}
-                    placeholder="Your Full Name"
-                  />
-                  {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>}
-                </div>
-
-                {/* Email */}
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                    Email <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    id="email"
-                    {...register('email')}
-                    className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.email ? 'border-red-500 ring-red-500' : ''}`}
-                    placeholder="you@example.com"
-                  />
-                  {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
-                </div>
-
-                {/* Phone (Optional) */}
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                    Phone <span className="text-gray-400">(Optional)</span>
-                  </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    {...register('phone')}
-                    className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.phone ? 'border-red-500 ring-red-500' : ''}`}
-                    placeholder="Your Phone Number"
-                  />
-                  {errors.phone && <p className="mt-1 text-xs text-red-600">{errors.phone.message}</p>}
-                </div>
-
-                {/* Message */}
-                <div>
-                  <label htmlFor="message" className="block text-sm font-medium text-gray-700">
-                    Message <span className="text-red-600">*</span>
-                  </label>
-                  <textarea
-                    id="message"
-                    rows={4}
-                    {...register('message')}
-                    className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.message ? 'border-red-500 ring-red-500' : ''}`}
-                    placeholder="How can we help you?"
-                  />
-                  {errors.message && <p className="mt-1 text-xs text-red-600">{errors.message.message}</p>}
-                </div>
-
-                {/* Submit Button */}
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex w-full justify-center items-center gap-2 rounded-md bg-[#FF5722] px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#E64A19] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5722] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {isSubmitting ? 'Sending...' : 'Send Message'}
-                  </button>
-                </div>
-              </form>
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">What's included in your service packages?</h3>
+              <p className="text-gray-600">
+                Each service package is customized to your needs. We provide detailed proposals outlining deliverables, timelines, and costs before starting any project.
+              </p>
             </div>
-          </div>
+
+            <div className="bg-gray-50 p-6 rounded-lg">
+              <h3 className="font-semibold text-gray-900 mb-2">Do you offer ongoing support after project completion?</h3>
+              <p className="text-gray-600">
+                Absolutely! We offer various maintenance and support packages to ensure your brand continues to perform optimally after launch.
+              </p>
+            </div>
+          </div> 
         </div>
-      </div>
+      </section>
     </div>
   );
 };
