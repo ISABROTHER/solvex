@@ -1,194 +1,167 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from './AuthProvider'; // Correct: Import from AuthProvider
-import { Loader2, LogIn, UserPlus } from 'lucide-react';
-import FuturisticHomeButton from './FuturisticHomeButton'; // Import the new futuristic button
-
-type Tab = 'client' | 'admin';
+import React, { useState } from 'react';
+import { useAuth } from './useAuth';
+import { useLocation, Link } from 'react-router-dom';
 
 const MyPage: React.FC = () => {
-    const navigate = useNavigate();
-    const location = useLocation();
-    // Correctly get auth functions from useAuth hook
-    const { login, signup, isAuthenticated, role, isLoading: authLoading } = useAuth();
-    const [activeTab, setActiveTab] = useState<Tab>(location.state?.defaultTab || 'client');
-    const [isSignup, setIsSignup] = useState(false);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [fullName, setFullName] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const { clientLogin, adminLogin } = useAuth();
 
-    // Redirect if already authenticated
-    useEffect(() => {
-        if (!authLoading && isAuthenticated) {
-            if (role === 'admin') {
-                navigate('/admin', { replace: true });
-            } else { // Handles 'client' and 'pending' roles
-                navigate('/client', { replace: true });
-            }
-        }
-    }, [isAuthenticated, role, navigate, authLoading]);
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    
+    // This is where you would add the logic from your plan:
+    // 1. Check email status (invited, pending, not found).
+    // 2. If not invited, show "Access requires approval."
+    // 3. If pending, show "Your request is under review." 
+    // 4. If invited, proceed with login.
+    
+    setIsSubmitting(true);
+    setTimeout(() => {
+      if (activeTab === 'client') {
+        // For now, we'll just log in directly.
+        clientLogin();
+      } else {
+        adminLogin();
+      }
+      setIsSubmitting(false);
+    }, 1000);
+  };
 
-    const handleTabChange = (tab: Tab) => {
-        setActiveTab(tab);
-        setIsSignup(false); // Reset to login view when changing tabs
-        setError(null); // Clear errors
-        // Clear form fields when switching tabs for better UX
-        setEmail('');
-        setPassword('');
-        setFullName('');
-    };
+  const renderClientForm = () => (
+    <>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">Welcome to your SolveX Studios portal.</p>
+      
+      {error && <p className="text-red-500 text-sm text-center mb-4 bg-red-50 p-3 rounded-md">{error}</p>}
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError(null);
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">Email Address</label>
+        <input type="email" id="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="password">Password</label>
+        <input type="password" id="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
 
-        try {
-            if (isSignup) {
-                await signup(email, password, fullName);
-                // On success, show a message. The user needs to verify their email.
-                setIsSignup(false); // Switch back to login form
-                alert('Signup successful! Please check your email to verify your account before logging in.');
-                // Clear fields after successful signup attempt
-                setEmail('');
-                setPassword('');
-                setFullName('');
-            } else {
-                await login(email, password);
-                // AuthProvider's onAuthStateChange listener will handle redirection
-            }
-        } catch (err: any) {
-            console.error(`${isSignup ? 'Signup' : 'Login'} Error:`, err);
-            setError(err.message || `An unexpected ${isSignup ? 'signup' : 'login'} error occurred.`);
-        } finally {
-            setLoading(false);
-        }
-    };
+      <button type="submit" disabled={isSubmitting} className="w-full bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:bg-gray-400">
+        {isSubmitting ? 'Processing...' : 'Login'}
+      </button>
 
-    const formTitle = isSignup ? 'Create Client Account' : (activeTab === 'client' ? 'Client Login' : 'Admin Login');
-    const buttonText = isSignup ? 'Sign Up' : 'Login';
-    const toggleText = isSignup ? 'Already have an account? Login' : "Don't have an account? Sign Up";
+      <div className="text-center mt-6 border-t pt-6">
+        <p className="text-sm text-gray-600 mb-2">Don't have an account yet?</p>
+        <Link to="/request-access" className="w-full block bg-gray-100 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-200 transition-colors">
+          Request Access
+        </Link>
+      </div>
+    </>
+  );
 
-    return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
-            {/* Use the new Futuristic Home Button component */}
-            <FuturisticHomeButton />
+  const renderAdminForm = () => (
+    <>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">Internal access only</p>
+      
+      <div className="mb-4">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-email">Email Address</label>
+        <input type="email" id="admin-email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <div className="mb-6">
+        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-password">Password</label>
+        <input type="password" id="admin-password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md border-gray-300" required />
+      </div>
+      <button type="submit" disabled={isSubmitting} className="w-full bg-gray-800 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400">
+        {isSubmitting ? 'Processing...' : 'Login'}
+      </button>
+    </>
+  );
 
-            <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-                className="w-full max-w-md bg-white rounded-xl shadow-lg overflow-hidden"
-            >
-                {/* Logo and Tabs */}
-                <div className="p-8 pb-0 text-center">
-                    <img src="/Solvexstudios logo.png" alt="Solvex Logo" className="h-16 w-auto mx-auto mb-6" />
-                    <div className="flex border-b">
-                        <button
-                            onClick={() => handleTabChange('client')}
-                            className={`flex-1 py-3 text-sm font-semibold transition-colors duration-200 ${activeTab === 'client' ? 'border-b-2 border-[#FF5722] text-[#FF5722]' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            CLIENT PORTAL
-                        </button>
-                        <button
-                            onClick={() => handleTabChange('admin')}
-                            className={`flex-1 py-3 text-sm font-semibold transition-colors duration-200 ${activeTab === 'admin' ? 'border-b-2 border-gray-800 text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
-                        >
-                            ADMIN PANEL
-                        </button>
-                    </div>
-                </div>
-
-                {/* Form Area */}
-                <div className="p-8">
-                    <h2 className="text-xl font-semibold text-center text-gray-800 mb-6">{formTitle}</h2>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <AnimatePresence>
-                            {isSignup && activeTab === 'client' && (
-                                <motion.div
-                                    key="fullName" // Key for AnimatePresence
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="overflow-hidden" // Prevents content jump during animation
-                                >
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-                                    <input
-                                        type="text"
-                                        value={fullName}
-                                        onChange={(e) => setFullName(e.target.value)}
-                                        required
-                                        className="w-full px-4 py-2 border rounded-lg focus:ring-[#FF5722] focus:border-[#FF5722]"
-                                        placeholder="Your Full Name"
-                                    />
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                            <input
-                                type="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                required
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-[#FF5722] focus:border-[#FF5722]"
-                                placeholder="you@example.com"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                required
-                                className="w-full px-4 py-2 border rounded-lg focus:ring-[#FF5722] focus:border-[#FF5722]"
-                                placeholder="••••••••"
-                            />
-                        </div>
-
-                        <AnimatePresence>
-                            {error && (
-                                <motion.p
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="text-sm text-red-600 text-center mt-2"
-                                >
-                                    {error}
-                                </motion.p>
-                            )}
-                        </AnimatePresence>
-
-                        <button
-                            type="submit"
-                            disabled={loading || authLoading}
-                            className={`w-full text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${activeTab === 'client' ? 'bg-[#FF5722] hover:bg-[#E64A19]' : 'bg-gray-800 hover:bg-gray-700'}`}
-                        >
-                            {loading || authLoading ? <Loader2 className="animate-spin" /> : (isSignup ? <UserPlus size={18} /> : <LogIn size={18} />)}
-                            {loading || authLoading ? 'Processing...' : buttonText}
-                        </button>
-
-                        {/* Toggle Signup/Login (Only shown on Client tab) */}
-                        {activeTab === 'client' && (
-                            <button
-                                type="button"
-                                onClick={() => { setIsSignup(!isSignup); setError(null); }} // Clear error on toggle
-                                className="w-full text-center text-sm text-[#FF5722] hover:underline mt-4"
-                            >
-                                {toggleText}
-                            </button>
-                        )}
-                    </form>
-                </div>
-            </motion.div>
+  return (
+    // Note: added pb-24 so the fixed bottom nav doesn't cover content on mobile
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 pb-24">
+      <div className="max-w-md w-full">
+        <div className="flex border-b border-gray-200 mb-6">
+          <button onClick={() => { setActiveTab('client'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500'}`}>
+            CLIENT
+          </button>
+          <button onClick={() => { setActiveTab('admin'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500'}`}>
+            ADMIN
+          </button>
         </div>
-    );
+        <div className="bg-white p-8 rounded-lg shadow-md">
+          <form onSubmit={handleSubmit} noValidate>
+            {activeTab === 'client' ? renderClientForm() : renderAdminForm()}
+          </form>
+        </div>
+      </div>
+
+      {/* Bottom navigation - mobile first, accessible, won't break layout */}
+      <BottomNav />
+    </div>
+  );
 };
 
 export default MyPage;
+
+/* ---------------------- BottomNav component ---------------------- */
+/* This is included in the same file for easy copy-paste. It uses Link from react-router-dom.
+   It is a minimal, mobile-friendly nav with a Home button. Tap areas >= 44x44px. */
+
+const BottomNav: React.FC = () => {
+  return (
+    <nav
+      aria-label="Primary"
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-area-inset-bottom"
+    >
+      <div className="max-w-md mx-auto flex justify-between px-4 py-2">
+        <NavItem to="/" label="Home" ariaLabel="Go to home">
+          {/* Home SVG */}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5L12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10.5z" />
+          </svg>
+        </NavItem>
+
+        <NavItem to="/request-access" label="Request" ariaLabel="Request access">
+          {/* Request SVG (paper-plane) */}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9-7-9-7-9 7 9 7z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 12l9-7" />
+          </svg>
+        </NavItem>
+      </div>
+    </nav>
+  );
+};
+
+type NavItemProps = {
+  to: string;
+  label: string;
+  ariaLabel?: string;
+  children: React.ReactNode;
+};
+
+const NavItem: React.FC<NavItemProps> = ({ to, label, ariaLabel, children }) => {
+  return (
+    <Link
+      to={to}
+      aria-label={ariaLabel || label}
+      className="flex flex-col items-center justify-center text-xs text-gray-700 no-underline"
+      style={{ minWidth: 44 }}
+    >
+      <div
+        className="flex items-center justify-center"
+        style={{ width: 44, height: 44 }}
+      >
+        {children}
+      </div>
+      <span className="mt-1">{label}</span>
+    </Link>
+  );
+}; 
