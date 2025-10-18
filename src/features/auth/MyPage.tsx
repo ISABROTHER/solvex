@@ -84,7 +84,8 @@ const MyPage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    // Note: added pb-24 so the fixed bottom nav doesn't cover content on mobile
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 pb-24">
       <div className="max-w-md w-full">
         <div className="flex border-b border-gray-200 mb-6">
           <button onClick={() => { setActiveTab('client'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500'}`}>
@@ -100,8 +101,67 @@ const MyPage: React.FC = () => {
           </form>
         </div>
       </div>
+
+      {/* Bottom navigation - mobile first, accessible, won't break layout */}
+      <BottomNav />
     </div>
   );
 };
 
 export default MyPage;
+
+/* ---------------------- BottomNav component ---------------------- */
+/* This is included in the same file for easy copy-paste. It uses Link from react-router-dom.
+   It is a minimal, mobile-friendly nav with a Home button. Tap areas >= 44x44px. */
+
+const BottomNav: React.FC = () => {
+  return (
+    <nav
+      aria-label="Primary"
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-area-inset-bottom"
+    >
+      <div className="max-w-md mx-auto flex justify-between px-4 py-2">
+        <NavItem to="/" label="Home" ariaLabel="Go to home">
+          {/* Home SVG */}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5L12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10.5z" />
+          </svg>
+        </NavItem>
+
+        <NavItem to="/request-access" label="Request" ariaLabel="Request access">
+          {/* Request SVG (paper-plane) */}
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9-7-9-7-9 7 9 7z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 12l9-7" />
+          </svg>
+        </NavItem>
+      </div>
+    </nav>
+  );
+};
+
+type NavItemProps = {
+  to: string;
+  label: string;
+  ariaLabel?: string;
+  children: React.ReactNode;
+};
+
+const NavItem: React.FC<NavItemProps> = ({ to, label, ariaLabel, children }) => {
+  return (
+    <Link
+      to={to}
+      aria-label={ariaLabel || label}
+      className="flex flex-col items-center justify-center text-xs text-gray-700 no-underline"
+      style={{ minWidth: 44 }}
+    >
+      <div
+        className="flex items-center justify-center"
+        style={{ width: 44, height: 44 }}
+      >
+        {children}
+      </div>
+      <span className="mt-1">{label}</span>
+    </Link>
+  );
+};
