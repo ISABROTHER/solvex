@@ -19,10 +19,24 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
 console.log('Supabase client initialized (in forms.ts - incorrect):', supabase ? 'Success' : 'Failed');
 
-// Reverted: No specific form submission logic was defined here yet
+export const submitRentalBooking = async (data: any) => {
+  console.warn('Rental booking not yet implemented');
+  return { data: null, success: false, error: 'Not implemented' };
+};
+
+export const submitCareerApplication = async (data: any) => {
+  console.warn('Career application not yet implemented');
+  return { data: null, success: false, error: 'Not implemented' };
+};
+
+export const submitContactInquiry = async (data: any) => {
+  console.warn('Contact inquiry not yet implemented');
+  return { data: null, success: false, error: 'Not implemented' };
+};
+
 export const supabaseForms = {
-    // submitAccessRequest was added later, so it's removed in this revert.
-    // Keep other form functions if they existed before, e.g.:
-    // submitContactInquiry: async (...) => { ... }
-    // submitCareerApplication: async (...) => { ... }
+  submitAccessRequest: async (data: any) => {
+    console.warn('Access request not yet implemented');
+    return { data: null, error: { code: 'NOT_IMPLEMENTED', message: 'Not implemented' } };
+  }
 };

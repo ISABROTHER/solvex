@@ -136,4 +136,5 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
+export { AuthContext };
 export default AuthProvider;
