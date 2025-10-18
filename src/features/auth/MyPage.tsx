@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './useAuth';
 import { useLocation, Link } from 'react-router-dom';
+import { Home } from 'lucide-react'; // Import the Home icon
 
 const MyPage: React.FC = () => {
   const location = useLocation();
@@ -84,7 +85,16 @@ const MyPage: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
+      {/* Home Button */}
+      <Link 
+        to="/" 
+        className="absolute top-6 left-6 p-3 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors"
+        aria-label="Back to Home"
+      >
+        <Home className="w-5 h-5 text-gray-600" />
+      </Link>
+
       <div className="max-w-md w-full">
         <div className="flex border-b border-gray-200 mb-6">
           <button onClick={() => { setActiveTab('client'); }} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500'}`}>
