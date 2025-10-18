@@ -1,11 +1,11 @@
-import React, { useState } from 'react'; // Added useState
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+// Import the correct icons
 import { FilePlus, MessageSquare, Clock, CheckCircle, CreditCard, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
-import PaymentReceivingModal from './PaymentReceivingModal'; // Import the new modal
 
 const container = {
   hidden: { opacity: 0 },
@@ -13,55 +13,40 @@ const container = {
 };
 const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
-// Updated Metric component to optionally accept onClick and pass down props
+// Reverted Metric component (no onClick, no clickable styles)
 const Metric: React.FC<{
     label: string;
     value: React.ReactNode;
     icon: React.ElementType;
     colorBg?: string;
     iconColor?: string;
-    onClick?: () => void; // Added onClick prop
-    className?: string; // Added className prop
-    clickable?: boolean; // Added clickable prop for styling hint
+    className?: string; // Kept className for potential use
 }> = ({
   label,
   value,
   icon: Icon,
   colorBg = 'bg-amber-100',
   iconColor = 'text-amber-600',
-  onClick,
   className = '',
-  clickable = false,
-}) => {
-  const content = (
-      <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 transition-all duration-200 ease-in-out ${clickable ? 'hover:shadow-xl hover:border-gray-200 hover:-translate-y-0.5' : ''} ${className}`}>
-        <div className={`${colorBg} p-3 rounded-full flex items-center justify-center flex-shrink-0`}> {/* Added flex-shrink-0 */}
+}) => (
+      // Removed button wrapper and clickable styles
+      <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 ${className}`}>
+        <div className={`${colorBg} p-3 rounded-full flex items-center justify-center flex-shrink-0`}>
           <Icon className={`w-5 h-5 ${iconColor}`} />
         </div>
-        <div className="overflow-hidden"> {/* Added overflow-hidden */}
-          <p className="text-xs text-gray-500 truncate">{label}</p> {/* Added truncate */}
-          <p className="text-xl font-semibold text-gray-900 truncate">{value}</p> {/* Added truncate */}
+        <div className="overflow-hidden">
+          <p className="text-xs text-gray-500 truncate">{label}</p>
+          <p className="text-xl font-semibold text-gray-900 truncate">{value}</p>
         </div>
       </div>
   );
-
-  // Render as button if onClick is provided, otherwise as a div
-  return onClick ? (
-    <button onClick={onClick} className="text-left w-full focus:outline-none focus:ring-2 focus:ring-[#FF5722] focus:ring-offset-2 rounded-2xl">
-      {content}
-    </button>
-  ) : (
-    content
-  );
-};
 
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const { client, requests } = useClientMock();
   const userName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
-  // State to control the payment modal
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  // Removed modal state: const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const stats = {
     pending: requests.filter(r => r.status === 'Pending').length,
@@ -79,13 +64,10 @@ const DashboardPage: React.FC = () => {
     requestedAt: req.createdAt,
   }));
 
-  // Handler to open the modal
-  const handlePaymentClick = () => {
-    setIsPaymentModalOpen(true);
-  };
+  // Removed handler: const handlePaymentClick = () => { ... };
 
   return (
-    <> {/* Added Fragment shorthand */}
+    // Removed Fragment shorthand as modal is gone
       <div className="min-h-screen bg-gradient-to-b from-stone-50 via-orange-50 to-amber-50 p-4 sm:p-6 lg:p-8">
         <motion.div className="max-w-6xl mx-auto space-y-6" initial="hidden" animate="show" variants={container}>
           <motion.header variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -116,22 +98,21 @@ const DashboardPage: React.FC = () => {
               <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" iconColor="text-sky-600" />
               <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
               <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
-              {/* --- Made this Metric clickable --- */}
+              {/* --- Reverted Metric --- */}
               <Metric
                 label="Account Tier"
                 value={paymentDisplayValue}
                 icon={CreditCard}
                 colorBg="bg-gray-100"
                 iconColor="text-gray-600"
-                onClick={handlePaymentClick} // Added onClick handler
-                clickable={true} // Add visual cue for clickability
+                // Removed onClick and clickable props
               />
-              {/* --- End Update --- */}
+              {/* --- End Revert --- */}
             </div>
           </motion.section>
 
           {/* ... (rest of the component remains the same) ... */}
-          <motion.section variants={fadeUp}>
+           <motion.section variants={fadeUp}>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -190,13 +171,8 @@ const DashboardPage: React.FC = () => {
         </motion.div>
       </div>
 
-      {/* Render the modal */}
-      <PaymentReceivingModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        clientName={userName}
-      />
-    </> // Added Fragment shorthand
+     {/* Removed the modal invocation */}
+    // Removed Fragment shorthand
   );
 };
 
