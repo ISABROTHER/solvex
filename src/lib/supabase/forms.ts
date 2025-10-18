@@ -1,28 +1,38 @@
 // src/lib/supabase/forms.ts
-// Reverted: Contains client initialization (incorrect location)
-// Reverted: Does NOT contain submitAccessRequest function
+import { supabase } from './client';
 
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './database.types'; // Assuming you generated types
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Check if variables are loaded
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Supabase URL or Anon Key is missing. Check your .env file.');
-  throw new Error('Supabase configuration is missing. Check environment variables.');
+interface AccessRequestData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  company?: string;
+  reason?: string;
 }
 
-// Reverted: Client initialization was here
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+// Add other form data interfaces (Contact, Career, Rental) if needed
 
-console.log('Supabase client initialized (in forms.ts - incorrect):', supabase ? 'Success' : 'Failed');
-
-// Reverted: No specific form submission logic was defined here yet
 export const supabaseForms = {
-    // submitAccessRequest was added later, so it's removed in this revert.
-    // Keep other form functions if they existed before, e.g.:
-    // submitContactInquiry: async (...) => { ... }
-    // submitCareerApplication: async (...) => { ... }
+  /**
+   * Submits data from the Request Access form.
+   */
+  submitAccessRequest: async (data: AccessRequestData) => {
+    const { error } = await supabase
+      .from('access_requests')
+      .insert([
+        {
+          first_name: data.firstName,
+          last_name: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          company_name: data.company,
+          reason: data.reason,
+          status: 'pending',
+        },
+      ]);
+    return { error }; // Returns { error: null } on success
+  },
+
+  // Add other form submission functions below...
+  // submitContactInquiry: async (...) => { ... },
 };

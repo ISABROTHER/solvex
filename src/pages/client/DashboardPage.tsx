@@ -46,7 +46,7 @@ const Metric: React.FC<{
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const { client, requests } = useClientMock();
-  const userName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
+  const userName = (user as any)?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
 
   const stats = {
     active: requests.filter(r => r.status === 'In Progress').length,
