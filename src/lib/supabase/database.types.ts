@@ -12,13 +12,13 @@ export interface Database {
       submitted_applications: {
         Row: {
           id: string
-          job_position_id: string | null
           full_name: string
           email: string
-          phone: string | null
-          country_code: string | null
+          phone: string
+          country_code: string
+          job_position_id: string | null
+          position_title: string | null
           cover_letter: string | null
-          linkedin_url: string | null
           portfolio_url: string | null
           status: string
           created_at: string
@@ -26,13 +26,13 @@ export interface Database {
         }
         Insert: {
           id?: string
-          job_position_id?: string | null
           full_name: string
           email: string
-          phone?: string | null
-          country_code?: string | null
+          phone: string
+          country_code: string
+          job_position_id?: string | null
+          position_title?: string | null
           cover_letter?: string | null
-          linkedin_url?: string | null
           portfolio_url?: string | null
           status?: string
           created_at?: string
@@ -40,13 +40,13 @@ export interface Database {
         }
         Update: {
           id?: string
-          job_position_id?: string | null
           full_name?: string
           email?: string
-          phone?: string | null
-          country_code?: string | null
+          phone?: string
+          country_code?: string
+          job_position_id?: string | null
+          position_title?: string | null
           cover_letter?: string | null
-          linkedin_url?: string | null
           portfolio_url?: string | null
           status?: string
           created_at?: string
