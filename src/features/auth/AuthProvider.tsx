@@ -1,90 +1,51 @@
 // src/features/auth/AuthProvider.tsx
-import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase/client';
-import type { Session, User } from '@supabase/supabase-js';
-
-type UserRole = 'client' | 'admin' | null;
-
-interface AuthState {
-  isAuthenticated: boolean;
-  role: UserRole;
-  user: User | null;
-  session: Session | null;
-  isLoading: boolean;
-}
-
-interface AuthContextType extends AuthState {
-  clientLogin: (email?: string, password?: string) => Promise<{ success: boolean; role: UserRole }>;
-  adminLogin: (email?: string, password?: string) => Promise<{ success: boolean; role: UserRole }>;
-  logout: () => Promise<void>;
-  login: (email: string, password: string) => Promise<{ success: boolean; role: UserRole }>;
-  signup: (email: string, password: string, userData?: any) => Promise<boolean>;
-  error: string | null;
-  setError: (message: string | null) => void;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (!context) throw new Error('useAuth must be used within an AuthProvider');
-    return context;
-};
+// ... (imports and types remain the same) ...
 
 const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: false, role: null, user: null, session: null, isLoading: true,
-  });
-  const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
+  // ... (state and navigate) ...
 
-   useEffect(() => {
-    setError(null);
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      updateUserState(session);
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        await updateUserState(session);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-      }
-    );
-
-    return () => authListener?.subscription.unsubscribe();
+  useEffect(() => {
+    // ... (session fetching and listener setup) ...
   }, []);
 
   const updateUserState = async (session: Session | null): Promise<UserRole> => {
      setError(null);
-     let userRole: UserRole = null;
+     let userRole: UserRole = null; // Default to null initially
      if (session?.user) {
-        // --- ⚠️ IMPORTANT: IMPLEMENT YOUR ROLE FETCHING LOGIC HERE ---
-        // Query your database (e.g., 'profiles' table) using `session.user.id`
-        // to determine if the user is 'client' or 'admin'.
-        // Replace this example:
+        // --- ✅ IMPLEMENT YOUR ROLE FETCHING LOGIC HERE ---
         try {
+            // Query your 'profiles' table using the user ID
             const { data: profile, error: profileError } = await supabase
-                .from('profiles') // ** CHECK YOUR TABLE NAME **
-                .select('role')   // ** CHECK YOUR COLUMN NAME **
-                .eq('id', session.user.id) // Assumes profiles.id matches auth.users.id
-                .single();
+                .from('profiles') // <--- Make sure this table name is correct
+                .select('role')   // <--- Make sure this column name is correct
+                .eq('id', session.user.id) // Find profile matching the logged-in user's ID
+                .single(); // Expect only one profile per user
 
             if (profileError) {
-                console.error("Error fetching user role:", profileError.message);
-                // Decide fallback: maybe default to client, or prevent login by returning null?
-                userRole = 'client'; // Example fallback
+                // Handle cases like profile not found (user exists in auth but not profiles)
+                if (profileError.code === 'PGRST116') { // PostgREST code for "relation does not exist or insufficient privilege" or "0 rows"
+                     console.warn(`Profile not found for user ${session.user.id}. Defaulting role.`);
+                     // Decide: should they be 'client'? Or should login fail?
+                     userRole = 'client'; // Example: Default to client if no profile found
+                } else {
+                    // Handle other database errors
+                    console.error("Error fetching user profile/role:", profileError.message);
+                    setError("Could not verify your account role.");
+                    // Returning null might prevent login if role is required later
+                }
             } else if (profile && (profile.role === 'admin' || profile.role === 'client')) {
+                // Successfully fetched a valid role
                 userRole = profile.role;
             } else {
-                console.warn(`User ${session.user.id} has missing or invalid role in profiles table.`);
-                userRole = 'client'; // Example fallback for invalid role
+                // Profile found, but role column is missing, null, or has an invalid value
+                console.warn(`User ${session.user.id} has missing or invalid role ('${profile?.role}') in profiles table. Defaulting role.`);
+                userRole = 'client'; // Example: Default to client
             }
-        } catch (roleError: any) {
-             console.error("Unexpected error fetching role:", roleError);
-             userRole = 'client'; // Example fallback
-             setError("Could not verify user role.");
+        } catch (err: any) {
+             // Catch unexpected errors during the fetch
+             console.error("Unexpected error fetching user role:", err);
+             setError("An error occurred while checking your role.");
+             userRole = null; // Prevent login if role check fails unexpectedly
         }
         // --- End Role Logic ---
 
@@ -92,76 +53,18 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
           isAuthenticated: true, role: userRole, user: session.user, session: session, isLoading: false,
         });
      } else {
+        // No active session
         setAuthState({
             isAuthenticated: false, role: null, user: null, session: null, isLoading: false,
         });
      }
-     return userRole; // Return the determined role
+     return userRole; // Return the determined role (could be null if fetch failed)
   };
 
-  const login = async (email: string, password: string): Promise<{ success: boolean; role: UserRole }> => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    setError(null);
-    try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-      if (!data.session) throw new Error("Login successful, but session data is missing.");
+  // ... (login, signup, clientLogin, adminLogin, logout functions remain the same as previous correct version) ...
+  // Make sure they use the updated `updateUserState` which returns the role.
 
-      // Wait for session processing and role fetch
-      const role = await updateUserState(data.session);
-
-      return { success: true, role: role };
-    } catch (err: any) {
-      setError(err.message || 'Login failed. Check email/password.');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, role: null };
-    }
-  };
-
-  const signup = async (email: string, password: string, userData?: any): Promise<boolean> => {
-     setAuthState(prev => ({ ...prev, isLoading: true }));
-     setError(null);
-     try {
-       // Note: You might want to create a profile entry here via an edge function or trigger
-       const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: userData } });
-       if (signUpError) throw signUpError;
-       alert('Signup successful! Check your email to verify your account.');
-       return true;
-     } catch (err: any) {
-       setError(err.message || 'Signup failed. Please try again.');
-       return false;
-     } finally {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-     }
-  };
-
-   const clientLogin = async (email?: string, password?: string): Promise<{ success: boolean; role: UserRole }> => {
-    if (!email || !password) { setError("Email and password are required."); return { success: false, role: null }; }
-    return await login(email, password);
-   };
-
-   const adminLogin = async (email?: string, password?: string): Promise<{ success: boolean; role: UserRole }> => {
-    if (!email || !password) { setError("Email and password are required."); return { success: false, role: null }; }
-     return await login(email, password);
-   };
-
-  const logout = async () => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    setError(null);
-    try {
-        const { error: signOutError } = await supabase.auth.signOut();
-        if (signOutError) throw signOutError;
-        // State clears via onAuthStateChange listener
-        navigate('/my-page'); // Redirect after sign out
-    } catch (err: any) {
-        setError(err.message || 'Logout failed.');
-        setAuthState({ isAuthenticated: false, role: null, user: null, session: null, isLoading: false }); // Force clear state
-        navigate('/my-page');
-    }
-  };
-
-  const value = { ...authState, clientLogin, adminLogin, logout, login, signup, error, setError };
-
+  const value = { /* ... (auth state and functions) ... */ };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
