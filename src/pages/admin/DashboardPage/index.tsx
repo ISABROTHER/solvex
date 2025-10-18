@@ -10,10 +10,9 @@ import TeamsTab from "./tabs/TeamsTab";
 import EquipmentTab from "./tabs/EquipmentTab";
 import PartnersTab from "./tabs/PartnersTab";
 import SettingsTab from "./tabs/SettingsTab";
-// import ApplicationsTab from "./tabs/ApplicationsTab"; // REMOVED
+import ApplicationsTab from "./tabs/ApplicationsTab";
 import JobsTab from "./tabs/JobsTab";
 import ServicesTab from "./tabs/ServicesTab";
-import SubmittedApplicationsTab from "./tabs/SubmittedApplicationsTab"; // NEW
 
 export type TabKey =
   | "home"
@@ -21,7 +20,7 @@ export type TabKey =
   | "projects"
   | "access_requests"
   | "partners"
-  | "submitted_applications" // NEW KEY
+  | "applications"
   | "settings";
 
 const DashboardPage: React.FC = () => {
@@ -76,8 +75,7 @@ const DashboardPage: React.FC = () => {
           {tab === "clients" && <ClientsTab />}
           {tab === "projects" && <ProjectsTab />}
           {tab === "partners" && <PartnersTab />}
-          {/* Renders the NEW SubmittedApplicationsTab */}
-          {tab === "submitted_applications" && <SubmittedApplicationsTab />}
+          {tab === "applications" && <ApplicationsTab />}
           {tab === "settings" && (
             <SettingsTab 
               jobsTab={<JobsTab />}
