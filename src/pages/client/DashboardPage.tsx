@@ -58,7 +58,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <Link
-              to="/client/new-request"
+              to="/client/new"
               className="inline-flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg shadow hover:scale-[1.02] transition-transform duration-200"
             >
               <FilePlus size={16} />
@@ -88,7 +88,7 @@ const DashboardPage: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link
-                to="/client/new-request"
+                to="/client/new"
                 className="flex-1 inline-flex items-center justify-center gap-2 bg-[#FF5722] text-white py-3 rounded-lg font-medium"
               >
                 <FilePlus size={16} />
