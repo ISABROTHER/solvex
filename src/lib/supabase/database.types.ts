@@ -9,7 +9,7 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      job_applications: {
+      submitted_applications: {
         Row: {
           id: string
           job_position_id: string | null

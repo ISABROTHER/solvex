@@ -192,7 +192,7 @@ export const getJobTeamsAndPositions = async () => {
  */
 export const getCareerApplications = async () => {
   return supabase
-    .from('job_applications')
+    .from('submitted_applications')
     .select(`
         *,
         job_position:job_positions ( id, title, team_name, team_id, status )
@@ -205,7 +205,7 @@ export const getCareerApplications = async () => {
  */
 export const updateCareerApplicationStatus = async (id: string, newStatus: string) => {
   return supabase
-    .from('job_applications')
+    .from('submitted_applications')
     .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', id);
 };
@@ -288,9 +288,9 @@ export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
 export type JobPositionInsert = Database['public']['Tables']['job_positions']['Insert'];
 export type JobPositionUpdate = Database['public']['Tables']['job_positions']['Update'];
 
-export type JobApplication = Database['public']['Tables']['job_applications']['Row'];
-export type JobApplicationInsert = Database['public']['Tables']['job_applications']['Insert'];
-export type JobApplicationUpdate = Database['public']['Tables']['job_applications']['Update'];
+export type JobApplication = Database['public']['Tables']['submitted_applications']['Row'];
+export type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert'];
+export type JobApplicationUpdate = Database['public']['Tables']['submitted_applications']['Update'];
 
 export const getAllTeams = async () => {
   try {
@@ -359,7 +359,7 @@ export const getActiveJobPositions = async () => {
 export const getAllJobApplications = async () => {
   try {
     const { data, error } = await supabase
-      .from('job_applications')
+      .from('submitted_applications')
       .select(`
         *,
         job_position:job_positions (
@@ -517,7 +517,7 @@ export const deleteJobPosition = async (id: string) => {
 export const createJobApplication = async (application: JobApplicationInsert) => {
   try {
     const { data, error } = await supabase
-      .from('job_applications')
+      .from('submitted_applications')
       .insert(application)
       .select()
       .single();
@@ -537,7 +537,7 @@ export const createJobApplication = async (application: JobApplicationInsert) =>
 export const updateJobApplicationStatus = async (id: string, status: string) => {
   try {
     const { data, error } = await supabase
-      .from('job_applications')
+      .from('submitted_applications')
       .update({
         status,
         updated_at: new Date().toISOString()

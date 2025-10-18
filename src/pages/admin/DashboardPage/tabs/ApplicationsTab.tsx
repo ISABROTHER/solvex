@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 // Define the joined type for clarity
 // NOTE: The joined object is now aliased as 'job_position' in operations.ts
-type ApplicationRow = Database['public']['Tables']['job_applications']['Row'] & {
+type ApplicationRow = Database['public']['Tables']['submitted_applications']['Row'] & {
     job_position: { title: string, description: string | null, team_name: string | null, team_id: string | null } | null;
 };
 
