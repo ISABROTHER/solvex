@@ -1,0 +1,8 @@
+const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+  { id: 'overview', label: 'Overview', icon: <User size={16} /> },
+  { id: 'requests', label: 'Requests', icon: <FileText size={16} /> },
+  { id: 'messages', label: 'Messages', icon: <MessageSquare size={16} /> },
++ { id: 'payouts', label: 'Payouts', icon: <Banknote size={16} /> }, // Added Payouts tab
+  { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
+];
++ type TabType = 'overview' | 'requests' | 'messages' | 'payouts' | 'settings'; // Update TabType
