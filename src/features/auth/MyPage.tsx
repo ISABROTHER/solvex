@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from './useAuth';
 import { useLocation, Link } from 'react-router-dom';
-import { Home } from 'lucide-react'; // Standard icon library
+import { Home } from 'lucide-react'; // Keep Home for the top link
 
 // Constant for link text - easy to change later
 const HOME_LINK_TEXT = "Back to Home";
@@ -131,12 +131,11 @@ const MyPage: React.FC = () => {
   );
 
   return (
-    // Added padding-bottom to prevent overlap with potential fixed bottom nav
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 pb-24">
+    // Removed pb-24 padding as BottomNav is gone
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
 
         {/* --- Home Button Link --- */}
-        {/* Simple, clear navigation back to the main site */}
         <div className="mb-4 text-center">
             <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5722] rounded-md px-2 py-1">
                 <Home size={16} aria-hidden="true" />
@@ -171,64 +170,11 @@ const MyPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Optional: Mobile Bottom Navigation (kept from previous code) */}
-      <BottomNav />
+      {/* --- REMOVED BOTTOM NAV INVOCATION --- */}
     </div>
   );
 };
 
 export default MyPage;
 
-// --- BottomNav Component (Kept from previous code) ---
-const BottomNav: React.FC = () => {
-    // ... (rest of BottomNav component code remains the same)
-      return (
-    <nav
-      aria-label="Primary"
-      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 safe-area-inset-bottom"
-    >
-      <div className="max-w-md mx-auto flex justify-around px-4 py-2"> {/* Changed justify-between to justify-around */}
-        <NavItem to="/" label="Home" ariaLabel="Go to home">
-          {/* Home SVG */}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10.5L12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10.5z" />
-          </svg>
-        </NavItem>
-
-        <NavItem to="/request-access" label="Request" ariaLabel="Request access">
-          {/* Request SVG (simplified user plus) */}
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-          </svg>
-        </NavItem>
-      </div>
-    </nav>
-  );
-};
-
-type NavItemProps = {
-  to: string;
-  label: string;
-  ariaLabel?: string;
-  children: React.ReactNode;
-};
-
-const NavItem: React.FC<NavItemProps> = ({ to, label, ariaLabel, children }) => {
-  // Use NavLink to automatically handle active state if needed in the future
-  return (
-    <Link
-      to={to}
-      aria-label={ariaLabel || label}
-      className="flex flex-col items-center justify-center text-xs text-gray-600 hover:text-[#FF5722] transition-colors no-underline p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF5722]" // Added focus styles
-      style={{ minWidth: 44 }} // Ensure minimum tap target size
-    >
-      <div
-        className="flex items-center justify-center mb-1" // Added margin-bottom
-        style={{ width: 32, height: 32 }} // Slightly adjusted size
-      >
-        {children}
-      </div>
-      <span className="text-center leading-tight">{label}</span>
-    </Link>
-  );
-};
+// --- REMOVED BottomNav, NavItemProps, and NavItem component definitions ---
