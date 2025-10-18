@@ -252,7 +252,7 @@ const SettingsTab: React.FC = () => {
               <h3 className="font-semibold text-gray-900">Sync Database</h3>
               <p className="text-sm text-gray-600">Update database with all data: equipment, services, teams, and job postings</p>
             </div>
-            <button
+            <button 
               onClick={handleDatabaseSync}
               disabled={isSyncing}
               className="flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg hover:bg-[#E64A19] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
