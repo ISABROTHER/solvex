@@ -1,35 +1,25 @@
 // src/features/auth/AuthProvider.tsx
-// Reverted: Back to mock login/logout, no Supabase
-
-import React, { createContext, useState, ReactNode, useContext } from 'react';
+import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-// Removed Supabase imports
+import { supabase } from '../../lib/supabase/client';
+import type { Session, User } from '@supabase/supabase-js';
 
 type UserRole = 'client' | 'admin' | null;
-
-interface User { // Simplified mock user
-  id: string;
-  email?: string;
-}
-interface Session { // Simplified mock session
-  user: User;
-}
 
 interface AuthState {
   isAuthenticated: boolean;
   role: UserRole;
   user: User | null;
   session: Session | null;
-  isLoading: boolean; // Keep isLoading state
+  isLoading: boolean;
 }
 
-// Interface remains similar but functions will be mocks
 interface AuthContextType extends AuthState {
-  clientLogin: (email?: string, password?: string) => Promise<boolean>;
-  adminLogin: (email?: string, password?: string) => Promise<boolean>;
-  logout: () => void; // Reverted logout to sync
-  login: (email: string, password: string) => Promise<boolean>; // Mock login
-  signup: (email: string, password: string, userData?: any) => Promise<boolean>; // Mock signup
+  clientLogin: (email?: string, password?: string) => Promise<{ success: boolean; role: UserRole }>;
+  adminLogin: (email?: string, password?: string) => Promise<{ success: boolean; role: UserRole }>;
+  logout: () => Promise<void>;
+  login: (email: string, password: string) => Promise<{ success: boolean; role: UserRole }>;
+  signup: (email: string, password: string, userData?: any) => Promise<boolean>;
   error: string | null;
   setError: (message: string | null) => void;
 }
@@ -43,98 +33,136 @@ export const useAuth = () => {
 };
 
 const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Reverted initial state
   const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: false,
-    role: null,
-    user: null,
-    session: null,
-    isLoading: false, // Start not loading
+    isAuthenticated: false, role: null, user: null, session: null, isLoading: true,
   });
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Removed useEffect for Supabase session handling
+   useEffect(() => {
+    setError(null);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      updateUserState(session);
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+    });
 
-  // Mock updateUserState (simpler version)
-  const updateSessionState = (isAuthenticated: boolean, role: UserRole) => {
-     const mockUser = isAuthenticated ? { id: 'mock-user-id', email: 'mock@example.com' } : null;
-     const mockSession = isAuthenticated && mockUser ? { user: mockUser } : null;
-     setAuthState({
-         isAuthenticated,
-         role,
-         user: mockUser,
-         session: mockSession,
-         isLoading: false,
-     });
-     // Store mock session info if needed, or remove this
-     // localStorage.setItem('session', JSON.stringify({ isAuthenticated, role }));
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        await updateUserState(session);
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+      }
+    );
+
+    return () => authListener?.subscription.unsubscribe();
+  }, []);
+
+  const updateUserState = async (session: Session | null): Promise<UserRole> => {
+     setError(null);
+     let userRole: UserRole = null;
+     if (session?.user) {
+        // --- ⚠️ IMPORTANT: IMPLEMENT YOUR ROLE FETCHING LOGIC HERE ---
+        // Query your database (e.g., 'profiles' table) using `session.user.id`
+        // to determine if the user is 'client' or 'admin'.
+        // Replace this example:
+        try {
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles') // ** CHECK YOUR TABLE NAME **
+                .select('role')   // ** CHECK YOUR COLUMN NAME **
+                .eq('id', session.user.id) // Assumes profiles.id matches auth.users.id
+                .single();
+
+            if (profileError) {
+                console.error("Error fetching user role:", profileError.message);
+                // Decide fallback: maybe default to client, or prevent login by returning null?
+                userRole = 'client'; // Example fallback
+            } else if (profile && (profile.role === 'admin' || profile.role === 'client')) {
+                userRole = profile.role;
+            } else {
+                console.warn(`User ${session.user.id} has missing or invalid role in profiles table.`);
+                userRole = 'client'; // Example fallback for invalid role
+            }
+        } catch (roleError: any) {
+             console.error("Unexpected error fetching role:", roleError);
+             userRole = 'client'; // Example fallback
+             setError("Could not verify user role.");
+        }
+        // --- End Role Logic ---
+
+        setAuthState({
+          isAuthenticated: true, role: userRole, user: session.user, session: session, isLoading: false,
+        });
+     } else {
+        setAuthState({
+            isAuthenticated: false, role: null, user: null, session: null, isLoading: false,
+        });
+     }
+     return userRole; // Return the determined role
   };
 
-
-  // Reverted Mock Login
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; role: UserRole }> => {
     setAuthState(prev => ({ ...prev, isLoading: true }));
     setError(null);
-    console.warn('Auth not configured. Using mock login.');
-    await new Promise(resolve => setTimeout(resolve, 500)); // Simulate delay
-    // Basic mock logic: succeed if password isn't 'fail'
-    if (password === 'fail') {
-        setError('Mock login failed: Invalid credentials.');
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return false;
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw signInError;
+      if (!data.session) throw new Error("Login successful, but session data is missing.");
+
+      // Wait for session processing and role fetch
+      const role = await updateUserState(data.session);
+
+      return { success: true, role: role };
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Check email/password.');
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      return { success: false, role: null };
     }
-    // Role determination is removed - handled by specific logins now
-    setAuthState(prev => ({ ...prev, isLoading: false })); // Set loading false, role set by specific login
-    return true; // Indicate success for specific login to handle role/nav
   };
 
-  // Reverted Mock Signup
   const signup = async (email: string, password: string, userData?: any): Promise<boolean> => {
      setAuthState(prev => ({ ...prev, isLoading: true }));
      setError(null);
-     console.warn('Auth not configured. Using mock signup.');
-     await new Promise(resolve => setTimeout(resolve, 500));
-     alert('Mock signup complete. No email sent.');
-     setAuthState(prev => ({ ...prev, isLoading: false }));
-     return true;
+     try {
+       // Note: You might want to create a profile entry here via an edge function or trigger
+       const { error: signUpError } = await supabase.auth.signUp({ email, password, options: { data: userData } });
+       if (signUpError) throw signUpError;
+       alert('Signup successful! Check your email to verify your account.');
+       return true;
+     } catch (err: any) {
+       setError(err.message || 'Signup failed. Please try again.');
+       return false;
+     } finally {
+        setAuthState(prev => ({ ...prev, isLoading: false }));
+     }
   };
 
-   // Reverted Mock Client Login
-   const clientLogin = async (email?: string, password?: string): Promise<boolean> => {
-     const success = await login(email || '', password || '');
-     if(success) {
-         updateSessionState(true, 'client'); // Set state directly
-         // navigate('/client'); // Navigation moved to MyPage
-     }
-     return success;
+   const clientLogin = async (email?: string, password?: string): Promise<{ success: boolean; role: UserRole }> => {
+    if (!email || !password) { setError("Email and password are required."); return { success: false, role: null }; }
+    return await login(email, password);
    };
 
-   // Reverted Mock Admin Login
-   const adminLogin = async (email?: string, password?: string): Promise<boolean> => {
-     const success = await login(email || '', password || '');
-     if(success) {
-         updateSessionState(true, 'admin'); // Set state directly
-         // navigate('/admin'); // Navigation moved to MyPage
-     }
-     return success;
+   const adminLogin = async (email?: string, password?: string): Promise<{ success: boolean; role: UserRole }> => {
+    if (!email || !password) { setError("Email and password are required."); return { success: false, role: null }; }
+     return await login(email, password);
    };
 
-  // Reverted Mock Logout (synchronous)
-  const logout = () => {
-    const previousRole = authState.role; // Remember role before clearing
-    console.warn('Auth not configured. Using mock logout.');
-    // localStorage.removeItem('session'); // Remove if you were storing mock session
-    updateSessionState(false, null); // Clear state
-    // Navigate back to login, potentially defaulting to the previous tab
-    navigate('/my-page', { state: { defaultTab: previousRole === 'admin' ? 'admin' : 'client' } });
+  const logout = async () => {
+    setAuthState(prev => ({ ...prev, isLoading: true }));
+    setError(null);
+    try {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) throw signOutError;
+        // State clears via onAuthStateChange listener
+        navigate('/my-page'); // Redirect after sign out
+    } catch (err: any) {
+        setError(err.message || 'Logout failed.');
+        setAuthState({ isAuthenticated: false, role: null, user: null, session: null, isLoading: false }); // Force clear state
+        navigate('/my-page');
+    }
   };
-
 
   const value = { ...authState, clientLogin, adminLogin, logout, login, signup, error, setError };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export { AuthContext };
 export default AuthProvider;
