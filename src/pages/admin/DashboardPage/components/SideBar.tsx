@@ -9,12 +9,9 @@ const NAV: { key: TabKey; label: string; icon: React.ComponentType<any> }[] = [
   { key: "clients", label: "Clients", icon: Users },
   { key: "projects", label: "Projects", icon: Briefcase },
   { key: "access_requests", label: "Access Requests", icon: UserCheck },
-  { key: "teams", label: "Teams", icon: UserSquare2 },
-  { key: "equipment", label: "Equipment", icon: Package },
-  { key: "services", label: "Manage Services", icon: LayoutGrid }, // This line is added
   { key: "partners", label: "Partners", icon: Handshake },
   { key: "applications", label: "Applications", icon: FileText },
-  { key: "jobs", label: "Job Postings", icon: Target },
+  // NOTE: Teams, Equipment, Services, and Jobs have been removed from the main navigation.
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
