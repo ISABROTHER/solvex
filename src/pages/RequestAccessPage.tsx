@@ -3,17 +3,17 @@ import React, { useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { supabaseForms } from '../lib/supabase/forms'; // Ensure correct import
+import { supabaseForms } from '../lib/supabase/forms';
 import { useToast } from '../contexts/ToastContext';
 import { Loader2, Send } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-// Schema matching the form and SQL table requirements
+// Updated Zod schema
 const requestAccessSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
-  phone: z.string().min(1, 'Phone number is required'), // Required phone
+  phone: z.string().min(1, 'Phone number is required'),
   company: z.string().optional(),
   reason: z.string().min(10, 'Reason requires at least 10 characters').optional(),
 });
@@ -34,10 +34,9 @@ const RequestAccessPage: React.FC = () => {
         setIsSuccess(false);
         setSubmittedFirstName('');
         try {
-            // Call the actual Supabase submission function
             const { error } = await supabaseForms.submitAccessRequest(data);
             if (error) {
-                if (error.code === '23505') { // Handle unique email error
+                if (error.code === '23505') { // Handle unique email constraint violation
                      addToast({ type: 'error', title: 'Email already submitted', message: 'An access request with this email exists.' });
                 } else {
                     console.error('Supabase submit error:', error);
@@ -45,13 +44,13 @@ const RequestAccessPage: React.FC = () => {
                 }
             } else {
                 addToast({ type: 'success', title: 'Request Sent!', message: 'We will review your request shortly.' });
-                setSubmittedFirstName(data.firstName); // Store name for success message
-                reset(); // Clear the form fields
-                setIsSuccess(true); // Show the success view
+                setSubmittedFirstName(data.firstName);
+                reset(); // Clear form
+                setIsSuccess(true); // Show success view
             }
         } catch (err: any) {
             console.error('Failed to submit access request:', err);
-            addToast({ type: 'error', title: 'Submission Error', message: err.message || 'Please try again.' });
+            addToast({ type: 'error', title: 'Submission Error', message: err.message || 'Please try again later.' });
         } finally {
             setIsSubmitting(false);
         }
@@ -59,7 +58,7 @@ const RequestAccessPage: React.FC = () => {
 
     // Success View
     if (isSuccess) {
-        return (
+        return ( /* ... (Success view remains the same, using submittedFirstName) ... */
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="max-w-md w-full text-center bg-white p-8 rounded-lg shadow-md">
                     <h1 className="text-2xl font-bold text-green-600 mb-4">Request Received!</h1>
@@ -75,14 +74,14 @@ const RequestAccessPage: React.FC = () => {
     }
 
     // Form View
-    return (
+    return ( /* ... (Form view remains mostly the same, ensure input names match schema: firstName, lastName, phone) ... */
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
             <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
                 <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">Request Client Access</h1>
                 <p className="text-center text-gray-500 mb-6 text-sm">Fill out the form for portal access.</p>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-                    {/* First Name & Last Name */}
+                    {/* First & Last Name */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name <span className="text-red-600">*</span></label>
@@ -107,12 +106,12 @@ const RequestAccessPage: React.FC = () => {
                         <input type="tel" id="phone" {...register('phone')} className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.phone ? 'border-red-500 ring-red-500' : ''}`} />
                         {errors.phone && <p className="mt-1 text-xs text-red-600">{errors.phone.message}</p>}
                     </div>
-                    {/* Company */}
+                    {/* Company (Optional) */}
                     <div>
                         <label htmlFor="company" className="block text-sm font-medium text-gray-700">Company <span className="text-gray-400">(Optional)</span></label>
                         <input type="text" id="company" {...register('company')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm" />
                     </div>
-                    {/* Reason */}
+                    {/* Reason (Optional) */}
                     <div>
                         <label htmlFor="reason" className="block text-sm font-medium text-gray-700">Reason for Access <span className="text-gray-400">(Optional)</span></label>
                         <textarea id="reason" rows={3} {...register('reason')} className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.reason ? 'border-red-500 ring-red-500' : ''}`} placeholder="Briefly explain why..."></textarea>
