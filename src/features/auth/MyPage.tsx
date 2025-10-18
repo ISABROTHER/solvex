@@ -36,7 +36,7 @@ const AnimatedHomeButton: React.FC = () => {
                     className="text-sm font-semibold text-gray-700 whitespace-nowrap"
                 >
                     Home
-                </motion.span>
+                </motion.span> 
             </motion.div>
         </Link>
     );
