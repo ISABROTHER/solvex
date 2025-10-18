@@ -187,21 +187,21 @@ export const getJobTeamsAndPositions = async () => {
 
 /**
  * Fetches all career applications and joins position details.
- * FIX: Using 'job_applications' table name now.
+ * FIX: Using 'job_applications' table name now and renaming the joined object to 'job_position' 
+ * to match the FK field more closely and avoid confusion with the old 'job_positions' array.
  */
 export const getCareerApplications = async () => {
   return supabase
     .from('job_applications')
     .select(`
         *,
-        job_positions ( id, title, team_name, team_id, status )
+        job_position:job_positions ( id, title, team_name, team_id, status )
     `)
     .order('created_at', { ascending: false });
 };
 
 /**
  * Updates the status of a specific job application.
- * FIX: Using 'job_applications' table name now.
  */
 export const updateCareerApplicationStatus = async (id: string, newStatus: string) => {
   return supabase
@@ -359,10 +359,10 @@ export const getActiveJobPositions = async () => {
 export const getAllJobApplications = async () => {
   try {
     const { data, error } = await supabase
-      .from('job_applications') // FIX: Using 'job_applications'
+      .from('job_applications')
       .select(`
         *,
-        job_positions (
+        job_position:job_positions (
           id,
           title,
           team_name,
@@ -517,7 +517,7 @@ export const deleteJobPosition = async (id: string) => {
 export const createJobApplication = async (application: JobApplicationInsert) => {
   try {
     const { data, error } = await supabase
-      .from('job_applications') // FIX: Using 'job_applications'
+      .from('job_applications')
       .insert(application)
       .select()
       .single();
@@ -537,7 +537,7 @@ export const createJobApplication = async (application: JobApplicationInsert) =>
 export const updateJobApplicationStatus = async (id: string, status: string) => {
   try {
     const { data, error } = await supabase
-      .from('job_applications') // FIX: Using 'job_applications'
+      .from('job_applications')
       .update({
         status,
         updated_at: new Date().toISOString()
