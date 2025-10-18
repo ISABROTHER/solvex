@@ -1,49 +1,49 @@
 // src/features/auth/MyPage.tsx
+// Reverted: Calls mock logins, simple navigation
+
 import React, { useState, useEffect } from 'react';
-import { useAuth } from './useAuth'; // Only useAuth is needed
+import { useAuth } from './useAuth';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Home, Loader2 } from 'lucide-react';
 
 const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  // Get mock functions and state
   const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Use authError directly from context
 
    useEffect(() => { setAuthError(null); }, [email, password, activeTab, setAuthError]);
 
+  // Reverted handleSubmit for mock functions
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setAuthError(null);
-    let targetRole: 'client' | 'admin' = activeTab;
+    setAuthError(null); // Clear previous errors
 
     try {
-      let result: { success: boolean; role: 'client' | 'admin' | null };
-
-      if (targetRole === 'client') {
-        result = await clientLogin(email, password);
+      let success = false;
+      if (activeTab === 'client') {
+        success = await clientLogin(email, password); // Calls mock
+        if (success) {
+           navigate('/client'); // Navigate directly on mock success
+        }
       } else {
-        result = await adminLogin(email, password);
+        success = await adminLogin(email, password); // Calls mock
+         if (success) {
+           navigate('/admin'); // Navigate directly on mock success
+         }
       }
-
-      if (result.success && result.role === targetRole) {
-        // SUCCESS and correct role fetched
-        navigate(targetRole === 'admin' ? '/admin' : '/client');
-      } else if (result.success) {
-        // SUCCESS, but role mismatch (or role fetch failed/returned null/defaulted)
-        setAuthError(`Login successful, but your account role ('${result.role || 'unknown'}') is not '${targetRole}'.`);
-        // Consider calling logout() here if you want to prevent access
-      } else if (!authError) {
-        // FAILED explicitly (login returned false, no error set)
-         setAuthError('Login failed. Please check credentials.');
+      // If mock login returns false, authError should be set by AuthProvider
+      if (!success && !authError) {
+          setAuthError('Mock login failed. Try again.');
       }
-      // If result.success was false and authError was set by AuthProvider, it will just display.
 
     } catch (err: any) {
-      // Catch unexpected errors during the process
-      setAuthError(err.message || 'An unexpected login error occurred.');
+      // Should not happen with current mocks, but keep for safety
+      setAuthError(err.message || 'An unexpected error occurred.');
     }
   };
 
@@ -53,7 +53,7 @@ const MyPage: React.FC = () => {
   };
 
   // --- Render Functions (renderClientForm, renderAdminForm) ---
-  // No changes needed here, they correctly use isLoading and authError
+  // These are fine as they use isLoading and authError
   const renderClientForm = () => (
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
