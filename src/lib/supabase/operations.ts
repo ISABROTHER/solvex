@@ -1,576 +1,114 @@
-// @ts-nocheck
 // src/lib/supabase/operations.ts
-
+// @ts-nocheck
 import { supabase } from './client';
 import type { Database } from './database.types';
 
-// Define the shape of data the public frontend expects
-export type RentalItemDisplay = {
-  id: string;
-  title: string; 
-  subtitle: string | null;
-  category: string | null;
-  price: number;
-  images: string[] | null;
-  features: string[] | null;
-  videoUrl: string | null;
-  status: 'Available' | 'Unavailable' | 'Retired';
-};
+// --- Types for Access Requests ---
+export type AccessRequest = Database['public']['Tables']['access_requests']['Row'];
+export type AccessRequestUpdate = Database['public']['Tables']['access_requests']['Update'];
 
-// Original table types (for internal Admin use)
-export type RentalGear = Database['public']['Tables']['rental_gear']['Row'];
-export type RentalGearInsert = Database['public']['Tables']['rental_gear']['Insert'];
-export type RentalGearUpdate = Database['public']['Tables']['rental_gear']['Update'];
-export type Service = Database['public']['Tables']['services']['Row'];
-export type ServiceInsert = Database['public']['Tables']['services']['Insert'];
-export type ServiceUpdate = Database['public']['Tables']['services']['Update'];
+// ... (keep existing functions like getRentalEquipment, getAllRentalEquipment, etc.) ...
 
-// --- TEAM MANAGEMENT OPERATIONS (LIVE) ---
+// --- Access Request Operations ---
 
 /**
- * Fetches all teams for internal management.
+ * Fetches all access requests (consider filtering by 'pending' in production)
  */
-export const getTeams = async () => {
+export const getAccessRequests = async () => {
   return supabase
-    .from('teams')
+    .from('access_requests')
     .select('*')
-    .order('name', { ascending: true });
+    // Optionally filter for only pending requests initially:
+    // .eq('status', 'pending')
+    .order('created_at', { ascending: true });
 };
 
-
 /**
- * Fetches all members and joins their associated team name.
+ * Updates the status of an access request.
  */
-export const getMembers = async () => {
+export const updateAccessRequestStatus = async (id: string, newStatus: 'approved' | 'rejected') => {
   return supabase
-    .from('members')
-    .select(`
-        *,
-        teams ( name )
-    `)
-    .order('full_name', { ascending: true });
-};
-
-// Placeholder for member creation (used by ApplicationsTab when accepting a job)
-export const createMember = async (member: Partial<Database['public']['Tables']['members']['Insert']>) => {
-    return supabase.from('members').insert(member).select().single();
-};
-
-// --- RENTAL EQUIPMENT OPERATIONS ---
-
-/**
- * Fetches only available rental items and maps them to the public display format.
- */
-export const getRentalEquipment = async () => {
-  const { data, error } = await supabase
-    .from('rental_gear')
-    .select(`
-      id,
-      name,
-      description,
-      category,
-      price_per_day,
-      is_available,
-      image_url,
-      video_url,
-      features
-    `)
-    .eq('is_available', true)
-    .order('category', { ascending: true })
-    .order('name', { ascending: true });
-
-  if (error) return { data: [], error };
-
-  // Manually map to the expected frontend format (RentalItemDisplay)
-  const mappedData = data.map(item => ({
-    id: item.id,
-    title: item.name,
-    subtitle: item.description,
-    category: item.category,
-    price: item.price_per_day,
-    images: item.image_url ? [item.image_url] : [''],
-    features: Array.isArray(item.features) ? item.features : (item.features ? [item.features] : []),
-    videoUrl: item.video_url,
-    status: item.is_available ? 'Available' : 'Unavailable',
-  }));
-
-  return { data: mappedData, error: null };
-};
-
-/**
- * Fetches ALL equipment for the admin dashboard (no availability filter).
- */
-export const getAllRentalEquipment = async () => {
-  return supabase.from('rental_gear').select('*').order('name', { ascending: true });
-};
-
-
-/**
- * Updates a piece of rental equipment (Admin CRUD)
- */
-export const updateRentalEquipment = async (id: string, updates: Partial<RentalGearUpdate>) => {
-  return supabase.from('rental_gear').update(updates).eq('id', id);
-};
-
-/**
- * Deletes a piece of rental equipment (Admin CRUD)
- */
-export const deleteRentalEquipment = async (id: string) => {
-  return supabase.from('rental_gear').delete().eq('id', id);
-};
-
-/**
- * Subscribes to real-time changes on the rental_gear table.
- */
-export const onRentalGearChange = (callback: () => void) => {
-  return supabase
-    .channel('public:rental_gear')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'rental_gear' }, callback)
-    .subscribe();
-};
-
-
-// --- REAL-TIME SERVICE OPERATIONS ---
-export const getServices = async () => supabase.from('services').select('*').eq('is_deleted', false).order('title', { ascending: true });
-
-export const getDeletedServices = async () => supabase.from('services').select('*').eq('is_deleted', true);
-
-export const createService = async (service: ServiceInsert) => supabase.from('services').insert(service).select().single();
-
-export const updateService = async (id: string, service: ServiceUpdate) => supabase.from('services').update(service).eq('id', id).select().single();
-
-export const softDeleteService = async (id: string) => {
-  return supabase
-    .from('services')
-    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
-};
-
-export const restoreService = async (id: string) => {
-  return supabase
-    .from('services')
-    .update({ is_deleted: false, deleted_at: null })
-    .eq('id', id);
-};
-
-export const onServicesChange = (callback: (payload: any) => void) => {
-  return supabase
-    .channel('public:services')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, callback)
-    .subscribe();
-};
-
-
-// --- JOB POSTING OPERATIONS (Fixed join fields) ---
-
-export const getJobTeamsAndPositions = async () => {
-  const { data: teams, error: teamsError } = await supabase
-    .from('teams') // Assuming 'teams' is the correct table name
-    .select(`
-      id,
-      name,
-      job_positions(*)
-    `)
-    .eq('is_deleted', false) // Assuming 'is_deleted' instead of 'is_active' based on your schema
-    .order('display_order', { ascending: true }); // Assuming 'display_order' exists
-
-  if (teamsError) return { data: [], error: teamsError };
-
-  const result = teams.map(team => ({
-    ...team,
-    job_positions: team.job_positions || []
-  }));
-
-  return { data: result, error: null };
-};
-
-// --- CAREER APPLICATION OPERATIONS (UPDATED TABLE NAME) ---
-
-/**
- * Fetches all career applications and joins position details.
- * UPDATED: Uses 'submitted_applications' table.
- */
-export const getCareerApplications = async () => {
-  return supabase
-    .from('submitted_applications') // <<< CHANGED TABLE NAME
-    .select(`
-        *,
-        job_position:job_positions ( id, title, team_name, team_id, status )
-    `)
-    .order('created_at', { ascending: false });
-};
-
-/**
- * Updates the status of a specific job application.
- * UPDATED: Uses 'submitted_applications' table.
- */
-export const updateCareerApplicationStatus = async (id: string, newStatus: string) => {
-  return supabase
-    .from('submitted_applications') // <<< CHANGED TABLE NAME
+    .from('access_requests')
     .update({ status: newStatus, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select() // Return the updated row
+    .single(); // Expect only one row
 };
 
-// --- CLIENT/ADMIN REQUEST & USER OPERATIONS ---
+/**
+ * Invites a new user via email (Requires SERVICE_ROLE_KEY setup or admin privileges)
+ * IMPORTANT: Calling admin functions directly from the client-side is generally
+ * discouraged for security reasons. Ideally, this would be handled by a Supabase Edge Function.
+ * For now, this assumes the client has sufficient privilege OR you understand the security implications.
+ */
+export const inviteUserByEmail = async (email: string) => {
+   // Check if admin API is available (it might not be in a standard browser environment)
+   if (!supabase.auth.admin) {
+       console.error("supabase.auth.admin is not available. Ensure you are using the client appropriately or move this logic to a backend function.");
+       return { data: null, error: { message: "Admin Auth API not available." } };
+   }
+   try {
+     const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
+     if (error) {
+         console.error("Error inviting user:", error.message);
+         // Handle specific errors, e.g., user already exists
+         if (error.message.includes('already registered')) {
+            // Decide how to handle existing users - maybe just approve request without invite?
+            return { data: { user: null, /* indication of existing user */ }, error: null };
+         }
+     }
+     return { data, error };
+   } catch (err) {
+      console.error("Caught exception during invite:", err);
+      return { data: null, error: { message: err.message || "An unexpected error occurred during invite." } };
+   }
+};
 
-export const getOrCreateClientForUser = async (userId: string, email?: string, fullName?: string) => {
-    if (!userId) return { data: null, error: null };
-    const upsertData = {
-        id: userId,
-        full_name: fullName,
-        email: email,
-        tier: 'Regular',
-        is_active: true,
-    };
-    const { error: upsertError } = await supabase
-        .from('clients')
-        .upsert(upsertData, { onConflict: 'id' });
-    if (upsertError) return { data: null, error: upsertError };
-    const { data: clientData, error: fetchError } = await supabase
-        .from('clients')
-        .select('*')
+/**
+ * Creates a profile entry for a user (linking auth user to role and details)
+ * Assumes a 'profiles' table exists with 'id' (matching auth.users.id) and 'role' columns.
+ */
+export const createClientProfile = async (userId: string, firstName: string, lastName: string, email: string, phone: string, company?: string | null) => {
+    // Check if profile exists first to avoid errors (optional but good practice)
+    const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
         .eq('id', userId)
+        .maybeSingle();
+
+    if (checkError) {
+        console.error("Error checking for existing profile:", checkError);
+        return { data: null, error: checkError };
+    }
+    if (existingProfile) {
+        console.log(`Profile for user ${userId} already exists.`);
+        // Optionally update the profile here if needed
+        return { data: existingProfile, error: null };
+    }
+
+    // Create new profile
+    return supabase
+        .from('profiles') // ** MAKE SURE 'profiles' TABLE EXISTS **
+        .insert({
+            id: userId,          // Link to auth.users table
+            role: 'client',      // Assign the client role
+            first_name: firstName,
+            last_name: lastName,
+            email: email,        // Storing email here might be redundant but can be useful
+            phone: phone,
+            company: company,
+        })
+        .select()
         .single();
-    if (fetchError) return { data: null, error: fetchError };
-    return { data: clientData, error: null };
 };
 
-export const createServiceRequest = async (payload: Database['public']['Tables']['service_requests']['Insert']) => {
-  const { data, error } = await supabase
-    .from('service_requests')
-    .insert([payload])
-    .select()
-    .single();
 
-  if (error) return { data: null, error };
-  return { data, error: null };
+// --- Add listener for access request changes ---
+export const onAccessRequestsChange = (callback: () => void) => {
+  return supabase
+    .channel('public:access_requests')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'access_requests' }, callback)
+    .subscribe();
 };
 
-export const listMyServiceRequests = async (clientId: string) => {
-  const { data, error } = await supabase
-    .from('service_requests')
-    .select(`*, clients (full_name, email)`)
-    .eq('client_id', clientId)
-    .order('created_at', { ascending: false });
-
-  if (error) return { data: [], error };
-  return { data, error: null };
-};
-
-export const listClientsWithStats = async (...args: any[]) => ({ data: [], error: null });
-
-export const listServiceRequests = async () => {
-  const { data, error } = await supabase
-    .from('service_requests')
-    .select(`*, clients (full_name, email)`)
-    .order('requested_at', { ascending: false });
-
-  if (error) return { data: [], error };
-  return { data, error: null };
-};
-
-export const updateServiceRequestStatus = async (id: string, newStatus: ServiceRequestStatus) => {
-  return supabase.from('service_requests').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', id);
-};
-
-// Type definitions - Make sure these point to the correct table
-export type ServiceRequestStatus = Database['public']['Tables']['service_requests']['Row']['status']; // Assuming this exists
-export type Team = Database['public']['Tables']['teams']['Row'];
-export type TeamInsert = Database['public']['Tables']['teams']['Insert'];
-export type TeamUpdate = Database['public']['Tables']['teams']['Update'];
-
-export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
-export type JobPositionInsert = Database['public']['Tables']['job_positions']['Insert'];
-export type JobPositionUpdate = Database['public']['Tables']['job_positions']['Update'];
-
-// UPDATED TYPE DEFINITIONS FOR JOB APPLICATIONS
-export type JobApplication = Database['public']['Tables']['submitted_applications']['Row']; // <<< CHANGED TABLE NAME
-export type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert']; // <<< CHANGED TABLE NAME
-export type JobApplicationUpdate = Database['public']['Tables']['submitted_applications']['Update']; // <<< CHANGED TABLE NAME
-
-export const getAllTeams = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('teams')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('display_order', { ascending: true })
-      .order('name', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching teams:', error);
-      return { data: null, error };
-    }
-
-    return { data: data || [], error: null };
-  } catch (error) {
-    console.error('Unexpected error fetching teams:', error);
-    return { data: null, error };
-  }
-};
-
-export const getAllJobPositions = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('job_positions')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('team_name', { ascending: true })
-      .order('title', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching job positions:', error);
-      return { data: null, error };
-    }
-
-    return { data: data || [], error: null };
-  } catch (error) {
-    console.error('Unexpected error fetching job positions:', error);
-    return { data: null, error };
-  }
-};
-
-export const getActiveJobPositions = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('job_positions')
-      .select('*')
-      .eq('is_deleted', false)
-      .eq('status', 'open')
-      .order('team_name', { ascending: true })
-      .order('title', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching active job positions:', error);
-      return { data: null, error };
-    }
-
-    return { data: data || [], error: null };
-  } catch (error) {
-    console.error('Unexpected error fetching active job positions:', error);
-    return { data: null, error };
-  }
-};
-
-/**
- * Fetches all career applications.
- * UPDATED: Uses 'submitted_applications' table.
- */
-export const getAllJobApplications = async () => {
-  try {
-    const { data, error } = await supabase
-      .from('submitted_applications') // <<< CHANGED TABLE NAME
-      .select(`
-        *,
-        job_position:job_positions (
-          id,
-          title,
-          team_name,
-          team_id,
-          status
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching job applications:', error);
-      return { data: null, error };
-    }
-
-    return { data: data || [], error: null };
-  } catch (error) {
-    console.error('Unexpected error fetching job applications:', error);
-    return { data: null, error };
-  }
-};
-
-export const createTeam = async (team: TeamInsert) => {
-  try {
-    const { data, error } = await supabase
-      .from('teams')
-      .insert(team)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating team:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error creating team:', error);
-    return { data: null, error };
-  }
-};
-
-export const updateTeam = async (id: string, updates: TeamUpdate) => {
-  try {
-    const { data, error } = await supabase
-      .from('teams')
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating team:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error updating team:', error);
-    return { data: null, error };
-  }
-};
-
-export const deleteTeam = async (id: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('teams')
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error deleting team:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error deleting team:', error);
-    return { data: null, error };
-  }
-};
-
-export const createJobPosition = async (position: JobPositionInsert) => {
-  try {
-    const { data, error } = await supabase
-      .from('job_positions')
-      .insert(position)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating job position:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error creating job position:', error);
-    return { data: null, error };
-  }
-};
-
-export const updateJobPosition = async (id: string, updates: JobPositionUpdate) => {
-  try {
-    const { data, error } = await supabase
-      .from('job_positions')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating job position:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error updating job position:', error);
-    return { data: null, error };
-  }
-};
-
-export const deleteJobPosition = async (id: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('job_positions')
-      .update({
-        is_deleted: true,
-        deleted_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error deleting job position:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error deleting job position:', error);
-    return { data: null, error };
-  }
-};
-
-/**
- * Creates a job application.
- * UPDATED: Uses 'submitted_applications' table.
- */
-export const createJobApplication = async (application: JobApplicationInsert) => {
-  try {
-    const { data, error } = await supabase
-      .from('submitted_applications') // <<< CHANGED TABLE NAME
-      .insert(application)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating job application:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error creating job application:', error);
-    return { data: null, error };
-  }
-};
-
-/**
- * Updates the status of a job application.
- * UPDATED: Uses 'submitted_applications' table.
- */
-export const updateJobApplicationStatus = async (id: string, status: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('submitted_applications') // <<< CHANGED TABLE NAME
-      .update({
-        status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error updating application status:', error);
-      return { data: null, error };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    console.error('Unexpected error updating application status:', error);
-    return { data: null, error };
-  }
-};
-
-// Aliases
-export const getOpenJobPositions = getActiveJobPositions;
-export const getActiveTeams = getAllTeams;
-/**
- * Submits a job application.
- * UPDATED: Alias points to the correct function using the new table name.
- */
-export const submitJobApplication = createJobApplication; // <<< UPDATED ALIAS
+// ... (keep other existing functions) ...
