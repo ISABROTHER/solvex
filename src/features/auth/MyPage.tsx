@@ -41,7 +41,13 @@ const MyPage: React.FC = () => {
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Welcome to your SolveX Studios portal.</p>
 
-      {error && <p className="text-red-500 text-sm text-center mb-4 bg-red-50 p-3 rounded-md">{error}</p>}
+      {/* --- Error Message Area (with min-height) --- */}
+      <div className="min-h-[3.25rem] mb-4 flex items-center justify-center"> {/* Adjusted height to better fit padding */}
+        {error && (
+            <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{error}</p>
+        )}
+      </div>
+      {/* --- End Error Message Area --- */}
 
       <div className="mb-4">
         <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">Email Address</label>
@@ -50,7 +56,7 @@ const MyPage: React.FC = () => {
           id="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          className="w-full px-3 py-2 border rounded-md border-gray-300 focus:ring-2 focus:ring-[#FF5722] focus:border-transparent outline-none" // Added focus styles
+          className="w-full px-3 py-2 border rounded-md border-gray-300 focus:ring-2 focus:ring-[#FF5722] focus:border-transparent outline-none"
           required
           autoComplete="email"
         />
@@ -62,7 +68,7 @@ const MyPage: React.FC = () => {
           id="password"
           value={password}
           onChange={e => setPassword(e.target.value)}
-          className="w-full px-3 py-2 border rounded-md border-gray-300 focus:ring-2 focus:ring-[#FF5722] focus:border-transparent outline-none" // Added focus styles
+          className="w-full px-3 py-2 border rounded-md border-gray-300 focus:ring-2 focus:ring-[#FF5722] focus:border-transparent outline-none"
           required
           autoComplete="current-password"
         />
@@ -71,7 +77,7 @@ const MyPage: React.FC = () => {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" // Added disabled cursor
+        className="w-full bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
       >
         {isSubmitting ? 'Processing...' : 'Login'}
       </button>
@@ -94,7 +100,13 @@ const MyPage: React.FC = () => {
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Internal access only</p>
 
-      {error && <p className="text-red-500 text-sm text-center mb-4 bg-red-50 p-3 rounded-md">{error}</p>}
+      {/* --- Error Message Area (with min-height) --- */}
+       <div className="min-h-[3.25rem] mb-4 flex items-center justify-center"> {/* Adjusted height to better fit padding */}
+        {error && (
+            <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{error}</p>
+        )}
+       </div>
+      {/* --- End Error Message Area --- */}
 
       <div className="mb-4">
         <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-email">Email Address</label>
@@ -108,7 +120,7 @@ const MyPage: React.FC = () => {
           autoComplete="email"
         />
       </div>
-      <div className="mb-6">
+      <div className="mb-6"> {/* Keep mb-6 here to match spacing below paragraph */}
         <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-password">Password</label>
         <input
           type="password"
@@ -123,7 +135,7 @@ const MyPage: React.FC = () => {
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full bg-gray-800 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed" // Added disabled cursor
+        className="w-full bg-gray-800 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
       >
         {isSubmitting ? 'Processing...' : 'Login'}
       </button>
@@ -131,7 +143,6 @@ const MyPage: React.FC = () => {
   );
 
   return (
-    // Removed pb-24 padding as BottomNav is gone
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
 
@@ -169,12 +180,10 @@ const MyPage: React.FC = () => {
           </form>
         </div>
       </div>
-
-      {/* --- REMOVED BOTTOM NAV INVOCATION --- */}
     </div>
   );
 };
 
 export default MyPage;
 
-// --- REMOVED BottomNav, NavItemProps, and NavItem component definitions ---
+// --- Removed BottomNav component definitions ---
