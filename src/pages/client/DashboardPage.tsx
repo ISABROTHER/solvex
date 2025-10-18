@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { FilePlus, MessageSquare, User, Clock, CheckCircle, CreditCard } from 'lucide-react'; // Import CreditCard icon
+// Changed CreditCard back to User
+import { FilePlus, MessageSquare, User, Clock, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
@@ -20,9 +21,9 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; icon: React.Elem
 }) => (
   <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4">
     <div className={`${colorBg} p-3 rounded-full flex items-center justify-center`}>
-      {/* Dynamic icon rendering */}
+      {/* Dynamic icon rendering - Reverted logic for Account Tier */}
       <Icon className={`w-5 h-5 ${
-        label === 'Payment' ? 'text-gray-600' :
+        label === 'Account Tier' ? 'text-gray-600' : // Changed back to Account Tier
         label === 'Pending Requests' ? 'text-sky-600' :
         label === 'Active Requests' ? 'text-amber-600' :
         label === 'Completed' ? 'text-green-600' : 'text-gray-600' // Default color
@@ -45,7 +46,7 @@ const DashboardPage: React.FC = () => {
     pending: requests.filter(r => r.status === 'Pending').length,
     active: requests.filter(r => r.status === 'In Progress').length,
     completed: requests.filter(r => r.status === 'Completed').length,
-    tier: client.tier, // Keep the tier data, just change the label in the Metric
+    tier: client.tier,
   };
 
   const recentRequests = requests.slice(0, 5).map(req => ({
@@ -86,8 +87,8 @@ const DashboardPage: React.FC = () => {
             <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" />
             <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" />
             <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" />
-            {/* --- Changed Label and Icon Here --- */}
-            <Metric label="Payment" value={stats.tier} icon={CreditCard} colorBg="bg-gray-100" />
+            {/* --- Changed Label and Icon Back Here --- */}
+            <Metric label="Account Tier" value={stats.tier} icon={User} colorBg="bg-gray-100" />
             {/* --- End Change --- */}
           </div>
         </motion.section>
