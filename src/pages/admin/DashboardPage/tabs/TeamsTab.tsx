@@ -1,8 +1,9 @@
+// src/pages/admin/DashboardPage/tabs/TeamsTab.tsx
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Card from "../components/Card";
 import { Loader2, Mail, Phone, X, PlusCircle, Edit2, Trash2, Save, AlertCircle, Image, ListOrdered } from 'lucide-react'; 
-import { getTeams, getMembers, createTeam, updateTeam } from "../../../../lib/supabase/operations";
+import { getAllTeams, getMembers, createTeam, updateTeam, softDeleteTeam } from "../../../../lib/supabase/operations"; // Added softDeleteTeam
 import { supabase } from "../../../../lib/supabase/client";
 import type { Database } from "../../../../lib/supabase/database.types"; 
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,8 +27,10 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
     display_order: team?.display_order || 0,
     id: team?.id,
   });
+  const [error, setError] = useState('');
 
   useEffect(() => {
+    // Reset form when team changes
     setFormData({
       name: team?.name || '',
       description: team?.description || '',
@@ -35,6 +38,7 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
       display_order: team?.display_order || 0,
       id: team?.id,
     });
+    setError('');
   }, [team]);
 
   const handleChange = (e) => {
@@ -43,10 +47,14 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
       ...prev, 
       [name]: type === 'checkbox' ? checked : (name === 'display_order' ? parseInt(value) || 0 : value) 
     }));
+    setError('');
   };
 
   const handleSave = () => {
-    if (!formData.name.trim()) return alert('Team name is required.');
+    if (!formData.name.trim()) {
+        setError('Team name is required.');
+        return;
+    }
     onSave(formData);
     onClose();
   };
@@ -68,25 +76,35 @@ const TeamEditModal = ({ isOpen, onClose, team, onSave }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Team Name*</label>
-            <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" required/>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1"><Image size={14} className="w-4 h-4 inline mr-1" /> Image URL</label>
-            <input type="url" name="image_url" value={formData.image_url} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1"><ListOrdered size={14} className="w-4 h-4 inline mr-1" /> Display Order</label>
-            <input type="number" name="display_order" value={formData.display_order} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-            <textarea name="description" value={formData.description} onChange={handleChange} rows={3} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]"></textarea>
-          </div>
+          <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Team Name*</label>
+              <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" required/>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1"><Image size={14} className="w-4 h-4 inline mr-1" /> Image URL</label>
+              <input type="url" name="image_url" value={formData.image_url} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1"><ListOrdered size={14} className="w-4 h-4 inline mr-1" /> Display Order</label>
+              <input type="number" name="display_order" value={formData.display_order} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea name="description" value={formData.description} onChange={handleChange} rows={3} className="w-full px-3 py-2 border rounded-lg bg-gray-50 focus:ring-[#FF5722]"></textarea>
+            </div>
+            {error && (
+              <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
+          </form>
         </div>
 
         <div className="flex-shrink-0 p-6 border-t flex justify-end gap-3 bg-gray-50">
+          <button onClick={onClose} className="px-6 py-2 text-sm font-semibold text-gray-700 rounded-lg hover:bg-gray-100">
+            Cancel
+          </button>
           <button onClick={handleSave} className="flex items-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">
             <Save size={16} />
             {team.id ? 'Save Changes' : 'Create Team'}
@@ -116,8 +134,7 @@ const TeamsTab: React.FC = () => {
     setLoading(true);
     setError(null);
     
-    // Using Promise.allSettled allows the component to load even if one API call fails
-    const [teamsResult, membersResult] = await Promise.allSettled([getTeams(), getMembers()]);
+    const [teamsResult, membersResult] = await Promise.allSettled([getAllTeams(), getMembers()]);
 
     if (teamsResult.status === 'rejected' || teamsResult.value.error) {
         setError("Failed to fetch teams. Check RLS on 'teams' table.");
@@ -127,7 +144,6 @@ const TeamsTab: React.FC = () => {
     }
     
     if (membersResult.status === 'rejected' || membersResult.value.error) {
-        // Only override the general error if teams loaded successfully
         if (teamsResult.status === 'fulfilled' && teamsResult.value.data) {
              setError("Failed to fetch some members. Check RLS on 'members' table.");
         }
@@ -176,22 +192,24 @@ const TeamsTab: React.FC = () => {
     }));
 
     if (memberMap.has(null) && memberMap.get(null)?.length > 0) {
+        // Create a mock team object for unassigned members
+        const unassignedMembers = memberMap.get(null);
         grouped.push({
             id: 'unassigned',
             name: 'Unassigned',
             description: 'Members not yet assigned to a functional team.',
-            members: memberMap.get(null),
+            members: unassignedMembers,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             team_name: 'Unassigned',
-            code: null,
-            lead_member_id: null,
-            email_alias: null,
-            is_active: true,
+            display_order: 9999,
         });
     }
 
-    return grouped.sort((a, b) => a.name.localeCompare(b.name)).filter(team => team.members?.length > 0);
+    // Sort by display order, falling back to name. Filter out teams with no members unless they are explicitly created (not shown here)
+    return grouped
+      .filter(team => team.members?.length > 0 || team.id !== 'unassigned') // Only show unassigned if members exist
+      .sort((a, b) => (a.display_order || 9999) - (b.display_order || 9999));
   }, [teams, members]);
 
 
@@ -211,9 +229,22 @@ const TeamsTab: React.FC = () => {
 
         if (result.error) throw result.error;
         addToast({ type: 'success', title: `Team ${action} Successful`, message: `Team "${teamData.name}" has been saved.` });
-        fetchData(); // Re-fetch data to update the UI
       } catch (error) {
         addToast({ type: 'error', title: `${action} Failed`, message: `Failed to save team. Error: ${error.message || 'Unknown'}` });
+      }
+  }
+
+  const handleDeleteTeam = async (team: Team) => {
+      if (!window.confirm(`WARNING: This will soft-delete the team "${team.name}" and set the 'team_id' of all ${team.members.length} associated job postings to 'null' (Uncategorized). Are you sure?`)) return;
+      
+      try {
+        const { error } = await softDeleteTeam(team.id);
+
+        if (error) throw error;
+        
+        addToast({ type: 'success', title: 'Team Deleted', message: `Team "${team.name}" soft-deleted and jobs moved to Uncategorized.` });
+      } catch (error) {
+         addToast({ type: 'error', title: 'Deletion Failed', message: `Failed to delete team. Error: ${error.message || 'Unknown'}` });
       }
   }
 
@@ -252,35 +283,34 @@ const TeamsTab: React.FC = () => {
         </Card>
       )}
       
-      {groupedMembers.map(({ name, members: teamMembers, id: teamId, description }) => (
-        <Card key={teamId} title={`${name} (${teamMembers?.length || 0})`} right={
+      {groupedMembers.map((team) => (
+        <Card key={team.id} title={`${team.name} (${team.members?.length || 0})`} right={
             <div className="flex items-center gap-2">
                 <button
                     onClick={() => {
-                        // Find the real team object from the state
-                        const team = teams.find(t => t.id === teamId) || { id: teamId, name, description };
-                        setEditingTeam(team); 
+                        const teamData = teams.find(t => t.id === team.id) || { id: team.id, name: team.name, description: team.description };
+                        setEditingTeam(teamData); 
                         setIsTeamModalOpen(true);
                     }}
-                    disabled={teamId === 'unassigned'}
+                    disabled={team.id === 'unassigned'}
                     className="p-2 text-gray-500 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-                    title={teamId === 'unassigned' ? 'Cannot edit unassigned group' : 'Edit Team'}
+                    title={team.id === 'unassigned' ? 'Cannot edit unassigned group' : 'Edit Team'}
                 >
                     <Edit2 size={16} />
                 </button>
                 <button
-                    onClick={() => alert('Add New Member form would open here.')}
-                    className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-black"
-                    title="Add Member to Team"
+                    onClick={() => handleDeleteTeam(team)}
+                    disabled={team.id === 'unassigned'}
+                    className="p-2 text-red-500 hover:bg-red-100 rounded-md transition-colors disabled:opacity-50"
+                    title={team.id === 'unassigned' ? 'Cannot delete unassigned group' : 'Delete Team'}
                 >
-                    <PlusCircle size={16} />
-                    Member
+                    <Trash2 size={16} />
                 </button>
             </div>
         }>
-          {description && <p className="text-sm text-gray-600 mb-4">{description}</p>}
+          {team.description && <p className="text-sm text-gray-600 mb-4">{team.description}</p>}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {teamMembers?.map((member) => (
+            {team.members?.map((member) => (
               <div
                 key={member.id}
                 onClick={() => setSelectedMember(member)}
