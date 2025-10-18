@@ -1,11 +1,11 @@
 import React from 'react';
 import { Outlet, Link, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Home } from 'lucide-react'; // Removed User, added Home
-import { useClientMock } from '../../pages/client/useClientMock'; // Import the mock hook to get avatar
+// Removed unused User import, kept LayoutDashboard and Home
+import { LayoutDashboard, Home, User } from 'lucide-react';
+// Removed the import for useClientMock as the avatar is no longer needed
 
 const ClientLayout: React.FC = () => {
-  // Get client data to access the avatarUrl
-  const { client } = useClientMock();
+  // Removed the call to useClientMock
 
   return (
     <div className="min-h-screen flex flex-col bg-neutral-50">
@@ -28,25 +28,21 @@ const ClientLayout: React.FC = () => {
           <span className="sm:hidden">Dashboard</span>
         </NavLink>
 
-        {/* Center: Profile Link with Image */}
-        <div className="hidden sm:flex items-center gap-4 sm:gap-6 absolute left-1/2 transform -translate-x-1/2"> {/* Center the profile link */}
+        {/* Center: Profile Link (Text Only) */}
+        <div className="hidden sm:flex items-center gap-4 sm:gap-6 absolute left-1/2 transform -translate-x-1/2">
           <NavLink
             to="/client/profile"
             className={({ isActive }) =>
-              `flex items-center gap-2 text-sm transition-colors ${ // Increased gap slightly
+              `flex items-center gap-1.5 text-sm transition-colors ${ // Using gap-1.5 for consistency if icon is re-added
                 isActive
                   ? 'font-semibold text-[#FF5722]'
                   : 'text-gray-600 hover:text-gray-900'
               }`
             }
           >
-            {/* --- Added Client Avatar Image --- */}
-            <img
-                src={client.avatarUrl}
-                alt="Client profile picture"
-                className="h-6 w-6 rounded-full object-cover border border-gray-200" // Added styling
-            />
-            {/* --- End Client Avatar Image --- */}
+            {/* --- Removed Client Avatar Image, Optionally add User icon back --- */}
+             <User size={16} /> {/* Optional: Add User icon back if desired */}
+            {/* --- End Removal --- */}
             Profile
           </NavLink>
           {/* You can add Requests link back here if needed */}
@@ -56,7 +52,7 @@ const ClientLayout: React.FC = () => {
         {/* Back to Main Site Link (Right-aligned) */}
         <Link
           to="/"
-          className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm text-gray-500 hover:text-[#FF5722] transition-colors ml-auto sm:ml-0" // Ensure this is pushed right
+          className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm text-gray-500 hover:text-[#FF5722] transition-colors ml-auto sm:ml-0"
           title="Back to Main Site"
         >
           <Home size={16} />
