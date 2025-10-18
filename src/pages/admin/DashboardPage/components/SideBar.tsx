@@ -11,7 +11,7 @@ const NAV: { key: TabKey; label: string; icon: React.ComponentType<any> }[] = [
   { key: "access_requests", label: "Access Requests", icon: UserCheck },
   { key: "partners", label: "Partners", icon: Handshake },
   { key: "applications", label: "Applications", icon: FileText },
-  // NOTE: Teams, Equipment, Services, and Jobs have been removed from the main navigation.
+  // Removed: 'teams', 'equipment', 'services', and 'jobs'
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
