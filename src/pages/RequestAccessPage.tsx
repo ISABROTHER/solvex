@@ -1,212 +1,126 @@
+// src/pages/RequestAccessPage.tsx
+// (Showing relevant parts, assuming imports and schema are correct)
+
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { User, Mail, Phone, Building, MessageSquareText, Send, Loader2, Info } from 'lucide-react';
-import { useToast } from '../contexts/ToastContext'; // Use relative path
+import { useForm, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { supabaseForms } from '../lib/supabase/forms'; // Ensure this is the correct path
+import { useToast } from '../contexts/ToastContext';
+import { Loader2, Send } from 'lucide-react';
+import { Link } from 'react-router-dom'; // Added Link for navigation
+
+const requestAccessSchema = z.object({
+  name: z.string().min(2, 'Full name is required'),
+  email: z.string().email('Invalid email address'),
+  company: z.string().optional(),
+  reason: z.string().min(10, 'Please provide a brief reason (min 10 characters)').optional(),
+});
+type RequestAccessFormData = z.infer<typeof requestAccessSchema>;
+
 
 const RequestAccessPage: React.FC = () => {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    company: '',
-    phone: '',
-    reason: '',
-  });
-  const [isLoading, setIsLoading] = useState(false);
-  const { addToast } = useToast();
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    console.log('Access Request Submitted:', formData);
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsLoading(false);
-
-    addToast({
-      type: 'success',
-      title: 'Request Sent',
-      message:
-        'Thank you! We have received your access request and will get back to you shortly.',
+    const { showToast } = useToast();
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false); // State to show success message
+    const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors },
+    } = useForm<RequestAccessFormData>({
+        resolver: zodResolver(requestAccessSchema),
     });
 
-    setFormData({ fullName: '', email: '', company: '', phone: '', reason: '' });
-  };
+    const onSubmit: SubmitHandler<RequestAccessFormData> = async (data) => {
+        setIsSubmitting(true);
+        setIsSuccess(false); // Reset success state
+        try {
+            // Call the Supabase function to insert data
+            const { error } = await supabaseForms.submitAccessRequest(data);
+            if (error) {
+                // Check for unique constraint violation (email already exists)
+                if (error.code === '23505') { // PostgreSQL unique violation code
+                     showToast('An access request with this email already exists.', 'error');
+                } else {
+                    throw error; // Throw other errors
+                }
+            } else {
+                showToast('Access request submitted successfully! We will review it shortly.', 'success');
+                reset(); // Clear form on success
+                setIsSuccess(true); // Show success message UI
+            }
+        } catch (error: any) {
+            console.error('Failed to submit access request:', error);
+            showToast(error.message || 'Failed to submit request. Please try again.', 'error');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-stone-50 via-orange-50 to-amber-50 items-center justify-center px-5 py-10 selection:bg-[#FF5722]/20">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.97 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-3xl md:max-w-5xl bg-white rounded-2xl shadow-xl overflow-hidden grid md:grid-cols-5"
-      >
-        {/* LEFT: Form Section */}
-        <div className="col-span-5 md:col-span-3 p-6 sm:p-8 md:p-10">
-          <div className="mb-8">
-            <img
-              src="/Solvexstudios logo.png"
-              alt="Solvex Logo"
-              className="h-10 w-auto mb-4"
-            />
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-              Client Dashboard Access
-            </h1>
-            <p className="text-gray-600 text-sm sm:text-base">
-              Welcome! Please provide your details below to request access. We'll review it
-              promptly.
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Full Name */}
-            <div className="relative group">
-              <User
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FF5722]"
-                size={20}
-              />
-              <input
-                type="text"
-                name="fullName"
-                placeholder="Full Name *"
-                value={formData.fullName}
-                onChange={handleChange}
-                required
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent text-sm sm:text-base transition duration-200 ease-in-out"
-              />
+    // If successfully submitted, show a confirmation message instead of the form
+    if (isSuccess) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+                <div className="max-w-md w-full text-center bg-white p-8 rounded-lg shadow-md">
+                    <h1 className="text-2xl font-bold text-green-600 mb-4">Request Sent!</h1>
+                    <p className="text-gray-600 mb-6">Thank you for your request. We have received your information and will review it. You'll be notified via email once a decision is made.</p>
+                    <Link to="/" className="text-[#FF5722] hover:underline font-medium">
+                        Return to Home Page
+                    </Link>
+                </div>
             </div>
+        );
+    }
 
-            {/* Email */}
-            <div className="relative group">
-              <Mail
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FF5722]"
-                size={20}
-              />
-              <input
-                type="email"
-                name="email"
-                placeholder="Email *"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent text-sm sm:text-base transition duration-200 ease-in-out"
-              />
-            </div>
+    // Otherwise, show the form
+    return (
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+            <div className="max-w-md w-full bg-white p-8 rounded-lg shadow-md">
+                <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">Request Client Access</h1>
+                <p className="text-center text-gray-500 mb-6 text-sm">Fill out the form below to request access to the SolveX client portal.</p>
 
-            {/* Company / Org and Phone */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="relative group">
-                <Building
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FF5722]"
-                  size={20}
-                />
-                <input
-                  type="text"
-                  name="company"
-                  placeholder="Company / Org"
-                  value={formData.company}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent text-sm sm:text-base transition duration-200 ease-in-out"
-                />
-              </div>
-              <div className="relative group">
-                <Phone
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#FF5722]"
-                  size={20}
-                />
-                <input
-                  type="tel"
-                  name="phone"
-                  placeholder="Phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent text-sm sm:text-base transition duration-200 ease-in-out"
-                />
-              </div>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+                    {/* Name */}
+                    <div>
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700">Full Name <span className="text-red-600">*</span></label>
+                        <input type="text" id="name" {...register('name')} className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.name ? 'border-red-500 ring-red-500' : ''}`} />
+                        {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>}
+                    </div>
+                    {/* Email */}
+                    <div>
+                        <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email <span className="text-red-600">*</span></label>
+                        <input type="email" id="email" {...register('email')} className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.email ? 'border-red-500 ring-red-500' : ''}`} />
+                        {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
+                    </div>
+                    {/* Company */}
+                    <div>
+                        <label htmlFor="company" className="block text-sm font-medium text-gray-700">Company <span className="text-gray-400">(Optional)</span></label>
+                        <input type="text" id="company" {...register('company')} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm" />
+                    </div>
+                    {/* Reason */}
+                    <div>
+                        <label htmlFor="reason" className="block text-sm font-medium text-gray-700">Reason for Access <span className="text-gray-400">(Optional)</span></label>
+                        <textarea id="reason" rows={3} {...register('reason')} className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring-[#FF5722] sm:text-sm ${errors.reason ? 'border-red-500 ring-red-500' : ''}`} placeholder="Briefly explain why you need access..."></textarea>
+                        {errors.reason && <p className="mt-1 text-xs text-red-600">{errors.reason.message}</p>}
+                    </div>
+                    {/* Submit */}
+                    <div className="pt-2">
+                        <button type="submit" disabled={isSubmitting} className="w-full flex justify-center items-center gap-2 rounded-md bg-[#FF5722] px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#E64A19] disabled:opacity-50">
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                            {isSubmitting ? 'Submitting...' : 'Submit Request'}
+                        </button>
+                    </div>
+                     {/* Back Link */}
+                     <div className="text-center mt-4">
+                        <Link to="/my-page" className="text-sm text-gray-600 hover:text-[#FF5722]">
+                            Back to Login
+                        </Link>
+                    </div>
+                </form>
             </div>
-
-            {/* Reason */}
-            <div className="relative group">
-              <label
-                htmlFor="reason"
-                className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1"
-              >
-                <MessageSquareText size={16} className="text-gray-500" />
-                Reason for access / what you need *
-                <span className="relative ml-1 group/tooltip">
-                  <Info size={14} className="text-gray-400 cursor-help" />
-                  <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 p-2 bg-gray-700 text-white text-xs rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity pointer-events-none z-10">
-                    e.g., Project details, service needed, account check-in. This helps us approve your request faster!
-                  </span>
-                </span>
-              </label>
-              <textarea
-                id="reason"
-                name="reason"
-                placeholder="Briefly tell us why you need access..."
-                value={formData.reason}
-                onChange={handleChange}
-                rows={4}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent text-sm sm:text-base transition duration-200 ease-in-out resize-none"
-              ></textarea>
-            </div>
-
-            {/* Submit Button */}
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#FF5722] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#E64A19] disabled:opacity-75 flex items-center justify-center gap-2 transition-all duration-300 transform hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#FF5722]"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    <span>Submitting Request...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={20} />
-                    <span>Request Access</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
         </div>
-
-        {/* RIGHT: Visual Section (hidden on mobile) */}
-        <div className="hidden md:block md:col-span-2 relative">
-          <img
-            src="/client-access-image.jpg"
-            alt="Client Access Portal"
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-gray-900/70 to-transparent"></div>
-          <div className="relative h-full flex flex-col justify-end p-8 text-white">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-            >
-              <h2 className="text-2xl sm:text-3xl font-semibold mb-3 leading-tight">
-                Your Project Hub Awaits
-              </h2>
-              <p className="text-gray-200 text-sm sm:text-base leading-relaxed">
-                Get direct access to manage your projects, track progress, and communicate
-                seamlessly with the Solvex team. Request access today!
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
+    );
 };
 
 export default RequestAccessPage;
