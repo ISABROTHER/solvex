@@ -3,111 +3,123 @@
 import { supabase } from './client';
 import type { Database } from './database.types';
 
-// --- Types for Access Requests ---
+// --- Type for Access Requests (ensure columns match your SQL) ---
 export type AccessRequest = Database['public']['Tables']['access_requests']['Row'];
-export type AccessRequestUpdate = Database['public']['Tables']['access_requests']['Update'];
+// Add Update type if needed, though status update is simple
+// export type AccessRequestUpdate = Database['public']['Tables']['access_requests']['Update'];
 
-// ... (keep existing functions like getRentalEquipment, getAllRentalEquipment, etc.) ...
 
-// --- Access Request Operations ---
+// --- Existing functions (getRentalEquipment, services, jobs, etc.) ---
+// ... keep all previously defined functions ...
+
+
+// --- NEW Access Request Operations ---
 
 /**
- * Fetches all access requests (consider filtering by 'pending' in production)
+ * Fetches access requests, optionally filtering by status.
  */
-export const getAccessRequests = async () => {
-  return supabase
+export const getAccessRequests = async (status?: 'pending' | 'approved' | 'rejected') => {
+  let query = supabase
     .from('access_requests')
     .select('*')
-    // Optionally filter for only pending requests initially:
-    // .eq('status', 'pending')
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true }); // Show oldest first
+
+  if (status) {
+    query = query.eq('status', status);
+  }
+
+  return query; // Returns { data, error }
 };
 
 /**
- * Updates the status of an access request.
+ * Updates the status of a specific access request.
  */
 export const updateAccessRequestStatus = async (id: string, newStatus: 'approved' | 'rejected') => {
   return supabase
     .from('access_requests')
     .update({ status: newStatus, updated_at: new Date().toISOString() })
     .eq('id', id)
-    .select() // Return the updated row
+    .select() // Return the updated row(s)
     .single(); // Expect only one row
 };
 
 /**
- * Invites a new user via email (Requires SERVICE_ROLE_KEY setup or admin privileges)
- * IMPORTANT: Calling admin functions directly from the client-side is generally
- * discouraged for security reasons. Ideally, this would be handled by a Supabase Edge Function.
- * For now, this assumes the client has sufficient privilege OR you understand the security implications.
+ * Invites a user via Supabase Auth Admin API.
+ * ⚠️ SECURITY WARNING: Avoid calling admin functions directly from the client-side
+ * in production. Use a Supabase Edge Function for security. This implementation
+ * assumes the risks are understood or it's for development/internal tools.
  */
 export const inviteUserByEmail = async (email: string) => {
-   // Check if admin API is available (it might not be in a standard browser environment)
    if (!supabase.auth.admin) {
-       console.error("supabase.auth.admin is not available. Ensure you are using the client appropriately or move this logic to a backend function.");
-       return { data: null, error: { message: "Admin Auth API not available." } };
+       console.error("supabase.auth.admin is not available. Check Supabase client setup or move logic to Edge Function.");
+       // Return an error structure consistent with Supabase client errors
+       return { data: null, error: { message: "Admin Auth API not available on client." } };
    }
    try {
+     // Use the admin API to invite
      const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
-     if (error) {
-         console.error("Error inviting user:", error.message);
-         // Handle specific errors, e.g., user already exists
-         if (error.message.includes('already registered')) {
-            // Decide how to handle existing users - maybe just approve request without invite?
-            return { data: { user: null, /* indication of existing user */ }, error: null };
-         }
+
+     // Handle specific "user already exists" error gracefully
+     if (error && error.message?.includes('already registered')) {
+        console.warn(`User ${email} already registered. Proceeding without sending new invite.`);
+        // Return a specific indicator or fetch the existing user
+        const { data: existingUserData, error: getUserError } = await supabase.auth.admin.listUsers({ email: email });
+        if (getUserError || !existingUserData?.users?.length) {
+            console.error("Failed to retrieve existing user after invite conflict:", getUserError);
+            return { data: null, error: { message: `User exists but failed to retrieve: ${getUserError?.message}` }};
+        }
+        return { data: { user: existingUserData.users[0] }, error: null }; // Return existing user data
      }
+     // Return regular success or other errors
      return { data, error };
-   } catch (err) {
-      console.error("Caught exception during invite:", err);
+   } catch (err: any) {
+      console.error("Caught exception during inviteUserByEmail:", err);
       return { data: null, error: { message: err.message || "An unexpected error occurred during invite." } };
    }
 };
 
 /**
- * Creates a profile entry for a user (linking auth user to role and details)
- * Assumes a 'profiles' table exists with 'id' (matching auth.users.id) and 'role' columns.
+ * Creates or updates a profile entry for a user in the 'profiles' table.
+ * Links the Supabase Auth user ID to application-specific data like role.
  */
-export const createClientProfile = async (userId: string, firstName: string, lastName: string, email: string, phone: string, company?: string | null) => {
-    // Check if profile exists first to avoid errors (optional but good practice)
-    const { data: existingProfile, error: checkError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
+export const createOrUpdateClientProfile = async (
+    userId: string,
+    firstName: string,
+    lastName: string,
+    email: string,
+    phone: string,
+    company?: string | null
+) => {
+    // Data to insert or update in the 'profiles' table
+    const profileData = {
+        id: userId,          // Must match the auth.users.id
+        role: 'client',      // Assign the 'client' role
+        first_name: firstName,
+        last_name: lastName,
+        email: email,        // Storing email redundantly can be useful
+        phone: phone,
+        company: company,
+        updated_at: new Date().toISOString(), // Ensure updated_at is set
+    };
 
-    if (checkError) {
-        console.error("Error checking for existing profile:", checkError);
-        return { data: null, error: checkError };
-    }
-    if (existingProfile) {
-        console.log(`Profile for user ${userId} already exists.`);
-        // Optionally update the profile here if needed
-        return { data: existingProfile, error: null };
-    }
-
-    // Create new profile
+    // Use upsert to handle both new profiles and existing ones
+    // `onConflict: 'id'` tells Supabase to update if a profile with this ID already exists
     return supabase
-        .from('profiles') // ** MAKE SURE 'profiles' TABLE EXISTS **
-        .insert({
-            id: userId,          // Link to auth.users table
-            role: 'client',      // Assign the client role
-            first_name: firstName,
-            last_name: lastName,
-            email: email,        // Storing email here might be redundant but can be useful
-            phone: phone,
-            company: company,
-        })
-        .select()
-        .single();
+        .from('profiles') // ** CHECK YOUR TABLE NAME **
+        .upsert(profileData, { onConflict: 'id' })
+        .select() // Return the created or updated profile row
+        .single(); // Expect only one row
 };
 
-
-// --- Add listener for access request changes ---
-export const onAccessRequestsChange = (callback: () => void) => {
+// --- Realtime listener for access requests ---
+export const onAccessRequestsChange = (callback: (payload: any) => void) => {
   return supabase
-    .channel('public:access_requests')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'access_requests' }, callback)
+    .channel('public:access_requests:admin') // Use a unique channel name
+    .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'access_requests' },
+        callback // Call the provided function when changes occur
+     )
     .subscribe();
 };
 
