@@ -1,36 +1,28 @@
 // src/lib/supabase/forms.ts
-import { supabase } from './client';
+// Reverted: Contains client initialization (incorrect location)
+// Reverted: Does NOT contain submitAccessRequest function
 
-interface AccessRequestData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  company?: string;
-  reason?: string;
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from './database.types'; // Assuming you generated types
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Check if variables are loaded
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('Supabase URL or Anon Key is missing. Check your .env file.');
+  throw new Error('Supabase configuration is missing. Check environment variables.');
 }
 
-// Add other form data interfaces as needed (e.g., ContactInquiryData)
+// Reverted: Client initialization was here
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
 
+console.log('Supabase client initialized (in forms.ts - incorrect):', supabase ? 'Success' : 'Failed');
+
+// Reverted: No specific form submission logic was defined here yet
 export const supabaseForms = {
-  submitAccessRequest: async (data: AccessRequestData) => {
-    const { error } = await supabase
-      .from('access_requests')
-      .insert([
-        {
-          first_name: data.firstName,
-          last_name: data.lastName,
-          email: data.email,
-          phone: data.phone,
-          company_name: data.company,
-          reason: data.reason,
-          status: 'pending',
-        },
-      ]);
-    return { error };
-  },
-
-  // Add other submission functions here, e.g.:
-  // submitContactInquiry: async (data: ContactInquiryData) => { ... },
-  // submitCareerApplication: async (data: CareerApplicationData) => { ... },
+    // submitAccessRequest was added later, so it's removed in this revert.
+    // Keep other form functions if they existed before, e.g.:
+    // submitContactInquiry: async (...) => { ... }
+    // submitCareerApplication: async (...) => { ... }
 };
