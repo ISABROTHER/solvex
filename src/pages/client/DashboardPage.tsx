@@ -1,11 +1,10 @@
-// src/pages/ClientDashboard.warm.tsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FilePlus, MessageSquare, User, Clock, CheckCircle } from 'lucide-react';
-import { useAuth } from './auth';
-import { useClientMock } from './useClientMock';
-import StatusBadge from './StatusBadge';
+import { useAuth } from '../../features/auth';
+import { useClientMock } from '../../features/client/useClientMock';
+import StatusBadge from '../../features/client/StatusBadge';
 
 const container = {
   hidden: { opacity: 0 },
@@ -30,18 +29,32 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; icon: React.Elem
   </div>
 );
 
-const ClientDashboardWarm: React.FC = () => {
+const DashboardPage: React.FC = () => {
   const { user } = useAuth();
-  const { stats, recentRequests } = useClientMock();
-  const userName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email || 'Friend';
+  const { client, requests } = useClientMock();
+  const userName = user?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
+
+  const stats = {
+    pending: requests.filter(r => r.status === 'Pending').length,
+    active: requests.filter(r => r.status === 'In Progress').length,
+    completed: requests.filter(r => r.status === 'Completed').length,
+    tier: client.tier,
+  };
+
+  const recentRequests = requests.slice(0, 5).map(req => ({
+    id: req.id,
+    title: req.projectTitle,
+    status: req.status,
+    requestedAt: req.createdAt,
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-stone-50 via-orange-50 to-amber-50 p-4 sm:p-6 lg:p-8">
       <motion.div className="max-w-6xl mx-auto space-y-6" initial="hidden" animate="show" variants={container}>
         <motion.header variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Hey {userName} 👋</h1>
-            <p className="text-sm text-gray-600 mt-1">Here’s what’s happening with your projects and requests.</p>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Hey {userName}</h1>
+            <p className="text-sm text-gray-600 mt-1">Here's what's happening with your projects and requests.</p>
           </div>
           <div className="flex gap-3">
             <Link
@@ -66,7 +79,7 @@ const ClientDashboardWarm: React.FC = () => {
             <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" />
             <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" />
             <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" />
-            <Metric label="Account Tier" value={stats.tier} icon={User} colorBg="bg-purple-100" />
+            <Metric label="Account Tier" value={stats.tier} icon={User} colorBg="bg-gray-100" />
           </div>
         </motion.section>
 
@@ -89,7 +102,7 @@ const ClientDashboardWarm: React.FC = () => {
                 View Requests
               </Link>
               <Link
-                to="/client/contact"
+                to="/contact"
                 className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg"
               >
                 <MessageSquare size={16} />
@@ -131,4 +144,4 @@ const ClientDashboardWarm: React.FC = () => {
   );
 };
 
-export default ClientDashboardWarm;
+export default DashboardPage;
