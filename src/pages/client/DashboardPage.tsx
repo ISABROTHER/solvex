@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Changed CreditCard back to User
-import { FilePlus, MessageSquare, User, Clock, CheckCircle } from 'lucide-react';
+// Changed User back to CreditCard as the label is now just 'Payments'
+import { FilePlus, MessageSquare, Clock, CheckCircle, CreditCard, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
@@ -13,21 +13,18 @@ const container = {
 };
 const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
-const Metric: React.FC<{ label: string; value: React.ReactNode; icon: React.ElementType; colorBg?: string }> = ({
+const Metric: React.FC<{ label: string; value: React.ReactNode; icon: React.ElementType; colorBg?: string; iconColor?: string }> = ({
   label,
   value,
   icon: Icon,
   colorBg = 'bg-amber-100',
+  // Allow overriding icon color
+  iconColor = 'text-amber-600'
 }) => (
   <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4">
     <div className={`${colorBg} p-3 rounded-full flex items-center justify-center`}>
-      {/* Dynamic icon rendering - Reverted logic for Account Tier */}
-      <Icon className={`w-5 h-5 ${
-        label === 'Account Tier' ? 'text-gray-600' : // Changed back to Account Tier
-        label === 'Pending Requests' ? 'text-sky-600' :
-        label === 'Active Requests' ? 'text-amber-600' :
-        label === 'Completed' ? 'text-green-600' : 'text-gray-600' // Default color
-      }`} />
+      {/* Dynamic icon rendering with specific color override */}
+      <Icon className={`w-5 h-5 ${iconColor}`} />
     </div>
     <div>
       <p className="text-xs text-gray-500">{label}</p>
@@ -46,8 +43,12 @@ const DashboardPage: React.FC = () => {
     pending: requests.filter(r => r.status === 'Pending').length,
     active: requests.filter(r => r.status === 'In Progress').length,
     completed: requests.filter(r => r.status === 'Completed').length,
+    // Tier data is still available if needed elsewhere, but not used directly in the metric value
     tier: client.tier,
   };
+
+  // Value is now hardcoded
+  const paymentDisplayValue = "PAYMENTS";
 
   const recentRequests = requests.slice(0, 5).map(req => ({
     id: req.id,
@@ -84,12 +85,12 @@ const DashboardPage: React.FC = () => {
 
         <motion.section variants={fadeUp}>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" />
-            <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" />
-            <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" />
-            {/* --- Changed Label and Icon Back Here --- */}
-            <Metric label="Account Tier" value={stats.tier} icon={User} colorBg="bg-gray-100" />
-            {/* --- End Change --- */}
+            <Metric label="Pending Requests" value={stats.pending} icon={Clock} colorBg="bg-sky-100" iconColor="text-sky-600" />
+            <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
+            <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
+            {/* --- Updated Label, Value, Icon, and Colors Here --- */}
+            <Metric label="Account Tier" value={paymentDisplayValue} icon={CreditCard} colorBg="bg-gray-100" iconColor="text-gray-600" />
+            {/* --- End Update --- */}
           </div>
         </motion.section>
 
