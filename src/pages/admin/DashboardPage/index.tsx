@@ -18,13 +18,12 @@ export type TabKey =
   | "home"
   | "clients"
   | "projects"
-  | "teams"
-  | "equipment"
+  | "access_requests"
   | "partners"
-  | "services"
   | "applications"
-  | "jobs"
   | "settings";
+  // NOTE: The separate entries for 'teams', 'equipment', 'services', and 'jobs' 
+  // are removed from the main TabKey definition.
 
 const DashboardPage: React.FC = () => {
   const [tab, setTab] = useState<TabKey>("home");
@@ -77,13 +76,17 @@ const DashboardPage: React.FC = () => {
           {tab === "home" && <HomeTab />}
           {tab === "clients" && <ClientsTab />}
           {tab === "projects" && <ProjectsTab />}
-          {tab === "teams" && <TeamsTab />}
-          {tab === "equipment" && <EquipmentTab />}
+          {/* Removed direct rendering for TeamsTab, EquipmentTab, ServicesTab, JobsTab */}
           {tab === "partners" && <PartnersTab />}
-          {tab === "services" && <ServicesTab />}
           {tab === "applications" && <ApplicationsTab />}
-          {tab === "jobs" && <JobsTab />}
-          {tab === "settings" && <SettingsTab />}
+          {tab === "settings" && (
+            <SettingsTab 
+              jobsTab={<JobsTab />}
+              teamsTab={<TeamsTab />}
+              servicesTab={<ServicesTab />}
+              equipmentTab={<EquipmentTab />}
+            />
+          )}
         </main>
       </div>
     </div>
