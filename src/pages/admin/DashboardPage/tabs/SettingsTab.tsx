@@ -1,15 +1,85 @@
 // @ts-nocheck
-import React from "react";
-import { useState } from "react";
-import { RefreshCw, Database, CircleCheck as CheckCircle, CircleAlert as AlertCircle } from "lucide-react";
+import React, { useState } from "react";
+import { RefreshCw, Database, CircleCheck as CheckCircle, CircleAlert as AlertCircle, Briefcase, Users, Package, Target } from "lucide-react";
 import Card from "../components/Card";
 import { supabase } from "../../../../lib/supabase/client";
 
-const SettingsTab: React.FC = () => {
+// Define the content components passed from index.tsx
+interface SettingsTabProps {
+  jobsTab: React.ReactNode;
+  teamsTab: React.ReactNode;
+  servicesTab: React.ReactNode;
+  equipmentTab: React.ReactNode;
+}
+
+type SubTabKey = 'database' | 'jobs' | 'teams' | 'services' | 'equipment';
+
+const SettingsTab: React.FC<SettingsTabProps> = ({ jobsTab, teamsTab, servicesTab, equipmentTab }) => {
+  const [activeSubTab, setActiveSubTab] = useState<SubTabKey>('database');
+  
+  // Database Management State
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [syncMessage, setSyncMessage] = useState('');
+  
+  const subTabs: { key: SubTabKey; label: string; icon: React.ComponentType<any> }[] = [
+    { key: 'database', label: 'Database & Sync', icon: Database },
+    { key: 'jobs', label: 'Job Postings', icon: Target },
+    { key: 'teams', label: 'Teams', icon: Users },
+    { key: 'services', label: 'Services', icon: Briefcase },
+    { key: 'equipment', label: 'Equipment', icon: Package },
+  ];
 
+  const renderContent = () => {
+    switch (activeSubTab) {
+      case 'jobs': return jobsTab;
+      case 'teams': return teamsTab;
+      case 'services': return servicesTab;
+      case 'equipment': return equipmentTab;
+      case 'database': return <DatabaseManagementCard 
+        isSyncing={isSyncing}
+        syncStatus={syncStatus}
+        syncMessage={syncMessage}
+        setIsSyncing={setIsSyncing}
+        setSyncStatus={setSyncStatus}
+        setSyncMessage={setSyncMessage}
+        />;
+      default: return <p>Select a configuration area.</p>;
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Secondary Tab Navigation */}
+      <Card className="p-0">
+        <div className="flex flex-wrap border-b border-gray-200">
+          {subTabs.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveSubTab(key)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-semibold transition-colors border-b-2 ${
+                activeSubTab === key
+                  ? 'border-[#FF5722] text-[#FF5722]'
+                  : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Dynamic Content Area */}
+      {renderContent()}
+    </div>
+  );
+};
+
+
+// Extracted Database Management Card logic
+const DatabaseManagementCard = ({ isSyncing, syncStatus, syncMessage, setIsSyncing, setSyncStatus, setSyncMessage }) => {
+    
   const handleDatabaseSync = async () => {
     setIsSyncing(true);
     setSyncStatus('idle');
@@ -242,41 +312,39 @@ const SettingsTab: React.FC = () => {
       }, 5000);
     }
   };
-
+    
   return (
-    <div className="space-y-6">
-      <Card title="Database Management">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <div>
-              <h3 className="font-semibold text-gray-900">Sync Database</h3>
-              <p className="text-sm text-gray-600">Update database with all data: equipment, services, teams, and job postings</p>
-            </div>
-            <button 
-              onClick={handleDatabaseSync}
-              disabled={isSyncing}
-              className="flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg hover:bg-[#E64A19] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-              {isSyncing ? 'Syncing...' : 'Sync Now'}
-            </button>
+    <Card title="Database Management">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+          <div>
+            <h3 className="font-semibold text-gray-900">Sync Database</h3>
+            <p className="text-sm text-gray-600">Update database with all data: equipment, services, teams, and job postings</p>
           </div>
-          
-          {syncStatus !== 'idle' && (
-            <div className={`flex items-center gap-2 p-3 rounded-lg ${
-              syncStatus === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}>
-              {syncStatus === 'success' ? (
-                <CheckCircle className="w-4 h-4" />
-              ) : (
-                <AlertCircle className="w-4 h-4" />
-              )}
-              <span className="text-sm">{syncMessage}</span>
-            </div>
-          )}
+          <button
+            onClick={handleDatabaseSync}
+            disabled={isSyncing}
+            className="flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg hover:bg-[#E64A19] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Syncing...' : 'Sync Now'}
+          </button>
         </div>
-      </Card>
-    </div>
+        
+        {syncStatus !== 'idle' && (
+          <div className={`flex items-center gap-2 p-3 rounded-lg ${
+            syncStatus === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {syncStatus === 'success' ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : (
+              <AlertCircle className="w-4 h-4" />
+            )}
+            <span className="text-sm">{syncMessage}</span>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 };
 
