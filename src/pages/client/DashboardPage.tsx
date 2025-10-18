@@ -2,12 +2,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Updated icons: Removed Clock, CreditCard. Kept MessageSquare, CheckCircle, User, FilePlus.
-import { FilePlus, MessageSquare, CheckCircle, User } from 'lucide-react';
+// Updated icons: Added Clock back. Kept MessageSquare, CheckCircle, User, FilePlus.
+import { FilePlus, MessageSquare, CheckCircle, User, Clock } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
-// Removed PaymentReceivingModal import as the trigger is gone
+// Removed PaymentReceivingModal import
 
 const container = {
   hidden: { opacity: 0 },
@@ -15,7 +15,7 @@ const container = {
 };
 const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
-// Metric component remains the same as the last stable version
+// Metric component remains the same
 const Metric: React.FC<{
     label: string;
     value: React.ReactNode;
@@ -94,20 +94,18 @@ const DashboardPage: React.FC = () => {
           </motion.header>
 
           <motion.section variants={fadeUp}>
-             {/* --- Updated Metrics Grid --- */}
+             {/* --- Metrics Grid --- */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Kept 2 columns */}
-              {/* Removed Pending Requests Metric */}
               <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
               <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
-              {/* Removed Account Tier / Payments Metric */}
             </div>
-            {/* --- End Updated Metrics Grid --- */}
+            {/* --- End Metrics Grid --- */}
           </motion.section>
 
           <motion.section variants={fadeUp}>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
-              {/* Kept original Quick Actions */}
+              {/* Original Quick Actions */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link
                   to="/client/new"
@@ -120,7 +118,8 @@ const DashboardPage: React.FC = () => {
                   to="/client/requests"
                   className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg"
                 >
-                  <Clock size={16} /> {/* Kept Clock icon here */}
+                  {/* Correctly uses Clock icon */}
+                  <Clock size={16} />
                   View Requests
                 </Link>
                 <Link
@@ -163,7 +162,7 @@ const DashboardPage: React.FC = () => {
             </div>
           </motion.section>
         </motion.div>
-        {/* Comment moved inside the closing tag */}
+         {/* Removed Comments */}
       </div>
   );
 };
