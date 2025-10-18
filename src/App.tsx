@@ -28,10 +28,10 @@ import ContactPage from './pages/ContactPage';
 import RequestAccessPage from './pages/RequestAccessPage';
 import DashboardPage from './pages/admin/DashboardPage';
 import ClientDashboard from './pages/client/DashboardPage';
-import ProfilePage from './features/client/ProfilePage';
-import RequestsPage from './features/client/RequestsPage';
-import RequestDetailPage from './features/client/RequestDetailPage';
-import NewRequestPage from './features/client/NewRequestPage';
+import ProfilePage from './pages/client/ProfilePage';
+import RequestsPage from './pages/client/RequestsPage';
+import RequestDetailPage from './pages/client/RequestDetailPage';
+import NewRequestPage from './pages/client/NewRequestPage';
 
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (

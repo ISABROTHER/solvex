@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { FilePlus, MessageSquare, User, Clock, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../features/auth';
-import { useClientMock } from '../../features/client/useClientMock';
-import StatusBadge from '../../features/client/StatusBadge';
+import { useClientMock } from './useClientMock';
+import StatusBadge from './StatusBadge';
 
 const container = {
   hidden: { opacity: 0 },
