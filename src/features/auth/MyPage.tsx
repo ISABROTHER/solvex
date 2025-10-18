@@ -1,60 +1,47 @@
 // src/features/auth/MyPage.tsx
-import React, { useState, useEffect } from 'react'; // Remove useContext
-// Remove AuthContext import, useAuth is sufficient
-import { useAuth } from './useAuth';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from './useAuth'; // No AuthContext needed
+// ... other imports
 
 const MyPage: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  // Get isAuthenticated and role directly from useAuth
-  const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError, isAuthenticated, role } = useAuth();
-  const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // ... state ...
+  // No need to get isAuthenticated or role from useAuth here
+  const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
 
-   useEffect(() => { setAuthError(null); }, [email, password, activeTab, setAuthError]);
+  // ... useEffect ...
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
-    let targetRole: 'client' | 'admin' | null = null;
-    let success = false;
 
     try {
-      if (activeTab === 'client') {
-        targetRole = 'client';
-        success = await clientLogin(email, password);
+      let targetRole: 'client' | 'admin' = activeTab; // Simpler
+      let result: { success: boolean; role: 'client' | 'admin' | null };
+
+      if (targetRole === 'client') {
+        result = await clientLogin(email, password);
       } else {
-        targetRole = 'admin';
-        success = await adminLogin(email, password);
+        result = await adminLogin(email, password);
       }
 
-      if (success) {
-         // Allow time for onAuthStateChange
-         setTimeout(() => {
-           // Re-check state using the hook's current values
-           const currentAuth = useAuth(); // Get latest state via hook
-
-           if (currentAuth.isAuthenticated && currentAuth.role === targetRole) {
-              navigate(targetRole === 'admin' ? '/admin' : '/client');
-           } else if (currentAuth.isAuthenticated) {
-              setAuthError(`Login successful but role is incorrect.`);
-           } else {
-             setAuthError('Login attempt succeeded but session update failed.');
-           }
-         }, 300);
+      if (result.success && result.role === targetRole) {
+        // SUCCESS: Role matches the tab
+        navigate(targetRole === 'admin' ? '/admin' : '/client');
+      } else if (result.success) {
+        // SUCCESS, but WRONG ROLE
+        setAuthError(`Login successful, but your account role ('${result.role}') does not match this portal.`);
+        // You might want to log them out here, or just show the error
       } else if (!authError) {
-         setAuthError('Login failed. Check credentials.');
+        // FAILED (and authProvider didn't set an error)
+         setAuthError('Login failed. Please check credentials.');
       }
+      // If authProvider set an error (e.g., "Invalid login credentials"), it will just be displayed
     } catch (err: any) {
-      setAuthError(err.message || 'An unexpected login error.');
+      setAuthError(err.message || 'An unexpected login error occurred.');
     }
   };
 
-  // ... (rest of the component remains the same, using isLoading and authError from useAuth)
-  // ... (handleTabClick, renderClientForm, renderAdminForm, return statement)
+  // ... (rest of the component is fine)
 };
 
-export default MyPage; // No need to export AuthContext here either
+export default MyPage;
