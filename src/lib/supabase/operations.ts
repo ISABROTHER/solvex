@@ -7,7 +7,7 @@ import type { Database } from './database.types';
 // Define the shape of data the public frontend expects
 export type RentalItemDisplay = {
   id: string;
-  title: string;
+  title: string; 
   subtitle: string | null;
   category: string | null;
   price: number;
