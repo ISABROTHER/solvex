@@ -2,19 +2,20 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-// Updated icons: Removed MessageSquare. Kept FilePlus, Clock, CheckCircle, User.
-import { FilePlus, Clock, CheckCircle, User } from 'lucide-react';
+// Updated icons: Reverted Mail back to MessageSquare.
+import { FilePlus, MessageSquare, Clock, CheckCircle, User } from 'lucide-react';
 import { useAuth } from '../../features/auth';
 import { useClientMock } from './useClientMock';
 import StatusBadge from './StatusBadge';
+// Removed COMPANY_INFO import
 
-// --- (Keep container, fadeUp, and Metric component definitions) ---
 const container = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
 };
 const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
+// Metric component remains the same
 const Metric: React.FC<{
     label: string;
     value: React.ReactNode;
@@ -95,7 +96,6 @@ const DashboardPage: React.FC = () => {
           <motion.section variants={fadeUp}>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
               <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
-              {/* --- Updated Quick Actions --- */}
               <div className="flex flex-col sm:flex-row gap-3">
                 <Link
                   to="/client/new"
@@ -111,9 +111,16 @@ const DashboardPage: React.FC = () => {
                   <Clock size={16} />
                   View Requests
                 </Link>
-                {/* Removed Contact Support Link */}
+                {/* --- Reverted Contact Support Button --- */}
+                <Link
+                  to="/contact" // Changed back to Link pointing to /contact
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg" // Original styling
+                >
+                  <MessageSquare size={16} /> {/* Changed Icon back */}
+                  Contact Support {/* Changed Text back */}
+                </Link>
+                {/* --- End Revert --- */}
               </div>
-              {/* --- End Update --- */}
             </div>
           </motion.section>
 
@@ -144,7 +151,7 @@ const DashboardPage: React.FC = () => {
                 <p className="text-sm text-gray-500 text-center py-6">No recent requests. Submit your first request to get started!</p>
               )}
             </div>
-          </motion.section>
+          </motion.section> 
         </motion.div>
       </div>
   );
