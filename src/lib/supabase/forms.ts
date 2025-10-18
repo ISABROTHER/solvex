@@ -61,3 +61,10 @@ export const submitContactInquiry = async (data: any) => {
   console.warn('Database not configured. Form submission disabled.');
   return { data: null, success: false, error: 'Database not configured' };
 };
+
+export const supabaseForms = {
+  submitAccessRequest: async (data: any) => {
+    console.warn('Database not configured. Form submission disabled.');
+    return { data: null, error: { code: 'DB_NOT_CONFIGURED', message: 'Database not configured' } };
+  }
+};

@@ -20,7 +20,7 @@ type RequestAccessFormData = z.infer<typeof requestAccessSchema>;
 
 
 const RequestAccessPage: React.FC = () => {
-    const { showToast } = useToast();
+    const { addToast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false); // State to show success message
     const {
@@ -41,18 +41,18 @@ const RequestAccessPage: React.FC = () => {
             if (error) {
                 // Check for unique constraint violation (email already exists)
                 if (error.code === '23505') { // PostgreSQL unique violation code
-                     showToast('An access request with this email already exists.', 'error');
+                     addToast({ type: 'error', title: 'Email already exists', message: 'An access request with this email already exists.' });
                 } else {
                     throw error; // Throw other errors
                 }
             } else {
-                showToast('Access request submitted successfully! We will review it shortly.', 'success');
+                addToast({ type: 'success', title: 'Success!', message: 'Access request submitted successfully! We will review it shortly.' });
                 reset(); // Clear form on success
                 setIsSuccess(true); // Show success message UI
             }
         } catch (error: any) {
             console.error('Failed to submit access request:', error);
-            showToast(error.message || 'Failed to submit request. Please try again.', 'error');
+            addToast({ type: 'error', title: 'Error', message: error.message || 'Failed to submit request. Please try again.' });
         } finally {
             setIsSubmitting(false);
         }

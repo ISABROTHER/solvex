@@ -23,12 +23,14 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  clientLogin: () => void;
+  clientLogin: (email?: string, password?: string) => Promise<boolean>;
   clientSignup: () => void;
-  adminLogin: () => void;
+  adminLogin: (email?: string, password?: string) => Promise<boolean>;
   logout: () => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, userData?: any) => Promise<void>;
+  loading: boolean;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,6 +43,7 @@ const AuthController: React.FC<{ children: ReactNode }> = ({ children }) => {
     session: null,
     isLoading: false,
   });
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const updateSession = (isAuthenticated: boolean, role: 'client' | 'admin' | null) => {
@@ -57,9 +60,11 @@ const AuthController: React.FC<{ children: ReactNode }> = ({ children }) => {
     console.warn('Auth not configured. Connect your database first.');
   };
 
-  const clientLogin = () => {
+  const clientLogin = async (email?: string, password?: string): Promise<boolean> => {
+    console.warn('Auth not configured. Using mock login.');
     updateSession(true, 'client');
     navigate('/client/dashboard');
+    return true;
   };
 
   const clientSignup = () => {
@@ -67,9 +72,11 @@ const AuthController: React.FC<{ children: ReactNode }> = ({ children }) => {
     navigate('/client/dashboard');
   };
 
-  const adminLogin = () => {
+  const adminLogin = async (email?: string, password?: string): Promise<boolean> => {
+    console.warn('Auth not configured. Using mock login.');
     updateSession(true, 'admin');
     navigate('/admin');
+    return true;
   };
 
   const logout = () => {
@@ -80,7 +87,7 @@ const AuthController: React.FC<{ children: ReactNode }> = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ ...authState, clientLogin, clientSignup, adminLogin, logout, login, signup }}>
+    <AuthContext.Provider value={{ ...authState, clientLogin, clientSignup, adminLogin, logout, login, signup, loading: authState.isLoading, error }}>
       {children}
     </AuthContext.Provider>
   );
