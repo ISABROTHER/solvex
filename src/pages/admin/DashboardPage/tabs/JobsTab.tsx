@@ -20,7 +20,8 @@ const JobsTab: React.FC = () => {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = setIsSaving(false);
+  // FIX: Corrected React state initialization for isSaving
+  const [isSaving, setIsSaving] = useState(false); 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<JobPosition | null>(null);
   const { addToast } = useToast();
