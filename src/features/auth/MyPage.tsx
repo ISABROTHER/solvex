@@ -1,6 +1,6 @@
 // src/features/auth/MyPage.tsx
-import React, { useState, useEffect, useContext } from 'react'; // Added useContext
-import { useAuth, AuthContext } from './useAuth'; // Import AuthContext
+import React, { useState, useEffect, useContext } from 'react';
+import { useAuth, AuthContext } from './useAuth'; // Ensure AuthContext is exported if used
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Home, Loader2 } from 'lucide-react';
 
@@ -8,23 +8,19 @@ const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
-
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-   useEffect(() => {
-    setAuthError(null);
-   }, [email, password, activeTab, setAuthError]);
+   useEffect(() => { setAuthError(null); }, [email, password, activeTab, setAuthError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
+    let targetRole: 'client' | 'admin' | null = null;
+    let success = false;
 
     try {
-      let success = false;
-      let targetRole: 'client' | 'admin' | null = null;
-
       if (activeTab === 'client') {
         targetRole = 'client';
         success = await clientLogin(email, password);
@@ -34,47 +30,50 @@ const MyPage: React.FC = () => {
       }
 
       if (success) {
-         // Give Supabase listener time to update the state
+         // Allow time for onAuthStateChange to potentially update role
          setTimeout(() => {
-           // Check the latest state directly from context
-           const updatedAuthState = (AuthContext as any)?._currentValue;
+           const updatedAuthState = (AuthContext as any)?._currentValue; // Check current context value
 
-           if (updatedAuthState?.role === targetRole) {
+           if (updatedAuthState?.isAuthenticated && updatedAuthState?.role === targetRole) {
               navigate(targetRole === 'admin' ? '/admin' : '/client');
            } else if (updatedAuthState?.isAuthenticated) {
-              setAuthError(`Login successful, but role '${updatedAuthState?.role || 'unknown'}' is incorrect.`);
-              // Optional: logout();
+              // Logged in but wrong role or role fetch failed
+              setAuthError(`Login successful but role is incorrect for this portal.`);
+              // Consider logging out: logout();
            } else {
-             setAuthError('Login succeeded but session update failed. Please try again.');
+             // Login function returned true, but state didn't update (should be rare)
+             setAuthError('Login attempt succeeded but session update failed.');
            }
-         }, 250); // Adjust delay if needed
+         }, 300); // Adjust delay if needed
       } else if (!authError) {
-         setAuthError('Login failed. Please check credentials.');
+         // Login function returned false, and no specific error was set by AuthProvider
+         setAuthError('Login failed. Please check your credentials.');
       }
-
     } catch (err: any) {
-      setAuthError(err.message || 'An unexpected error occurred.');
+      setAuthError(err.message || 'An unexpected login error occurred.');
     }
   };
 
   const handleTabClick = (tab: 'client' | 'admin') => {
       setActiveTab(tab);
       setAuthError(null);
-  }
+  };
 
+  // --- Render Functions (renderClientForm, renderAdminForm) ---
+  // These use `isLoading` and `authError` from useAuth()
   const renderClientForm = () => (
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
-      <p className="text-center text-gray-500 mb-6 text-sm">Welcome back.</p>
+      <p className="text-center text-gray-500 mb-6 text-sm">Access your portal.</p>
       <div className="min-h-[3.25rem] mb-4 flex items-center justify-center">
         {authError && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{authError}</p>}
       </div>
       <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="email">Email</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="email">Email</label>
         <input type="email" id="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required autoComplete="email" disabled={isLoading} />
       </div>
       <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="password">Password</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="password">Password</label>
         <input type="password" id="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required autoComplete="current-password" disabled={isLoading} />
       </div>
       <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center gap-2 bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:bg-gray-400">
@@ -82,7 +81,7 @@ const MyPage: React.FC = () => {
       </button>
       <div className="text-center mt-6 border-t pt-6">
         <p className="text-sm text-gray-600 mb-2">Need access?</p>
-        <Link to="/request-access" className={`w-full block bg-gray-100 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-200 transition-colors ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
+        <Link to="/request-access" className={`w-full block bg-gray-100 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-200 ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
           Request Access
         </Link>
       </div>
@@ -92,16 +91,16 @@ const MyPage: React.FC = () => {
   const renderAdminForm = () => (
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
-      <p className="text-center text-gray-500 mb-6 text-sm">Internal access.</p>
-      <div className="min-h-[3.25rem] mb-4 flex items-center justify-center">
+      <p className="text-center text-gray-500 mb-6 text-sm">Internal access only.</p>
+       <div className="min-h-[3.25rem] mb-4 flex items-center justify-center">
         {authError && <p className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md w-full">{authError}</p>}
-      </div>
+       </div>
       <div className="mb-4">
-        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-email">Email</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="admin-email">Email</label>
         <input type="email" id="admin-email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-gray-800" required autoComplete="email" disabled={isLoading} />
       </div>
       <div className="mb-6">
-        <label className="block text-gray-700 text-sm font-semibold mb-2" htmlFor="admin-password">Password</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="admin-password">Password</label>
         <input type="password" id="admin-password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-gray-800" required autoComplete="current-password" disabled={isLoading} />
       </div>
       <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center gap-2 bg-gray-800 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400">
@@ -109,12 +108,13 @@ const MyPage: React.FC = () => {
       </button>
     </>
   );
+  // --- End Render Functions ---
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="mb-4 text-center">
-            <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
+            <Link to="/" className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
                 <Home size={16} /> Back to Home
             </Link>
         </div>
@@ -122,7 +122,7 @@ const MyPage: React.FC = () => {
           <button onClick={() => handleTabClick('client')} disabled={isLoading} className={`flex-1 py-3 text-sm font-semibold ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500 hover:text-gray-700'}`}>CLIENT</button>
           <button onClick={() => handleTabClick('admin')} disabled={isLoading} className={`flex-1 py-3 text-sm font-semibold ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>ADMIN</button>
         </div>
-        <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
+         <div className="bg-white p-6 sm:p-8 rounded-lg shadow-md">
           <form onSubmit={handleSubmit} noValidate>
             {activeTab === 'client' ? renderClientForm() : renderAdminForm()}
           </form>
