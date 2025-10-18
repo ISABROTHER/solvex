@@ -1,119 +1,88 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useClientMock } from './useClientMock';
+// src/pages/client/NewRequestPage.tsx
+
+// ... (imports and schema definition) ...
 
 const NewRequestPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { addRequest } = useClientMock();
-  const [formData, setFormData] = useState({
-    serviceType: '',
-    projectTitle: '',
-    brief: '',
-    timeline: '',
+  // ... (state, react-hook-form setup) ...
+  const [showCustomService, setShowCustomService] = useState(false);
+  const {
+    // ... (other form methods) ...
+    watch,
+    setValue,
+  } = useForm<RequestFormData>({
+    resolver: zodResolver(requestSchema),
+    // ... (defaultValues) ...
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newRequest = addRequest(formData);
-    navigate(`/client/requests/${newRequest.id}`);
-  };
+  const selectedServiceType = watch('serviceType');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  // Handle showing/hiding the custom service input
+  React.useEffect(() => {
+    if (selectedServiceType === 'Other') {
+      setShowCustomService(true);
+    } else {
+      setShowCustomService(false);
+      setValue('customServiceType', ''); // Clear custom input if 'Other' is deselected
+    }
+  }, [selectedServiceType, setValue]);
+
+  const onSubmit: SubmitHandler<RequestFormData> = async (data) => {
+    // ... (submission logic) ...
+    // Use custom service type if 'Other' is selected and custom input is filled
+    const finalServiceType = data.serviceType === 'Other' && data.customServiceType
+        ? data.customServiceType
+        : data.serviceType;
+    // ... (rest of submission logic using finalServiceType) ...
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-3xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">New Request</h1>
-        <div className="bg-white rounded-lg shadow p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="serviceType" className="block text-sm font-medium text-gray-700 mb-2">
-                Service Type
-              </label>
-              <select
-                id="serviceType"
-                name="serviceType"
-                value={formData.serviceType}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
-              >
-                <option value="">Select a service</option>
-                <option value="Brand Strategy">Brand Strategy</option>
-                <option value="Advertising">Advertising</option>
-                <option value="Photography & Videography">Photography & Videography</option>
-                <option value="Content Marketing">Content Marketing</option>
-                <option value="Web Development">Web Development</option>
-              </select>
-            </div>
+    // ... (page structure) ...
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 bg-white p-6 sm:p-8 rounded-lg shadow border border-gray-100">
+          {/* Service Type Dropdown */}
+          <div>
+            <label htmlFor="serviceType" className="block text-sm font-medium leading-6 text-gray-900">
+              Service Type <span className="text-red-600">*</span>
+            </label>
+            <select
+              id="serviceType"
+              {...register('serviceType')}
+              className={`mt-2 block w-full rounded-md border-0 py-2 pl-3 pr-10 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-[#FF5722] sm:text-sm sm:leading-6 ${errors.serviceType ? 'ring-red-500' : ''}`}
+            >
+              <option value="" disabled>Select a service...</option>
+              {SERVICES_DATA.map((service) => (
+                <option key={service.id} value={service.title}>{service.title}</option>
+              ))}
+              {/* --- This is the custom option --- */}
+              <option value="Other">Other (Please specify)</option>
+            </select>
+            {errors.serviceType && <p className="mt-1 text-xs text-red-600">{errors.serviceType.message}</p>}
+          </div>
 
+          {/* --- Custom Service Type Input (Conditional) --- */}
+          {showCustomService && (
             <div>
-              <label htmlFor="projectTitle" className="block text-sm font-medium text-gray-700 mb-2">
-                Project Title
+              <label htmlFor="customServiceType" className="block text-sm font-medium leading-6 text-gray-900">
+                Custom Service Type <span className="text-red-600">*</span>
               </label>
               <input
                 type="text"
-                id="projectTitle"
-                name="projectTitle"
-                value={formData.projectTitle}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
+                id="customServiceType"
+                {...register('customServiceType')}
+                className={`mt-2 block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-[#FF5722] sm:text-sm sm:leading-6 ${errors.customServiceType ? 'ring-red-500' : ''}`}
+                placeholder="e.g., Custom Software Development"
               />
+               {/* Conditionally validate custom input if 'Other' is selected */}
+               {selectedServiceType === 'Other' && errors.serviceType && !watch('customServiceType') && (
+                   <p className="mt-1 text-xs text-red-600">Please specify the service type.</p>
+               )}
+               {errors.customServiceType && <p className="mt-1 text-xs text-red-600">{errors.customServiceType.message}</p>}
             </div>
+          )}
+          {/* --- End Conditional Input --- */}
 
-            <div>
-              <label htmlFor="brief" className="block text-sm font-medium text-gray-700 mb-2">
-                Project Brief
-              </label>
-              <textarea
-                id="brief"
-                name="brief"
-                value={formData.brief}
-                onChange={handleChange}
-                required
-                rows={6}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="timeline" className="block text-sm font-medium text-gray-700 mb-2">
-                Timeline
-              </label>
-              <input
-                type="text"
-                id="timeline"
-                name="timeline"
-                value={formData.timeline}
-                onChange={handleChange}
-                required
-                placeholder="e.g., 2-3 weeks, Flexible"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
-              />
-            </div>
-
-            <div className="flex gap-4">
-              <button
-                type="submit"
-                className="flex-1 bg-[#FF5722] text-white px-6 py-3 rounded-lg hover:bg-[#E64A19] transition font-semibold"
-              >
-                Submit Request
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/client/requests')}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+          {/* ... (rest of the form fields: Project Title, Brief, Timeline, Submit Button) ... */}
+        </form>
+    // ... (rest of component) ...
   );
 };
 
