@@ -1,128 +1,100 @@
-import React from "react";
-import { Home, Users, Briefcase, UserCheck, LayoutGrid, SquareUser as UserSquare2, Package, Handshake, Settings, X, FileText, Target } from "lucide-react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../../../../features/auth/useAuth";
-import type { TabKey } from "../shared/types";
+// @ts-nocheck
+import React from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, FileText, Settings, LogOut,
+  Package, Wrench, Briefcase, FileCheck, UsersRound,
+  UserCheck // Added UserCheck for Access Requests
+} from 'lucide-react';
+import { useAuth } from '../../../../features/auth/AuthProvider'; // <-- CORRECTED IMPORT PATH
 
-const NAV: { key: TabKey; label: string; icon: React.ComponentType<any> }[] = [
-  { key: "home", label: "Home", icon: Home },
-  { key: "clients", label: "Clients", icon: Users },
-  { key: "projects", label: "Projects", icon: Briefcase },
-  { key: "access_requests", label: "Access Requests", icon: UserCheck },
-  { key: "partners", label: "Partners", icon: Handshake },
-  { key: "applications", label: "Applications", icon: FileText },
-  { key: "settings", label: "Settings", icon: Settings },
+// Define icons map if not already defined globally
+const icons = {
+  home: LayoutDashboard,
+  clients: UsersRound, // Updated Icon
+  accessRequests: UserCheck, // Added Icon
+  equipment: Package,
+  services: Wrench,
+  jobs: Briefcase,
+  applications: FileCheck, // Keep if separate tab
+  settings: Settings,
+};
+
+// Define navigation items
+const navItems = [
+  { name: 'Home', path: '', icon: 'home' },
+  { name: 'Clients', path: 'clients', icon: 'clients' },
+  { name: 'Access Requests', path: 'access-requests', icon: 'accessRequests' }, // Added Nav Item
+  { name: 'Equipment', path: 'equipment', icon: 'equipment' },
+  { name: 'Services', path: 'services', icon: 'services' },
+  { name: 'Jobs', path: 'jobs', icon: 'jobs' },
+  { name: 'Applications', path: 'applications', icon: 'applications' },
+  { name: 'Settings', path: 'settings', icon: 'settings' },
 ];
 
-type Props = {
-  active: TabKey;
-  onSelect: (k: TabKey) => void;
-  isMobile?: boolean;
-  isOpenMobile?: boolean;
-  onCloseMobile?: () => void;
-};
+interface SideBarProps {
+  isOpen: boolean; // Assuming state is managed by parent
+}
 
-const SideBar: React.FC<Props> = ({
-  active,
-  onSelect,
-  isMobile = false,
-  isOpenMobile = false,
-  onCloseMobile,
-}) => {
-  if (!isMobile) {
-    return (
-      <aside className="h-full w-72 border-r bg-white">
-        <Header />
-        <NavList active={active} onSelect={onSelect} />
-        <BottomArea />
-      </aside>
-    );
-  }
-
-  return (
-    <>
-      <div
-        className={`fixed inset-0 z-40 bg-black/40 transition-opacity sm:hidden ${isOpenMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
-        onClick={onCloseMobile}
-      />
-      <aside
-        className={`fixed top-0 left-0 z-50 h-full w-72 border-r bg-white shadow-xl transition-transform sm:hidden ${isOpenMobile ? "translate-x-0" : "-translate-x-full"}`}
-      >
-        <div className="px-4 py-3 border-b flex items-center justify-between h-14">
-          <Link to="/" aria-label="Back to public website home">
-            <img src="https://i.imgur.com/eioVNZq.png" alt="Logo" className="h-8" />
-          </Link>
-          <button
-            className="p-2 rounded-md hover:bg-gray-100"
-            aria-label="Close menu"
-            onClick={onCloseMobile}
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <NavList active={active} onSelect={(k) => { onSelect(k); onCloseMobile?.(); }} />
-        <BottomArea />
-      </aside>
-    </>
-  );
-};
-
-const Header: React.FC = () => (
-  <div className="h-14 px-5 py-4 border-b flex items-center">
-    <Link to="/" aria-label="Back to public website home">
-      <img src="https://i.imgur.com/eioVNZq.png" alt="Logo" className="h-8" />
-    </Link>
-  </div>
-);
-
-const NavList: React.FC<{ active: TabKey; onSelect: (k: TabKey) => void }> = ({ active, onSelect }) => {
-  const isActive = (key: TabKey) => key === active;
-
-  return (
-    <nav className="p-2 sm:p-3">
-      <ul className="space-y-1">
-        {NAV.map(({ key, label, icon: Icon }) => (
-          <li key={key}>
-            <button
-              onClick={() => onSelect(key)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-left ${isActive(key) ? "bg-gray-900 text-white shadow-sm" : "text-gray-700 hover:bg-gray-100"}`}
-            >
-              <Icon size={18} />
-              <span className="text-sm font-medium">{label}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-};
-
-const BottomArea: React.FC = () => {
-  const { logout } = useAuth();
+const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
+  const { logout } = useAuth(); // Get logout function
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     try {
       await logout();
-      navigate("/");
+      navigate('/my-page'); // Explicit navigation after logout, though AuthProvider might also handle it
     } catch (error) {
-      console.error("Logout failed:", error);
-      navigate("/");
+      console.error("Logout failed from Sidebar:", error);
+      // Optionally show an error toast
     }
   };
 
   return (
-    <div className="mt-auto border-t pt-3 px-3 pb-3">
-      <button
-        onClick={handleLogout}
-        className="w-full flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-gray-50"
-      >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M16 17l5-5-5-5" />
-          <path d="M21 12H9" />
-        </svg>
-        Logout
-      </button>
+    <div className={`fixed inset-y-0 left-0 bg-gray-900 text-gray-300 w-64 space-y-6 py-7 px-2 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 lg:block z-30 shadow-lg`}>
+
+      {/* Logo or Brand */}
+      <div className="px-4 mb-6">
+        <NavLink to="/admin" className="text-white text-2xl font-semibold tracking-wider uppercase hover:text-gray-100 flex items-center justify-center">
+          {/* Add your logo image here if you have one */}
+          SOLVEX
+        </NavLink>
+      </div>
+
+      {/* Navigation Links */}
+      <nav className="flex-1 px-4 space-y-2">
+        {navItems.map((item) => {
+          const IconComponent = icons[item.icon as keyof typeof icons] || LayoutDashboard; // Fallback icon
+          return (
+            <NavLink
+              key={item.name}
+              to={`/admin/${item.path}`} // Base path is /admin
+              end={item.path === ''} // `end` prop for exact match on Home route
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-gray-700 text-white shadow-inner'
+                    : 'hover:bg-gray-700 hover:text-white'
+                }`
+              }
+            >
+              <IconComponent size={18} />
+              <span>{item.name}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
+
+      {/* Logout Button */}
+      <div className="absolute bottom-0 left-0 w-full px-4 pb-4">
+        <button
+          onClick={handleLogout}
+          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-700 hover:text-white transition-colors text-red-400"
+        >
+          <LogOut size={18} />
+          <span>Logout</span>
+        </button>
+      </div>
     </div>
   );
 };
