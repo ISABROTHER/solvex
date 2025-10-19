@@ -1,14 +1,13 @@
-// src/features/auth/MyPage.tsx
 import React, { useState, useEffect } from 'react';
-import { useAuth } from './useAuth'; // Get context functions/state
+import { useAuth } from './AuthProvider'; // <-- CORRECTED IMPORT
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { Home, Loader2 } from 'lucide-react';
-import Alert from '../../components/Alert'; // Import Alert component for displaying auth errors
+import Alert from '../../components/Alert'; // Import Alert component
 
 const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  // Get functions and state from AuthProvider
+  // Get functions and state from AuthProvider via useAuth
   const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
   // State for the active tab (client or admin)
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
@@ -24,14 +23,15 @@ const MyPage: React.FC = () => {
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
-    setAuthError(null); // Clear previous errors
+    setAuthError(null); // Clear previous errors before attempting login
     let targetRole: 'client' | 'admin' = activeTab; // Role user is trying to log in as
 
     console.log(`Attempting login for ${targetRole} with email: ${email}`);
 
     try {
       // Call the appropriate login function from AuthProvider
-      let result: { success: boolean; role: 'client' | 'admin' | null };
+      // result will be { success: boolean, role: UserRole }
+      let result;
 
       if (targetRole === 'client') {
         result = await clientLogin(email, password);
@@ -50,12 +50,17 @@ const MyPage: React.FC = () => {
         // SUCCESS, BUT WRONG ROLE: Login credentials were valid, but the fetched role doesn't match
         console.warn(`Login successful but role mismatch. Expected ${targetRole}, got ${result.role}`);
         // Display specific error about role mismatch
-        setAuthError(`Login successful, but your account role ('${result.role || 'unknown'}') does not grant access to the ${targetRole} portal.`);
+        // Use a more informative message if the role was null (profile fetch failed)
+        if (result.role === null) {
+            setAuthError(authError || "Login successful, but failed to verify account role. Please contact support."); // Show AuthProvider error if set
+        } else {
+            setAuthError(`Login successful, but your account role ('${result.role}') does not grant access to the ${targetRole} portal.`);
+        }
         // DO NOT NAVIGATE
       } else if (!result.success && authError) {
-          // FAILED with specific error from AuthProvider (e.g., "Invalid login credentials", "User profile not found")
+          // FAILED with specific error from AuthProvider (e.g., "Invalid login credentials", "Profile not found")
           console.log("Login failed with error from AuthProvider:", authError);
-          // Error is already set, Alert component will display it.
+          // Error is already set, Alert component will display it. No need to call setAuthError again.
       } else if (!result.success) {
          // FAILED without a specific error message (generic failure)
          console.warn("Login failed without specific error message.");
@@ -81,7 +86,7 @@ const MyPage: React.FC = () => {
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Access your project portal.</p>
-      {/* Display Auth Error if present */}
+      {/* Display Auth Error if present using Alert component */}
       {authError && <Alert type="error" message={authError} className="mb-4" />}
       {/* Email Input */}
       <div className="mb-4">
@@ -111,7 +116,7 @@ const MyPage: React.FC = () => {
     <>
       <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Admin Login</h2>
       <p className="text-center text-gray-500 mb-6 text-sm">Internal use only.</p>
-      {/* Display Auth Error if present */}
+      {/* Display Auth Error if present using Alert component */}
       {authError && <Alert type="error" message={authError} className="mb-4" />}
        {/* Email Input */}
       <div className="mb-4">
