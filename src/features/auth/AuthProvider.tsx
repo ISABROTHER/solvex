@@ -74,7 +74,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
                 console.log(`[updateUserState] Role value from profile: '${fetchedRole}' (Type: ${typeof fetchedRole})`);
 
                 if (fetchedRole === 'admin' || fetchedRole === 'client') {
-                    userRole = fetchedRole;
+                    userRole = fetchedRole as UserRole;
                     console.log(`[updateUserState] Role successfully verified as: ${userRole}`);
                     setError(null);
                 } else {
@@ -143,7 +143,8 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         return { success: false, role: null };
      }
      
-     const role = await updateUserState(data.session);
+     // Type assertion is safe here as the sign-in was successful
+     const role = await updateUserState(data.session as Session); 
      setAuthState(prev => ({ ...prev, isLoading: false }));
      
      return { success: true, role };
