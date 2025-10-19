@@ -176,8 +176,43 @@ export const getActiveTeams = async () => {
   return supabase.from('teams').select('*').is('deleted_at', null).order('name');
 };
 
+// Mapped type for rental equipment display in the UI
+export interface RentalItemDisplay {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  category: string | null;
+  price: number;
+  images: string[] | null;
+  features: string[] | null;
+  videoUrl: string | null;
+  status: string;
+}
+
+// Maps database rental_gear row to RentalItemDisplay format
+const mapRentalGearToDisplay = (gear: RentalGear): RentalItemDisplay => {
+  return {
+    id: gear.id,
+    title: gear.name,
+    subtitle: gear.description,
+    category: gear.category,
+    price: gear.price_per_day,
+    images: gear.image_url ? [gear.image_url] : null,
+    features: gear.features,
+    videoUrl: gear.video_url,
+    status: gear.is_available ? 'Available' : 'Unavailable'
+  };
+};
+
 export const getRentalEquipment = async () => {
-  return supabase.from('rental_gear').select('*').eq('is_available', true).order('name');
+  const result = await supabase.from('rental_gear').select('*').order('name');
+
+  if (result.error) {
+    return { data: null, error: result.error };
+  }
+
+  const mappedData = result.data?.map(mapRentalGearToDisplay) || [];
+  return { data: mappedData, error: null };
 };
 
 export const getAllTeams = async () => {
