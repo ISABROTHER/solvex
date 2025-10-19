@@ -1,159 +1,187 @@
-// src/pages/client/DashboardPage.tsx
-import React from 'react';
+// @ts-nocheck
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-// Updated icons: Reverted Mail back to MessageSquare.
-import { FilePlus, MessageSquare, Clock, CheckCircle, User } from 'lucide-react';
-import { useAuth } from '../../features/auth';
-import { useClientMock } from './useClientMock';
+import { PlusCircle, FileText, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '../../features/auth/AuthProvider'; // <-- CORRECTED IMPORT
+// Assuming you have functions to fetch client-specific data
+// import { getClientRequests, getClientProfile } from '../../lib/supabase/operations'; // Example imports
+
+// Mock data (replace with actual data fetching)
+import { useClientMock } from './useClientMock'; // Using mock hook for now
 import StatusBadge from './StatusBadge';
-// Removed COMPANY_INFO import
+import { ServiceRequestStatus } from '../../types/client-sync.types'; // Assuming type exists
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+
+// Type for dashboard requests (simplified)
+type DashboardRequest = {
+  id: string;
+  project_title: string;
+  service_key: string;
+  status: ServiceRequestStatus;
+  requested_at: string;
 };
-const fadeUp = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
-
-// Metric component remains the same
-const Metric: React.FC<{
-    label: string;
-    value: React.ReactNode;
-    icon: React.ElementType;
-    colorBg?: string;
-    iconColor?: string;
-    className?: string;
-}> = ({
-  label,
-  value,
-  icon: Icon,
-  colorBg = 'bg-amber-100',
-  iconColor = 'text-amber-600',
-  className = '',
-}) => (
-      <div className={`bg-white rounded-2xl p-4 sm:p-5 shadow-lg border border-gray-100 flex items-center gap-4 ${className}`}>
-        <div className={`${colorBg} p-3 rounded-full flex items-center justify-center flex-shrink-0`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
-        </div>
-        <div className="overflow-hidden">
-          <p className="text-xs text-gray-500 truncate">{label}</p>
-          <p className="text-xl font-semibold text-gray-900 truncate">{value}</p>
-        </div>
-      </div>
-  );
-
 
 const DashboardPage: React.FC = () => {
-  const { user } = useAuth();
-  const { client, requests } = useClientMock();
-  const userName = (user as any)?.user_metadata?.full_name?.split(' ')[0] || user?.email || client.firstName;
+  const { user } = useAuth(); // Get user info
+  // const [requests, setRequests] = useState<DashboardRequest[]>([]);
+  // const [loading, setLoading] = useState(true);
+  // const [error, setError] = useState<string | null>(null);
 
-  const stats = {
-    active: requests.filter(r => r.status === 'In Progress').length,
-    completed: requests.filter(r => r.status === 'Completed').length,
+  // --- Using Mock Data ---
+  const { requests, loading, error, clientName } = useClientMock(); // Replace with real fetching
+  // --- End Mock Data ---
+
+  /*
+  // --- Example Real Data Fetching (implement in operations.ts) ---
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.id) return; // Wait for user info
+
+      setLoading(true);
+      setError(null);
+      try {
+        // Fetch client requests (implement getClientRequests in operations.ts)
+        const { data: requestData, error: requestError } = await getClientRequests(user.id);
+        if (requestError) throw requestError;
+        setRequests(requestData || []);
+
+        // Fetch client name (implement getClientProfile in operations.ts)
+        // const { data: profileData, error: profileError } = await getClientProfile(user.id);
+        // if (profileError) throw profileError;
+        // setClientName(profileData?.first_name || user.email);
+
+      } catch (err: any) {
+        console.error("Error fetching client dashboard data:", err);
+        setError(err.message || "Failed to load data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [user]); // Refetch if user changes
+  */
+  // --- End Real Data Fetching Example ---
+
+
+  const recentRequests = useMemo(() => {
+    return requests
+      .sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime())
+      .slice(0, 5); // Show latest 5
+  }, [requests]);
+
+  const requestStats = useMemo(() => {
+    return requests.reduce((acc, req) => {
+      acc[req.status] = (acc[req.status] || 0) + 1;
+      return acc;
+    }, {} as Record<ServiceRequestStatus, number>);
+  }, [requests]);
+
+  const getIconForStatus = (status: ServiceRequestStatus) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="text-green-500" size={18} />;
+      case 'in_progress':
+      case 'confirmed': return <Clock className="text-blue-500" size={18} />;
+      case 'cancelled': return <XCircle className="text-red-500" size={18} />;
+      case 'requested':
+      default: return <FileText className="text-amber-500" size={18} />;
+    }
   };
 
-  const recentRequests = requests.slice(0, 5).map(req => ({
-    id: req.id,
-    title: req.projectTitle,
-    status: req.status,
-    requestedAt: req.createdAt,
-  }));
 
   return (
-      <div className="min-h-screen bg-gradient-to-b from-stone-50 via-orange-50 to-amber-50 p-4 sm:p-6 lg:p-8">
-        <motion.div className="max-w-6xl mx-auto space-y-6" initial="hidden" animate="show" variants={container}>
-          <motion.header variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Hey {userName}</h1>
-              <p className="text-sm text-gray-600 mt-1">Here's what's happening with your projects and requests.</p>
-            </div>
-            <div className="flex gap-3">
-              <Link
-                to="/client/new"
-                className="inline-flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg shadow hover:scale-[1.02] transition-transform duration-200"
-              >
-                <FilePlus size={16} />
-                New Request
-              </Link>
-              <Link
-                to="/client/profile"
-                className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-lg shadow border border-gray-100 hover:scale-[1.02] transition-transform duration-200"
-              >
-                <User size={16} />
-                Profile
-              </Link>
-            </div>
-          </motion.header>
+    <div className="container mx-auto px-4 py-8">
+      {/* Welcome Header */}
+      <div className="mb-8 p-6 bg-gradient-to-r from-[#ff8a65] to-[#FF5722] rounded-lg shadow text-white">
+        <h1 className="text-3xl font-bold mb-1">Welcome back, {clientName || user?.email}!</h1>
+        <p className="text-orange-100">Here's a quick overview of your recent activity.</p>
+      </div>
 
-          <motion.section variants={fadeUp}>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Metric label="Active Requests" value={stats.active} icon={MessageSquare} colorBg="bg-amber-100" iconColor="text-amber-600" />
-              <Metric label="Completed" value={stats.completed} icon={CheckCircle} colorBg="bg-green-100" iconColor="text-green-600" />
-            </div>
-          </motion.section>
+       {/* Loading and Error States */}
+       {loading && (
+         <div className="flex justify-center items-center py-20">
+             <Loader2 className="h-10 w-10 animate-spin text-gray-400" />
+         </div>
+       )}
+       {error && !loading && (
+         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+             <strong className="font-bold">Error:</strong>
+             <span className="block sm:inline ml-2">{error}</span>
+         </div>
+       )}
 
-          <motion.section variants={fadeUp}>
-            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick Actions</h2>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Link
-                  to="/client/new"
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-[#FF5722] text-white py-3 rounded-lg font-medium"
-                >
-                  <FilePlus size={16} />
-                  Submit Request
-                </Link>
-                <Link
-                  to="/client/requests"
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg"
-                >
-                  <Clock size={16} />
-                  View Requests
-                </Link>
-                {/* --- Reverted Contact Support Button --- */}
-                <Link
-                  to="/contact" // Changed back to Link pointing to /contact
-                  className="flex-1 inline-flex items-center justify-center gap-2 bg-white border border-gray-200 py-3 rounded-lg" // Original styling
-                >
-                  <MessageSquare size={16} /> {/* Changed Icon back */}
-                  Contact Support {/* Changed Text back */}
-                </Link>
-                {/* --- End Revert --- */}
+
+      {!loading && !error && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+          {/* Left Column: Quick Stats & New Request */}
+          <div className="md:col-span-1 space-y-6">
+            {/* Quick Stats */}
+            <div className="bg-white p-6 rounded-lg shadow">
+              <h2 className="text-lg font-semibold mb-4 text-gray-700">Request Summary</h2>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Requested:</span>
+                  <span className="font-medium text-amber-600">{requestStats.requested || 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Confirmed/In Progress:</span>
+                  <span className="font-medium text-blue-600">{(requestStats.confirmed || 0) + (requestStats.in_progress || 0)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Completed:</span>
+                  <span className="font-medium text-green-600">{requestStats.completed || 0}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Cancelled:</span>
+                  <span className="font-medium text-red-600">{requestStats.cancelled || 0}</span>
+                </div>
               </div>
             </div>
-          </motion.section>
 
-          {/* Recent Requests section remains the same */}
-          <motion.section variants={fadeUp}>
-            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-gray-100">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Recent Requests</h2>
-              {recentRequests.length ? (
-                <ul className="divide-y divide-gray-100">
-                  {recentRequests.map((req) => (
-                    <li key={req.id} className="py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div>
-                        <Link to={`/client/requests/${req.id}`} className="font-medium text-gray-900 hover:text-[#FF5722]">
-                          {req.title}
-                        </Link>
-                        <p className="text-xs text-gray-500 mt-1">Requested {new Date(req.requestedAt).toLocaleDateString()}</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <StatusBadge status={req.status} />
-                        <Link to={`/client/requests/${req.id}`} className="text-sm text-[#FF5722] font-medium">
-                          View
-                        </Link>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-gray-500 text-center py-6">No recent requests. Submit your first request to get started!</p>
-              )}
+            {/* New Request Button */}
+            <Link
+              to="/client/requests/new"
+              className="block w-full text-center bg-[#FF5722] text-white font-semibold py-3 px-4 rounded-lg shadow hover:bg-[#E64A19] transition-colors flex items-center justify-center gap-2"
+            >
+              <PlusCircle size={20} />
+              Submit New Request
+            </Link>
+          </div>
+
+          {/* Right Column: Recent Requests */}
+          <div className="md:col-span-2 bg-white p-6 rounded-lg shadow">
+            <div className="flex justify-between items-center mb-4">
+               <h2 className="text-lg font-semibold text-gray-700">Recent Requests</h2>
+               <Link to="/client/requests" className="text-sm text-[#FF5722] hover:underline">View All</Link>
             </div>
-          </motion.section> 
-        </motion.div>
-      </div>
+
+            {recentRequests.length > 0 ? (
+                <ul className="divide-y divide-gray-200">
+                {recentRequests.map((req) => (
+                  <li key={req.id} className="py-3 flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                       {getIconForStatus(req.status)}
+                      <div>
+                        <Link to={`/client/requests/${req.id}`} className="text-sm font-medium text-gray-800 hover:text-[#FF5722] hover:underline block truncate max-w-xs">
+                          {req.project_title || req.service_key.replace(/_/g, ' ')}
+                        </Link>
+                        <p className="text-xs text-gray-500">
+                          Requested on {new Date(req.requested_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <StatusBadge status={req.status} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+                <p className="text-center text-gray-500 py-8">You haven't submitted any requests yet.</p>
+            )}
+
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
