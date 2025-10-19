@@ -249,7 +249,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         // State clears automatically via the onAuthStateChange listener
         navigate('/my-page'); // Redirect after successful sign out
     } catch (err: any) {
-        console.error("Logout failed:", err.message); 
+        console.error("Logout failed:", err.message);
         setError(err.message || 'Logout failed.');
         setAuthState(prev => ({ ...prev, isLoading: false })); // Clear loading on error anyway
     }
