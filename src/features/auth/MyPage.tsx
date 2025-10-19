@@ -52,7 +52,8 @@ const MyPage: React.FC = () => {
         // Display specific error about role mismatch
         // Use a more informative message if the role was null (profile fetch failed)
         if (result.role === null) {
-            setAuthError(authError || "Login successful, but failed to verify account role. Please contact support."); // Show AuthProvider error if set
+            // Use the error already set by AuthProvider if available
+            setAuthError(authError || "Login successful, but failed to verify account role. Please contact support.");
         } else {
             setAuthError(`Login successful, but your account role ('${result.role}') does not grant access to the ${targetRole} portal.`);
         }
@@ -60,7 +61,7 @@ const MyPage: React.FC = () => {
       } else if (!result.success && authError) {
           // FAILED with specific error from AuthProvider (e.g., "Invalid login credentials", "Profile not found")
           console.log("Login failed with error from AuthProvider:", authError);
-          // Error is already set, Alert component will display it. No need to call setAuthError again.
+          // Error is already set by AuthProvider, Alert component will display it. No need to call setAuthError again.
       } else if (!result.success) {
          // FAILED without a specific error message (generic failure)
          console.warn("Login failed without specific error message.");
