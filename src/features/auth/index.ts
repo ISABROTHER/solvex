@@ -1,19 +1,17 @@
 // src/features/auth/index.ts
 
-// Export the main provider component
+// Export the main provider component FROM AuthProvider.tsx
 export { default as AuthProvider } from './AuthProvider';
 
-// Export the hook to access authentication state and functions
+// Export the hook FROM AuthProvider.tsx
 export { useAuth } from './AuthProvider';
 
 // Export the route protection components
 export { default as AdminRoute } from './AdminRoute';
 export { default as ClientRoute } from './ClientRoute';
 
-// Export the login page component (if intended to be imported via this index)
+// Export the login page component
 export { default as MyPage } from './MyPage';
 
-// --- REMOVE ANY EXPORTS RELATED TO './useAuth' ---
-// For example, remove lines like:
-// export * from './useAuth'; // DELETE THIS LINE IF IT EXISTS
-// export { default as useAuth } from './useAuth'; // DELETE THIS LINE IF IT EXISTS
+// --- ENSURE NO LINES REFERENCE './useAuth' ---
+// DELETE lines like: export * from './useAuth';
