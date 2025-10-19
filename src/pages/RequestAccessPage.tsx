@@ -1,34 +1,36 @@
 // src/pages/RequestAccessPage.tsx
-import React, { useState, useEffect } from 'react'; // Import useEffect
-// ... other imports ...
 
-const RequestAccessPage: React.FC = () => {
-    // ... existing state (addToast, isSubmitting, etc.) ...
-    const [formError, setFormError] = useState<string | null>(null); // <-- Add this state
+    const onSubmit: SubmitHandler<RequestAccessFormData> = async (data) => {
+        setIsSubmitting(true);
+        setIsSuccess(false);
+        setSubmittedFirstName('');
+        setFormError(null); // <-- Clear previous form error on new submit
 
-    const {
-        register,
-        handleSubmit,
-        reset,
-        watch, // <-- Import watch from useForm
-        formState: { errors },
-    } = useForm<RequestAccessFormData>({
-        resolver: zodResolver(requestAccessSchema),
-    });
+        try {
+            const { error } = await supabaseForms.submitAccessRequest(data); // Assuming forms.ts returns { error }
 
-    // Watch input fields to clear the error when the user types
-    const watchedFields = watch(["firstName", "lastName", "email", "phone"]);
-
-    // Effect to clear formError when inputs change
-    useEffect(() => {
-        if (formError) {
-            setFormError(null);
+            if (error) {
+                // Check if it's the specific duplicate email error
+                if (error.code === '23505' || error.message?.includes('already exists')) {
+                    // Set the form-specific error state instead of using toast
+                    setFormError('An access request with this email already exists. Please use a different email.');
+                } else {
+                    // Use toast for other, unexpected database errors
+                    console.error('Supabase submit error:', error);
+                    addToast({ type: 'error', title: 'Database Error', message: error.message || 'Could not submit request. Please try again.' });
+                }
+            } else {
+                // Success case - use toast
+                addToast({ type: 'success', title: 'Request Sent!', message: 'We will review your request shortly.' });
+                setSubmittedFirstName(data.firstName);
+                reset();
+                setIsSuccess(true);
+            }
+        } catch (err: any) { // Catch unexpected client-side errors during submission
+            console.error('Failed to submit access request:', err);
+            // Use toast for these unexpected errors
+            addToast({ type: 'error', title: 'Submission Error', message: err.message || 'An unexpected error occurred. Please try again.' });
+        } finally {
+            setIsSubmitting(false);
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [watchedFields]); // Rerun when watched fields change
-    // Note: formError intentionally omitted from deps to only clear, not set
-
-    // ... onSubmit function ...
-    // ... Success View JSX ...
-    // ... Form View JSX ...
-};
+    };
