@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader as Loader2 } from 'lucide-react';
-import { useAuth } from '../features/auth/useAuth';
+import { useAuth } from '../features/auth';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginModalProps {
