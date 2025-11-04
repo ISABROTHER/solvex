@@ -53,9 +53,10 @@ const AvatarUploader: React.FC<AvatarUploaderProps> = ({ currentAvatarUrl, onUpl
       const newAvatarUrl = urlData.publicUrl;
 
       // 3. Update 'profiles' table
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: newAvatarUrl })
+      const updatePayload: any = { avatar_url: newAvatarUrl, updated_at: new Date().toISOString() };
+      const { error: updateError } = await (supabase
+        .from('profiles') as any)
+        .update(updatePayload)
         .eq('id', user.id);
 
       if (updateError) throw updateError;

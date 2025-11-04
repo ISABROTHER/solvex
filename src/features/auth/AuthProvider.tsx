@@ -35,18 +35,20 @@ const getProfile = async (): Promise<Profile | null> => {
  * Uses 'upsert' to be safe.
  */
 const ensureProfileExists = async (user: User): Promise<Profile> => {
+  const fullName = user.user_metadata?.full_name || user.email || '';
+  const nameParts = fullName.split(' ');
+
   const { data, error } = await supabase
     .from('profiles')
     .upsert({
       id: user.id,
       email: user.email,
-      // Use metadata if available, otherwise email as name
-      full_name: user.user_metadata?.full_name || user.email,
-      // 'role' will be set to 'employee' by default from SQL
+      first_name: nameParts[0] || '',
+      last_name: nameParts.slice(1).join(' ') || '',
+      role: 'client', // Default role for new signups
     }, {
       onConflict: 'id',
-      // Do not overwrite existing profile data, just create if missing
-      ignoreDuplicates: true, 
+      ignoreDuplicates: true,
     })
     .select()
     .single();
@@ -55,15 +57,14 @@ const ensureProfileExists = async (user: User): Promise<Profile> => {
     console.error("Error ensuring profile exists:", error);
     throw error;
   }
-  
+
   // If upsert did nothing (profile existed), fetch it
   if (!data) {
      const existing = await getProfile();
      if (existing) return existing;
-     // This case should be rare, but handles a race condition
      throw new Error("Failed to retrieve profile after upsert.");
   }
-  
+
   return data as Profile;
 };
 
@@ -75,9 +76,10 @@ interface AuthContextType {
   profile: Profile | null;
   isAdmin: boolean;
   isClient: boolean;
+  isEmployee: boolean;
   loading: boolean;
   logout: () => Promise<void>;
-  refreshProfile: () => void; // Add a refresh function
+  refreshProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -170,15 +172,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loading = loadingUser || (!!user && loadingProfile);
   const isAdmin = profile?.role === 'admin';
   const isClient = profile?.role === 'client';
+  const isEmployee = profile?.role === 'employee';
 
   const value = {
     user,
     profile,
     isAdmin,
     isClient,
+    isEmployee,
     loading,
     logout,
-    refreshProfile: fetchProfile, // Expose the refresh function
+    refreshProfile: fetchProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

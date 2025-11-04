@@ -17,6 +17,9 @@ import MyPage from './features/auth/MyPage';
 import AdminDashboard from './pages/admin/DashboardPage';
 import ClientDashboard from './pages/client/DashboardPage';
 import { ToastProvider } from './contexts/ToastContext';
+import { CartProvider } from './contexts/CartContext';
+import CartDrawer from './contexts/CartDrawer';
+import CartFAB from './contexts/CartFAB';
 
 // --- IMPORT THE NEW PROFILE PAGE ---
 import ProfilePage from './pages/Profile';
@@ -25,8 +28,9 @@ function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
-        <AuthProvider>
-          <Routes>
+        <CartProvider>
+          <AuthProvider>
+            <Routes>
             {/* --- Public Routes --- */}
             <Route path="/" element={<PublicLayout />}>
               <Route index element={<HomePage />} />
@@ -67,9 +71,12 @@ function App() {
               <Route path="profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/portal" replace />} />
             </Route>
-            
+
           </Routes>
+          <CartDrawer />
+          <CartFAB />
         </AuthProvider>
+        </CartProvider>
       </ToastProvider>
     </BrowserRouter>
   );
