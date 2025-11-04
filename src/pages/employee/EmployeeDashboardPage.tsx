@@ -25,12 +25,14 @@ import {
   Save,
   X,
   Upload,
-  ClipboardList, // Added
-  FileDown,      // Added
-  FileUp,        // Added
-  Eye            // Added
+  ClipboardList,
+  FileDown,
+  FileUp,
+  Eye,
+  Trash2 // <-- ADDED ICON
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../../contexts/ToastContext'; // <-- ADDED TOAST
 
 // --- TYPE DEFINITIONS ---
 
@@ -52,8 +54,8 @@ interface Profile {
   payday: string | null;
   bank_account: string | null;
   bank_name: string | null;
-  signed_contract_url: string | null;  // Added for documents
-  signed_contract_name: string | null; // Added for documents
+  signed_contract_url: string | null;
+  signed_contract_name: string | null;
 }
 
 interface Task {
@@ -104,7 +106,7 @@ const statusMeta = (status: Task['status']) => {
 
 // --- REUSABLE UI ---
 
-// --- NEW PDF VIEWER MODAL ---
+// --- PDF VIEWER MODAL ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
@@ -128,7 +130,6 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
           </button>
         </div>
         <div className="flex-1 p-2">
-          {/* Use Google Docs viewer as a fallback for PDFs that browsers might block */}
           <iframe 
             src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
             className="w-full h-full border-0 rounded-b-lg" 
@@ -223,6 +224,7 @@ const TaskItem: React.FC<{
 
 const EmployeeDashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
+  const { addToast } = useToast(); // <-- Initialize toast
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -243,13 +245,13 @@ const EmployeeDashboardPage: React.FC = () => {
   const [editBankAccount, setEditBankAccount] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // --- NEW STATE FOR DOCUMENTS ---
+  // --- STATE FOR DOCUMENTS ---
   const [signedDocument, setSignedDocument] = useState<{ name: string; url: string } | null>(null);
   const [documentUploading, setDocumentUploading] = useState(false);
-  const [viewingPdf, setViewingPdf] = useState<string | null>(null); // PDF URL for modal
-  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>(''); // Title for modal
-  // Placeholder for the company's unsigned contract
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // You can change this URL
+  const [isRemovingDocument, setIsRemovingDocument] = useState(false); // <-- New state
+  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
+  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
+  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; 
 
   useEffect(() => {
     if (user?.id) {
@@ -266,7 +268,7 @@ const EmployeeDashboardPage: React.FC = () => {
     try {
       const { data: profileData, error: profileError } = await (supabase as any)
         .from('profiles')
-        .select('*') // This will now fetch signed_contract_url and signed_contract_name
+        .select('*') 
         .eq('id', user.id)
         .maybeSingle();
 
@@ -275,13 +277,11 @@ const EmployeeDashboardPage: React.FC = () => {
         setError('Could not load profile.');
       } else {
         setProfile(profileData);
-        // initialize edit fields
         setEditPhone(profileData?.phone || '');
         setEditAddress(profileData?.home_address || '');
         setEditBankName(profileData?.bank_name || '');
         setEditBankAccount(profileData?.bank_account || '');
         
-        // --- NEW: Load signed document state from profile ---
         if (profileData?.signed_contract_url && profileData?.signed_contract_name) {
           setSignedDocument({ name: profileData.signed_contract_name, url: profileData.signed_contract_url });
         } else {
@@ -319,13 +319,13 @@ const EmployeeDashboardPage: React.FC = () => {
 
       if (updateError) {
         console.error('Error updating task:', updateError);
-        alert('Failed to update task status');
+        addToast({ type: 'error', title: 'Task Update Failed' });
       } else {
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
       }
     } catch (err) {
       console.error('Unexpected error updating task:', err);
-      alert('Unexpected error updating task status');
+      addToast({ type: 'error', title: 'Error', message: 'An unexpected error occurred.' });
     } finally {
       setUpdatingTaskId(null);
     }
@@ -369,16 +369,15 @@ const EmployeeDashboardPage: React.FC = () => {
         .update(updates)
         .eq('id', user.id);
 
-      if (upErr) {
-        console.error('Error saving profile:', upErr);
-        setError('Could not save changes.');
-      } else {
-        setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
-        setEditMode(false);
-      }
-    } catch (e) {
-      console.error(e);
-      setError('Something went wrong while saving.');
+      if (upErr) throw upErr;
+
+      setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
+      setEditMode(false);
+      addToast({ type: 'success', title: 'Profile Saved!' });
+    } catch (e: any) {
+      console.error('Error saving profile:', e);
+      setError('Could not save changes.');
+      addToast({ type: 'error', title: 'Save Failed', message: e.message });
     } finally {
       setSavingProfile(false);
     }
@@ -390,13 +389,13 @@ const EmployeeDashboardPage: React.FC = () => {
     const MAX_MB = 5;
 
     if (file.size > MAX_MB * 1024 * 1024) {
-      alert(`Image too large. Max ${MAX_MB}MB.`);
+      addToast({ type: 'error', title: 'File too large', message: `Image must be under ${MAX_MB}MB.` });
       return;
     }
 
     const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
     if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
-      alert('Please upload a JPG, PNG, or WEBP image.');
+      addToast({ type: 'error', title: 'Invalid File Type', message: 'Please upload a JPG, PNG, or WEBP.' });
       return;
     }
 
@@ -420,27 +419,26 @@ const EmployeeDashboardPage: React.FC = () => {
       if (profErr) throw profErr;
 
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+      addToast({ type: 'success', title: 'Avatar Updated!' });
     } catch (e: any) {
       console.error('Error uploading avatar:', e);
-      alert(`Failed to upload image: ${e.message}`);
+      addToast({ type: 'error', title: 'Upload Failed', message: e.message });
     } finally {
       setAvatarUploading(false);
     }
   };
 
-  // --- NEW: FUNCTION TO UPLOAD SIGNED CONTRACT ---
   const onUploadSignedContract = async (file: File) => {
     if (!user?.id || !file) return;
-    // IMPORTANT: Create this bucket in your Supabase Storage
     const BUCKET = 'employee-documents'; 
-    const MAX_MB = 10; // 10MB for PDFs
+    const MAX_MB = 10; 
 
     if (file.type !== 'application/pdf') {
-      alert('Please upload a PDF file.');
+      addToast({ type: 'error', title: 'Invalid File Type', message: 'Please upload a PDF file.' });
       return;
     }
     if (file.size > MAX_MB * 1024 * 1024) {
-      alert(`File too large. Max ${MAX_MB}MB.`);
+      addToast({ type: 'error', title: 'File too large', message: `PDF must be under ${MAX_MB}MB.` });
       return;
     }
 
@@ -454,7 +452,6 @@ const EmployeeDashboardPage: React.FC = () => {
       const publicUrl = pub?.publicUrl;
       if (!publicUrl) throw new Error('Could not get public URL.');
 
-      // IMPORTANT: Add 'signed_contract_url' and 'signed_contract_name' to your 'profiles' table
       const updates = {
         signed_contract_url: publicUrl,
         signed_contract_name: file.name
@@ -467,14 +464,60 @@ const EmployeeDashboardPage: React.FC = () => {
 
       setSignedDocument({ name: file.name, url: publicUrl });
       setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
+      addToast({ type: 'success', title: 'Contract Uploaded!', message: 'Your signed document is saved.' });
     
-    } catch (e: any) {
+    } catch (e: any)
+{
       console.error('Error uploading signed contract:', e);
-      alert(`Failed to upload document: ${e.message}`);
+      addToast({ type: 'error', title: 'Upload Failed', message: e.message });
     } finally {
       setDocumentUploading(false);
     }
   };
+
+  // --- NEW: FUNCTION TO REMOVE SIGNED CONTRACT ---
+  const onRemoveSignedContract = async () => {
+    if (!user?.id || !signedDocument || !profile?.signed_contract_url) return;
+    
+    if (!window.confirm("Are you sure you want to remove your signed contract? You will be asked to upload it again.")) {
+      return;
+    }
+
+    setIsRemovingDocument(true);
+    try {
+      // 1. Extract file path from URL
+      const BUCKET = 'employee-documents';
+      const url = profile.signed_contract_url;
+      const path = url.substring(url.indexOf(`/${BUCKET}/`) + BUCKET.length + 2); // Get path like 'userid/filename.pdf'
+
+      // 2. Delete from Storage
+      const { error: storageErr } = await supabase.storage.from(BUCKET).remove([path]);
+      if (storageErr) throw storageErr; // Throw error to be caught
+
+      // 3. Update profile to remove link
+      const updates = {
+        signed_contract_url: null,
+        signed_contract_name: null
+      };
+      const { error: profErr } = await (supabase as any)
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id);
+      if (profErr) throw profErr;
+
+      // 4. Update local state
+      setSignedDocument(null);
+      setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
+      addToast({ type: 'success', title: 'Document Removed', message: 'You can now upload a new one.' });
+
+    } catch (e: any) {
+      console.error('Error removing document:', e);
+      addToast({ type: 'error', title: 'Removal Failed', message: e.message });
+    } finally {
+      setIsRemovingDocument(false);
+    }
+  };
+
 
   // --- NEW: Helper to open PDF viewer ---
   const handleViewPdf = (url: string, title: string) => {
@@ -825,7 +868,6 @@ const EmployeeDashboardPage: React.FC = () => {
                     <FileText size={16} className="text-gray-500 flex-shrink-0" />
                     <span className="truncate">{unsignedContract.name}</span>
                   </span>
-                  {/* --- FIX START --- */}
                   <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0 sm:flex-shrink-0">
                     <button
                       onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)}
@@ -841,7 +883,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       <FileDown size={14} /> Download
                     </a>
                   </div>
-                  {/* --- FIX END --- */}
                 </div>
 
                 {/* Signed Contract */}
@@ -851,7 +892,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
                       <span className="truncate" title={signedDocument.name}>{signedDocument.name}</span>
                     </span>
-                    {/* --- FIX START --- */}
                     <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0 sm:flex-shrink-0">
                       <button
                         onClick={() => handleViewPdf(signedDocument.url, signedDocument.name)}
@@ -866,8 +906,16 @@ const EmployeeDashboardPage: React.FC = () => {
                       >
                         <FileDown size={14} /> Download
                       </a>
+                      {/* --- NEW: REMOVE BUTTON --- */}
+                      <button
+                        onClick={onRemoveSignedContract}
+                        disabled={isRemovingDocument}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        {isRemovingDocument ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                        Remove
+                      </button>
                     </div>
-                    {/* --- FIX END --- */}
                   </div>
                 ) : (
                   <label className="relative flex flex-col items-center justify-center p-6 rounded-lg border-2 border-dashed border-gray-300 hover:border-[#FF5722] hover:bg-orange-50 transition-colors cursor-pointer">
