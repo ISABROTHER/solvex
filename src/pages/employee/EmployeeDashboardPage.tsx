@@ -710,8 +710,8 @@ const EmployeeDashboardPage: React.FC = () => {
             >
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
                 <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Target className="w-5 h-5 text-[#FF5722]" />
-                  My Assignments
+                  <ClipboardList className="w-5 h-5 text-[#FF5722]" />
+                  My Tasks
                 </h4>
 
                 <div className="flex flex-col sm:flex-row items-stretch gap-2">
@@ -754,7 +754,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
               {tasks.length === 0 ? (
                 <div className="text-center py-12">
-                  <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <ClipboardList className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-600 font-medium">No tasks assigned yet.</p>
                   <p className="text-sm text-gray-400">Enjoy the quiet... for now.</p>
                 </div>
