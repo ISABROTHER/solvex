@@ -1,28 +1,26 @@
-// @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../../../lib/supabase/client';
 import { Loader2, Send } from 'lucide-react';
 import Card from './Card';
 import { User } from '@supabase/supabase-js';
 
-// --- PLANNED TYPES (Same as AssignmentsTab) ---
-type Profile = {
+interface Profile {
   id: string;
   first_name: string | null;
   last_name: string | null;
   avatar_url: string | null;
-};
+}
 
-type Assignment = {
-  id: number;
+interface Assignment {
+  id: string;
   title: string;
   members: Profile[];
-};
+}
 
-type AssignmentMessage = {
-  id: number;
+interface AssignmentMessage {
+  id: string;
   created_at: string;
-  assignment_id: number;
+  assignment_id: string;
   sender_id: string;
   content: string;
   sender_profile: {
@@ -30,16 +28,7 @@ type AssignmentMessage = {
     last_name: string | null;
     avatar_url: string | null;
   };
-};
-
-// --- MOCK DATA (to build the UI) ---
-const MOCK_MESSAGES: AssignmentMessage[] = [
-  { id: 1, created_at: "2025-11-04T10:30:00Z", assignment_id: 1, sender_id: '1a', content: 'Hey admin, I\'ve started on the social media plan.', sender_profile: { first_name: 'John', last_name: 'Doe', avatar_url: null } },
-  { id: 2, created_at: "2025-11-04T10:31:00Z", assignment_id: 1, sender_id: '2b', content: 'I\'ll work on the ad copy.', sender_profile: { first_name: 'Jane', last_name: 'Smith', avatar_url: null } },
-  { id: 3, created_at: "2025-11-04T10:35:00Z", assignment_id: 1, sender_id: 'admin_id', content: 'Great, let me know if you need any resources.', sender_profile: { first_name: 'Admin', last_name: 'User', avatar_url: null } },
-];
-// --- END MOCK DATA ---
-
+}
 
 interface AssignmentChatProps {
   assignment: Assignment;
@@ -54,52 +43,74 @@ const AdminAssignmentChat: React.FC<AssignmentChatProps> = ({ assignment, adminU
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
 
   useEffect(() => {
-    // Scroll to bottom when messages change
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    // --- MOCK FETCHER ---
     const fetchMessages = async () => {
       setLoading(true);
-      // const { data, error } = await supabase
-      //   .from('assignment_messages')
-      //   .select(`*, sender_profile:profiles(first_name, last_name, avatar_url)`)
-      //   .eq('assignment_id', assignment.id)
-      //   .order('created_at', { ascending: true });
+      try {
+        const { data: messagesData, error } = await supabase
+          .from('assignment_messages')
+          .select('*')
+          .eq('assignment_id', assignment.id)
+          .order('created_at', { ascending: true });
 
-      // if (error) console.error('Error fetching messages:', error);
-      // else setMessages(data || []);
+        if (error) throw error;
 
-      setMessages(MOCK_MESSAGES.filter(m => m.assignment_id === assignment.id));
-      setLoading(false);
+        // Fetch sender profiles for each message
+        const messagesWithProfiles = await Promise.all(
+          (messagesData || []).map(async (msg) => {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('first_name, last_name, avatar_url')
+              .eq('id', msg.sender_id)
+              .maybeSingle();
+
+            return {
+              ...msg,
+              sender_profile: profile || { first_name: null, last_name: null, avatar_url: null }
+            };
+          })
+        );
+
+        setMessages(messagesWithProfiles);
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchMessages();
 
-    // --- REAL-TIME SUBSCRIPTION ---
-    // const channel = supabase
-    //   .channel(`assignment-chat-${assignment.id}`)
-    //   .on('postgres_changes', {
-    //     event: 'INSERT',
-    //     schema: 'public',
-    //     table: 'assignment_messages',
-    //     filter: `assignment_id=eq.${assignment.id}`
-    //   }, async (payload) => {
-    //     // Fetch the new message with sender info
-    //     const { data: newMessage, error } = await supabase
-    //       .from('assignment_messages')
-    //       .select(`*, sender_profile:profiles(first_name, last_name, avatar_url)`)
-    //       .eq('id', payload.new.id)
-    //       .single();
-    //     if (newMessage) setMessages(prev => [...prev, newMessage]);
-    //   })
-    //   .subscribe();
+    // Real-time subscription
+    const channel = supabase
+      .channel(`assignment-chat-${assignment.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'assignment_messages',
+        filter: `assignment_id=eq.${assignment.id}`
+      }, async (payload) => {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('first_name, last_name, avatar_url')
+          .eq('id', payload.new.sender_id)
+          .maybeSingle();
 
-    // return () => {
-    //   supabase.removeChannel(channel);
-    // };
+        const newMsg = {
+          ...payload.new,
+          sender_profile: profile || { first_name: null, last_name: null, avatar_url: null }
+        } as AssignmentMessage;
 
+        setMessages(prev => [...prev, newMsg]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [assignment.id]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -110,31 +121,22 @@ const AdminAssignmentChat: React.FC<AssignmentChatProps> = ({ assignment, adminU
     const content = newMessage.trim();
     setNewMessage('');
 
-    // --- MOCK SEND ---
-    const mockNewMessage: AssignmentMessage = {
-      id: Math.random(),
-      created_at: new Date().toISOString(),
-      assignment_id: assignment.id,
-      sender_id: adminUser.id,
-      content: content,
-      sender_profile: { first_name: 'Admin', last_name: 'User', avatar_url: null }
-    };
-    setMessages(prev => [...prev, mockNewMessage]);
-    setSending(false);
+    try {
+      const { error } = await (supabase as any)
+        .from('assignment_messages')
+        .insert({
+          assignment_id: assignment.id,
+          sender_id: adminUser.id,
+          content: content
+        });
 
-    // --- REAL SEND ---
-    // const { error } = await supabase
-    //   .from('assignment_messages')
-    //   .insert({
-    //     assignment_id: assignment.id,
-    //     sender_id: adminUser.id,
-    //     content: content
-    //   });
-    // if (error) {
-    //   console.error('Error sending message:', error);
-    //   setNewMessage(content); // Put text back on error
-    // }
-    // setSending(false);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setNewMessage(content);
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -144,15 +146,19 @@ const AdminAssignmentChat: React.FC<AssignmentChatProps> = ({ assignment, adminU
           <div className="flex justify-center items-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
           </div>
+        ) : messages.length === 0 ? (
+          <div className="flex justify-center items-center h-full text-gray-400 text-sm">
+            No messages yet. Start the conversation!
+          </div>
         ) : (
           messages.map(msg => {
             const isSender = msg.sender_id === adminUser?.id;
             return (
               <div key={msg.id} className={`flex gap-3 ${isSender ? 'flex-row-reverse' : 'flex-row'}`}>
-                <img 
-                  src={msg.sender_profile.avatar_url || `https://ui-avatars.com/api/?name=${msg.sender_profile.first_name}+${msg.sender_profile.last_name}&background=random`} 
-                  alt="avatar" 
-                  className="w-8 h-8 rounded-full" 
+                <img
+                  src={msg.sender_profile.avatar_url || `https://ui-avatars.com/api/?name=${msg.sender_profile.first_name}+${msg.sender_profile.last_name}&background=random`}
+                  alt="avatar"
+                  className="w-8 h-8 rounded-full"
                 />
                 <div className={`p-3 rounded-lg max-w-xs ${isSender ? 'bg-[#FF5722] text-white' : 'bg-white border'}`}>
                   <p className="text-sm">{msg.content}</p>

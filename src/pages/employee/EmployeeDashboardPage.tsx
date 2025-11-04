@@ -30,7 +30,8 @@ import {
   FileUp,
   Eye,
   Trash2,
-  Home // <-- ADDED ICON
+  Home,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../contexts/ToastContext'; 
@@ -68,6 +69,15 @@ interface Task {
   deadline: string | null;
   created_at: string;
   assigned_by: string | null;
+}
+
+interface Assignment {
+  id: string;
+  title: string;
+  instructions: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  created_at: string;
+  due_date: string | null;
 }
 
 // --- HELPERS ---
@@ -228,6 +238,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const { addToast } = useToast(); // <-- Initialize toast
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -257,6 +268,38 @@ const EmployeeDashboardPage: React.FC = () => {
   useEffect(() => {
     if (user?.id) {
       fetchProfileAndTasks();
+
+      // Set up real-time subscriptions
+      const tasksChannel = supabase
+        .channel('employee-tasks-changes')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'tasks', filter: `assigned_to=eq.${user.id}` },
+          () => {
+            fetchProfileAndTasks();
+          }
+        )
+        .subscribe();
+
+      const assignmentsChannel = supabase
+        .channel('employee-assignments-changes')
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'assignments' },
+          () => {
+            fetchProfileAndTasks();
+          }
+        )
+        .on('postgres_changes',
+          { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
+          () => {
+            fetchProfileAndTasks();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(tasksChannel);
+        supabase.removeChannel(assignmentsChannel);
+      };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -301,6 +344,23 @@ const EmployeeDashboardPage: React.FC = () => {
         setError((prev) => prev || 'Could not load tasks.');
       } else {
         setTasks(tasksData || []);
+      }
+
+      // Fetch assignments
+      const { data: memberData } = await (supabase as any)
+        .from('assignment_members')
+        .select('assignment_id')
+        .eq('employee_id', user.id);
+
+      if (memberData && memberData.length > 0) {
+        const assignmentIds = memberData.map((m: any) => m.assignment_id);
+        const { data: assignmentsData } = await (supabase as any)
+          .from('assignments')
+          .select('*')
+          .in('id', assignmentIds)
+          .order('created_at', { ascending: false });
+
+        setAssignments(assignmentsData || []);
       }
     } catch (err) {
       console.error('Unexpected error:', err);
@@ -716,6 +776,54 @@ const EmployeeDashboardPage: React.FC = () => {
                       />
                     ))}
                   </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Team Assignments */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-4">
+                <Users className="w-5 h-5 text-[#FF5722]" />
+                Team Assignments
+              </h4>
+
+              {assignments.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium">No team assignments yet.</p>
+                  <p className="text-sm text-gray-400">Check back later for team projects.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {assignments.map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="p-4 rounded-lg border border-gray-200 hover:border-[#FF5722] transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <h5 className="font-semibold text-gray-900 truncate">{assignment.title}</h5>
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{assignment.instructions}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 text-xs font-semibold capitalize rounded-full whitespace-nowrap ${
+                          assignment.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          assignment.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {assignment.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      {assignment.due_date && (
+                        <div className="flex items-center gap-1.5 mt-3 text-sm text-gray-500">
+                          <Calendar size={14} />
+                          Due: {formatDate(assignment.due_date)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </motion.div>

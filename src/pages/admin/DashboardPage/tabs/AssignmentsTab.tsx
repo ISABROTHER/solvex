@@ -1,77 +1,42 @@
-// @ts-nocheck
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../../../lib/supabase/client';
-import type { Database } from '../../../../lib/supabase/database.types';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import Card from '../components/Card';
-import { 
-  Loader2, 
-  User, 
-  Search, 
+import {
+  Loader2,
+  Search,
   AlertCircle,
   Briefcase,
   Plus,
   Send,
   X,
   Users,
-  MessageSquare,
-  ChevronRight,
-  Calendar,
   FileText,
-  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import AdminAssignmentChat from '../components/AssignmentChat'; // We will create this next
+import AdminAssignmentChat from '../components/AssignmentChat';
 
-// --- PLANNED TYPES ---
-// These types match the new tables we will create in Supabase
-type Profile = Database['public']['Tables']['profiles']['Row'];
+interface Profile {
+  id: string;
+  role: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  phone: string | null;
+  company: string | null;
+}
 
-type Assignment = {
-  id: number;
+interface Assignment {
+  id: string;
   created_at: string;
   title: string;
   instructions: string;
-  created_by: string; // uuid of admin
+  created_by: string | null;
   status: 'pending' | 'in_progress' | 'completed';
   due_date: string | null;
-  // Fetched via join
   members: Profile[];
-};
-
-type AssignmentMessage = {
-  id: number;
-  created_at: string;
-  assignment_id: number;
-  sender_id: string; // uuid of sender
-  content: string;
-  // Fetched via join
-  sender_profile: {
-    first_name: string | null;
-    last_name: string | null;
-    avatar_url: string | null;
-  };
-};
-
-// --- MOCK DATA (to build the UI before backend is ready) ---
-const MOCK_PROFILES: Profile[] = [
-  { id: '1a', role: 'employee', first_name: 'John', last_name: 'Doe', email: 'john@test.com', avatar_url: null, ... },
-  { id: '2b', role: 'employee', first_name: 'Jane', last_name: 'Smith', email: 'jane@test.com', avatar_url: null, ... },
-  { id: '3c', role: 'employee', first_name: 'Mike', last_name: 'Brown', email: 'mike@test.com', avatar_url: null, ... },
-];
-
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  { 
-    id: 1, created_at: new Date().toISOString(), title: 'Q4 Marketing Campaign', instructions: 'Plan and execute the Q4 marketing campaign. Focus on social media.', 
-    created_by: 'admin_id', status: 'in_progress', due_date: null, members: [MOCK_PROFILES[0], MOCK_PROFILES[1]] 
-  },
-  { 
-    id: 2, created_at: new Date().toISOString(), title: 'Website Redesign Mockups', instructions: 'Create Figma mockups for the new homepage.', 
-    created_by: 'admin_id', status: 'pending', due_date: null, members: [MOCK_PROFILES[2]]
-  },
-];
-// --- END MOCK DATA ---
-
+}
 
 const AssignmentsTab: React.FC = () => {
   const { user } = useAuth();
@@ -86,23 +51,55 @@ const AssignmentsTab: React.FC = () => {
   // Form State
   const [newTitle, setNewTitle] = useState('');
   const [newInstructions, setNewInstructions] = useState('');
-  const [newMembers, setNewMembers] = useState<string[]>([]); // Array of employee UUIDs
-  
+  const [newMembers, setNewMembers] = useState<string[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // --- MOCK DATA FETCHER ---
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // In reality, you would fetch from 'profiles' and 'assignments'
-      // const { data: employeesData, error: employeesError } = await supabase.from('profiles').select('*').eq('role', 'employee');
-      // if (employeesError) throw employeesError;
-      setAllEmployees(MOCK_PROFILES);
+      // Fetch all employees
+      const { data: employeesData, error: employeesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'employee');
 
-      // const { data: assignmentsData, error: assignmentsError } = await supabase.rpc('fetch_assignments_with_members');
-      // if (assignmentsError) throw assignmentsError;
-      setAssignments(MOCK_ASSIGNMENTS);
+      if (employeesError) throw employeesError;
+      setAllEmployees(employeesData || []);
+
+      // Fetch assignments with members
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('assignments')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (assignmentsError) throw assignmentsError;
+
+      // For each assignment, fetch its members
+      const assignmentsWithMembers = await Promise.all(
+        (assignmentsData || []).map(async (assignment) => {
+          const { data: memberIds } = await supabase
+            .from('assignment_members')
+            .select('employee_id')
+            .eq('assignment_id', assignment.id);
+
+          const employeeIds = (memberIds || []).map(m => m.employee_id);
+
+          if (employeeIds.length === 0) {
+            return { ...assignment, members: [] };
+          }
+
+          const { data: members } = await supabase
+            .from('profiles')
+            .select('*')
+            .in('id', employeeIds);
+
+          return { ...assignment, members: members || [] };
+        })
+      );
+
+      setAssignments(assignmentsWithMembers);
 
     } catch (err: any) {
       console.error('Error fetching data:', err);
@@ -114,6 +111,27 @@ const AssignmentsTab: React.FC = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Set up real-time subscription for assignments
+    const assignmentsChannel = supabase
+      .channel('assignments-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'assignments' },
+        () => {
+          fetchData();
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'assignment_members' },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(assignmentsChannel);
+    };
   }, [fetchData]);
 
   const handleCreateAssignment = async (e: React.FormEvent) => {
@@ -123,47 +141,36 @@ const AssignmentsTab: React.FC = () => {
     setIsSubmitting(true);
     setError(null);
     try {
-      // --- This is how you'll handle it with Supabase ---
-      // 1. Insert into 'assignments'
-      // const { data: newAssignment, error: assignmentError } = await supabase
-      //   .from('assignments')
-      //   .insert({
-      //     title: newTitle,
-      //     instructions: newInstructions,
-      //     created_by: user.id,
-      //     status: 'pending'
-      //   })
-      //   .select()
-      //   .single();
-      // if (assignmentError) throw assignmentError;
+      // Insert into 'assignments'
+      const { data: newAssignment, error: assignmentError } = await (supabase as any)
+        .from('assignments')
+        .insert({
+          title: newTitle,
+          instructions: newInstructions,
+          created_by: user.id,
+          status: 'pending'
+        })
+        .select()
+        .single();
 
-      // 2. Map members for the join table
-      // const membersToInsert = newMembers.map(employee_id => ({
-      //   assignment_id: newAssignment.id,
-      //   employee_id: employee_id
-      // }));
+      if (assignmentError) throw assignmentError;
+      if (!newAssignment) throw new Error('Failed to create assignment');
 
-      // 3. Insert into 'assignment_members'
-      // const { error: membersError } = await supabase
-      //   .from('assignment_members')
-      //   .insert(membersToInsert);
-      // if (membersError) throw membersError;
+      // Insert into 'assignment_members'
+      const membersToInsert = newMembers.map(employee_id => ({
+        assignment_id: newAssignment.id,
+        employee_id: employee_id
+      }));
 
-      // --- Mocking the result for now ---
-      const newId = Math.floor(Math.random() * 10000);
-      const members = allEmployees.filter(e => newMembers.includes(e.id));
-      const mockNewAssignment: Assignment = {
-        id: newId,
-        created_at: new Date().toISOString(),
-        title: newTitle,
-        instructions: newInstructions,
-        created_by: user!.id,
-        status: 'pending',
-        due_date: null,
-        members: members,
-      };
+      const { error: membersError } = await (supabase as any)
+        .from('assignment_members')
+        .insert(membersToInsert);
 
-      setAssignments(prev => [mockNewAssignment, ...prev]);
+      if (membersError) throw membersError;
+
+      // Refresh data
+      await fetchData();
+
       setShowCreateForm(false);
       setNewTitle('');
       setNewInstructions('');
@@ -178,7 +185,7 @@ const AssignmentsTab: React.FC = () => {
   };
 
   const handleSelectMember = (id: string) => {
-    setNewMembers(prev => 
+    setNewMembers(prev =>
       prev.includes(id) ? prev.filter(mId => mId !== id) : [...prev, id]
     );
   };
@@ -186,14 +193,14 @@ const AssignmentsTab: React.FC = () => {
   if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
   }
-  
+
   if (error) {
     return <div className="text-center py-20 text-red-600 flex flex-col items-center gap-3"><AlertCircle className="w-6 h-6" />{error}</div>;
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* --- Column 1: Assignment List --- */}
+      {/* Column 1: Assignment List */}
       <Card className="lg:col-span-1 flex flex-col" title="Assignments">
         <button
           onClick={() => {
@@ -221,17 +228,22 @@ const AssignmentsTab: React.FC = () => {
                 <div className="flex justify-between items-center">
                   <p className="font-semibold text-gray-900 truncate">{assignment.title}</p>
                   <span className={`px-2 py-0.5 text-xs font-semibold capitalize rounded-full ${
-                    assignment.status === 'completed' ? 'bg-green-100 text-green-700' : 
+                    assignment.status === 'completed' ? 'bg-green-100 text-green-700' :
                     assignment.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
                   }`}>
-                    {assignment.status}
+                    {assignment.status.replace('_', ' ')}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-2">
                   <Users size={14} className="text-gray-400" />
                   <div className="flex -space-x-2">
                     {assignment.members.slice(0, 3).map(m => (
-                      <img key={m.id} src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.first_name}+${m.last_name}&background=random`} alt="member" className="w-5 h-5 rounded-full border-2 border-white" />
+                      <img
+                        key={m.id}
+                        src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.first_name}+${m.last_name}&background=random`}
+                        alt="member"
+                        className="w-5 h-5 rounded-full border-2 border-white"
+                      />
                     ))}
                     {assignment.members.length > 3 && (
                       <span className="w-5 h-5 rounded-full border-2 border-white bg-gray-200 text-gray-600 text-[10px] flex items-center justify-center">
@@ -246,7 +258,7 @@ const AssignmentsTab: React.FC = () => {
         </div>
       </Card>
 
-      {/* --- Column 2: Details / Create Form --- */}
+      {/* Column 2: Details / Create Form */}
       <div className="lg:col-span-2 space-y-6">
         <AnimatePresence mode="wait">
           {showCreateForm ? (
@@ -342,7 +354,11 @@ const AssignmentsTab: React.FC = () => {
                     <div className="flex flex-wrap gap-2 mt-2">
                       {selectedAssignment.members.map(m => (
                         <span key={m.id} className="flex items-center gap-2 px-3 py-1 rounded-full bg-gray-100">
-                          <img src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.first_name}+${m.last_name}&background=random`} alt="member" className="w-5 h-5 rounded-full" />
+                          <img
+                            src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.first_name}+${m.last_name}&background=random`}
+                            alt="member"
+                            className="w-5 h-5 rounded-full"
+                          />
                           <span className="text-sm font-medium text-gray-700">{m.first_name} {m.last_name}</span>
                         </span>
                       ))}
@@ -351,7 +367,6 @@ const AssignmentsTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* Chat Component will go here */}
               <AdminAssignmentChat assignment={selectedAssignment} adminUser={user} />
 
             </motion.div>
