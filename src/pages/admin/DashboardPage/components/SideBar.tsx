@@ -83,7 +83,7 @@ const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
             >
               <IconComponent size={18} />
               <span>{item.name}</span>
-            </NavLink>
+            </NavLink> 
           );
         })}
       </nav>
