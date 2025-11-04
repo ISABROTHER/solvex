@@ -5,10 +5,11 @@ import * as z from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Loader2 } from 'lucide-react';
 import Select from 'react-select';
-import CountryDropdown from './CountryDropdown'; // Ensure this path is correct
-import { submitCareerApplication } from '../../lib/supabase/forms'; // Ensure this path is correct
-import type { JobPosition } from '../../lib/supabase/operations'; // Import the type
-import { countryCodes } from '../../data/forms/country-codes.data'; // Import country codes
+import CountryDropdown from './CountryDropdown';
+import { submitCareerApplication } from '../../lib/supabase/forms';
+import type { JobPosition } from '../../lib/supabase/operations';
+import { countryCodesData } from '../../data/forms/country-codes.data';
+import ApplicationConfirmationPopup from './ApplicationConfirmationPopup';
 
 // --- Zod Validation Schema ---
 const phoneRegex = /^[0-9]{7,15}$/; // Simple regex for phone (7-15 digits)
@@ -46,38 +47,38 @@ interface CareerApplicationData {
 interface ApplicationFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  roles: JobPosition[]; // Roles pre-selected by the user
-  allAvailableRoles: JobPosition[]; // All jobs for the dropdown
-  onSuccess: () => void;
+  availableRoles: JobPosition[]; // All available roles
+  anchorId?: string | null; // Optional anchor for animations
 }
 
 const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
   isOpen,
   onClose,
-  roles,
-  allAvailableRoles,
-  onSuccess,
+  availableRoles,
+  anchorId,
 }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [submittedData, setSubmittedData] = useState<{ firstName: string; lastName: string; email: string; appliedRoles: string[] } | null>(null);
 
   // --- Form Persistence (Optional but recommended) ---
   const persistenceKey = 'careerApplicationForm';
 
   // --- Map Roles for React-Select ---
   const roleOptions = useMemo(() => {
-    return allAvailableRoles.map(role => ({
+    return availableRoles.map(role => ({
       value: role.id,
       label: `${role.title} (${role.team_name || 'General'})`
     }));
-  }, [allAvailableRoles]);
+  }, [availableRoles]);
 
   const defaultSelectedRoles = useMemo(() => {
-    return roleOptions.filter(option => roles.some(role => role.id === option.value));
-  }, [roles, roleOptions]);
+    return [];
+  }, []);
   
   // Find default country code (e.g., Ghana "+233")
-  const defaultCountryCode = countryCodes.find(c => c.code === "GH")?.dial_code || "+233";
+  const defaultCountryObject = countryCodesData.find(c => c.iso === "GH") || countryCodesData[0];
 
   // --- React-Hook-Form Initialization ---
   const {
@@ -93,7 +94,7 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
       firstName: '',
       lastName: '',
       email: '',
-      countryCode: defaultCountryCode,
+      countryCode: defaultCountryObject.code,
       phone: '',
       appliedRoles: defaultSelectedRoles,
       coverLetter: '',
@@ -121,12 +122,17 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
     } else {
         // If no saved data, set default roles
         reset({
-            ...applicationSchema.partial().default(),
-            countryCode: defaultCountryCode,
-            appliedRoles: defaultSelectedRoles
+            firstName: '',
+            lastName: '',
+            email: '',
+            countryCode: defaultCountryObject.code,
+            phone: '',
+            appliedRoles: defaultSelectedRoles,
+            coverLetter: '',
+            portfolioUrl: '',
         });
     }
-  }, [reset, roleOptions, defaultSelectedRoles, persistenceKey, defaultCountryCode]);
+  }, [reset, roleOptions, defaultSelectedRoles, persistenceKey, defaultCountryObject]);
   
   // --- Save to LocalStorage ---
   const watchedValues = watch();
@@ -166,13 +172,22 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
       if (submitError) {
         throw submitError;
       }
-      
+
+      // Save submitted data for confirmation popup
+      setSubmittedData({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        appliedRoles: data.appliedRoles.map(r => r.label)
+      });
+
       // Clear form persistence on success
       if (persistenceKey) {
         localStorage.removeItem(persistenceKey);
       }
       reset(); // Reset form fields
-      onSuccess();
+      onClose(); // Close modal
+      setShowConfirmation(true); // Show success confirmation
       
     } catch (err: any) {
       console.error('Application submission error:', err);
@@ -188,6 +203,7 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
   };
 
   return (
+    <>
     <AnimatePresence>
       {isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -248,8 +264,9 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
                     rules={{ required: true }}
                     render={({ field }) => (
                       <CountryDropdown
-                        value={field.value}
-                        onChange={field.onChange}
+                        countries={countryCodesData}
+                        selectedCountry={countryCodesData.find(c => c.code === field.value) || null}
+                        onSelect={(country) => field.onChange(country.code)}
                       />
                     )}
                   />
@@ -334,6 +351,21 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
         </div>
       )}
     </AnimatePresence>
+
+    <ApplicationConfirmationPopup
+      isOpen={showConfirmation}
+      onClose={() => {
+        setShowConfirmation(false);
+        setSubmittedData(null);
+      }}
+      applicationData={submittedData ? {
+        firstName: submittedData.firstName,
+        lastName: submittedData.lastName,
+        email: submittedData.email,
+        appliedRoles: submittedData.appliedRoles
+      } : undefined}
+    />
+    </>
   );
 };
 
