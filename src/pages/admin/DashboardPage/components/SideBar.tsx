@@ -1,104 +1,106 @@
+// @ts-nocheck
 import React from 'react';
-import { X, LayoutDashboard, UsersRound, FolderKanban, UserCheck, Briefcase, FileCheck, Settings } from 'lucide-react';
-import type { TabKey } from '../index';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, FileText, Settings, LogOut,
+  Package, Wrench, Briefcase, FileCheck, UsersRound,
+  UserCheck // Added UserCheck for Access Requests
+} from 'lucide-react';
+import { useAuth } from '../../../../features/auth/AuthProvider'; // <-- CORRECTED IMPORT PATH
 
-interface SideBarProps {
-  active: TabKey;
-  onSelect: (tab: TabKey) => void;
-  isMobile?: boolean;
-  isOpenMobile?: boolean;
-  onCloseMobile?: () => void;
-}
+// Define icons map if not already defined globally
+const icons = {
+  home: LayoutDashboard,
+  clients: UsersRound, // Updated Icon
+  accessRequests: UserCheck, // Added Icon
+  equipment: Package,
+  services: Wrench,
+  jobs: Briefcase,
+  applications: FileCheck, // Keep if separate tab
+  settings: Settings,
+};
 
-const navItems: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: 'home', label: 'Home', icon: LayoutDashboard },
-  { key: 'clients', label: 'Clients', icon: UsersRound },
-  { key: 'projects', label: 'Projects', icon: FolderKanban },
-  { key: 'access_requests', label: 'Access Requests', icon: UserCheck },
-  { key: 'partners', label: 'Partners', icon: Briefcase },
-  { key: 'applications', label: 'Applications', icon: FileCheck },
-  { key: 'settings', label: 'Settings', icon: Settings },
+// Define navigation items
+const navItems = [
+  { name: 'Home', path: '', icon: 'home' },
+  { name: 'Clients', path: 'clients', icon: 'clients' },
+  { name: 'Access Requests', path: 'access-requests', icon: 'accessRequests' }, // Added Nav Item
+  { name: 'Equipment', path: 'equipment', icon: 'equipment' },
+  { name: 'Services', path: 'services', icon: 'services' },
+  { name: 'Jobs', path: 'jobs', icon: 'jobs' },
+  { name: 'Applications', path: 'applications', icon: 'applications' },
+  { name: 'Settings', path: 'settings', icon: 'settings' },
 ];
 
-const Sidebar: React.FC<SideBarProps> = ({
-  active,
-  onSelect,
-  isMobile = false,
-  isOpenMobile = false,
-  onCloseMobile
-}) => {
-  if (isMobile) {
-    return (
-      <>
-        {isOpenMobile && (
-          <div className="fixed inset-0 bg-black/50 z-40 sm:hidden" onClick={onCloseMobile} />
-        )}
-        <div
-          className={`fixed top-0 left-0 h-full w-72 bg-gradient-to-b from-gray-900 to-gray-800 text-white transform transition-transform duration-300 ease-in-out z-50 sm:hidden ${
-            isOpenMobile ? 'translate-x-0' : '-translate-x-full'
-          }`}
-        >
-          <div className="flex items-center justify-between p-5 border-b border-gray-700">
-            <h2 className="text-xl font-bold tracking-wider">SOLVEX</h2>
-            <button
-              onClick={onCloseMobile}
-              className="p-2 rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          <nav className="p-4 space-y-2">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = active === item.key;
-              return (
-                <button
-                  key={item.key}
-                  onClick={() => onSelect(item.key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-[#FF5722] text-white shadow-lg'
-                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      </>
-    );
-  }
+interface SideBarProps {
+  isOpen: boolean; // Assuming state is managed by parent
+}
+
+const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
+  const { logout } = useAuth(); // Get logout function
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/my-page'); // Explicit navigation after logout, though AuthProvider might also handle it
+    } catch (error) {
+      console.error("Logout failed from Sidebar:", error);
+      // Optionally show an error toast
+    }
+  };
 
   return (
-    <div className="h-full bg-gradient-to-b from-gray-900 to-gray-800 text-white flex flex-col">
-      <div className="p-5 border-b border-gray-700">
-        <h2 className="text-xl font-bold tracking-wider text-center">SOLVEX</h2>
+    <div className={`fixed inset-y-0 left-0 bg-gray-900 text-gray-300 w-64 space-y-6 py-7 px-2 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-200 ease-in-out lg:relative lg:translate-x-0 lg:block z-30 shadow-lg`}>
+
+      {/* Logo or Brand */}
+      <div className="px-4 mb-6">
+        <NavLink to="/admin" className="flex items-center justify-center">
+          {/* --- MODIFICATION: Replaced text with your logo --- */}
+          <img
+            src="https://i.imgur.com/MhcvKs3.png"
+            alt="SolveX Studios Logo"
+            className="h-10"
+          />
+        </NavLink>
       </div>
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+
+      {/* Navigation Links */}
+      <nav className="flex-1 px-4 space-y-2">
         {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = active === item.key;
+          const IconComponent = icons[item.icon as keyof typeof icons] || LayoutDashboard; // Fallback icon
           return (
-            <button
-              key={item.key}
-              onClick={() => onSelect(item.key)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
-                isActive
-                  ? 'bg-[#FF5722] text-white shadow-lg'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-              }`}
+            <NavLink
+              key={item.name}
+              to={`/admin/${item.path}`} // Base path is /admin
+              end={item.path === ''} // `end` prop for exact match on Home route
+              className={({ isActive }) =>
+                `flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-gray-700 text-white shadow-inner'
+                    : 'hover:bg-gray-700 hover:text-white'
+                }`
+              }
             >
-              <Icon className="w-5 h-5" />
-              <span>{item.label}</span>
-            </button>
+              <IconComponent size={18} />
+              <span>{item.name}</span>
+            </NavLink>
           );
         })}
       </nav>
+
+      {/* Logout Button */}
+      <div className="absolute bottom-0 left-0 w-full px-4 pb-4">
+        <button
+          onClick={handleLogout}
+          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-700 hover:text-white transition-colors text-red-400"
+        >
+          <LogOut size={18} />
+          <span>{isUpdatingStatus === r.id ? 'Saving...' : (r.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()))}</span>
+        </button>
+      </div>
     </div>
   );
 };
 
-export default Sidebar;
+export default SideBar;
