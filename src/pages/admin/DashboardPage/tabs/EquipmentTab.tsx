@@ -60,7 +60,7 @@ const EditEquipmentModal = ({ isOpen, onClose, equipment, onSave }) => {
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="px-4 py-2 font-semibold text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save Changes</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">Save Changes</button>
         </div>
       </div>
     </div>
@@ -241,7 +241,7 @@ const EquipmentTab: React.FC = () => {
         <p className="text-sm text-gray-600 mb-4">The most common reason for **"Failed to Update"** is a missing **Row Level Security (RLS)** policy that grants the authenticated admin user write access. You should run the database sync to ensure the necessary policies are applied.</p>
         <button
             onClick={() => addToast({ type: 'info', title: 'Action Required', message: 'Please navigate to the Settings tab and click "Sync Now" to fix RLS permissions.' })}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg hover:bg-[#E64A19] transition-colors"
           >
             <Database className="w-4 h-4" /> Go to Settings Tab to Sync
         </button>

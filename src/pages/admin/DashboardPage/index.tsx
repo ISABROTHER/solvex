@@ -47,7 +47,8 @@ const DashboardPage: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
+    <div className="flex h-screen w-full overflow-hidden bg-gray-50"
+      style={{ background: 'linear-gradient(to bottom right, #f9fafb, #fff5f2)' }}>
       <div
         className={`hidden sm:block h-full transition-all duration-300 ease-in-out ${
           isSidebarOpen ? "w-72" : "w-0"

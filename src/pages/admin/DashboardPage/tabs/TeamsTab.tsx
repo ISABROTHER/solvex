@@ -374,7 +374,7 @@ const TeamsTab: React.FC = () => {
                 </div>
               </div>
               <div className="flex-shrink-0 p-6 border-t mt-auto flex gap-3 bg-gray-50">
-                <a href={`mailto:${selectedMember.email}`} className="flex-1 text-center rounded-lg bg-blue-600 text-white px-4 py-2 font-semibold hover:bg-blue-700 transition-colors">Email Member</a>
+                <a href={`mailto:${selectedMember.email}`} className="flex-1 text-center rounded-lg bg-[#FF5722] text-white px-4 py-2 font-semibold hover:bg-[#E64A19] transition-colors">Email Member</a>
                 <button onClick={() => alert('Implement Member Update/Offboard')} className="flex-1 text-center rounded-lg border bg-white px-4 py-2 font-semibold hover:bg-gray-100 transition-colors">Update Status</button>
               </div>
             </motion.div>

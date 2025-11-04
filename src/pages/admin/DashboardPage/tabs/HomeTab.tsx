@@ -21,8 +21,8 @@ const StatChart: React.FC<StatChartProps> = ({ title, value, icon: Icon, data, c
           <h3 className="text-sm font-medium text-gray-500">{title}</h3>
           <p className="text-3xl font-bold text-gray-800 mt-1">{value}</p>
         </div>
-        <div className="p-2 bg-gray-100 rounded-lg">
-          <Icon className="w-5 h-5 text-gray-600" />
+        <div className="p-2 bg-orange-50 rounded-lg">
+          <Icon className="w-5 h-5 text-[#FF5722]" />
         </div>
       </div>
       <div className="flex-grow flex items-end gap-2 mt-4 pt-4 border-t">
@@ -69,33 +69,33 @@ const HomeTab: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <StatChart 
+      <StatChart
         title="Total Clients"
         value="37"
         icon={Users}
         data={clientData}
-        color="#3b82f6" // Blue
+        color="#FF5722" // Primary Orange
       />
-      <StatChart 
+      <StatChart
         title="Team Members"
         value="16"
         icon={UserSquare2}
         data={teamData}
-        color="#8b5cf6" // Violet
+        color="#E64A19" // Darker Orange
       />
-      <StatChart 
+      <StatChart
         title="Job Applications"
         value="44"
         icon={FileText}
         data={applicationData}
-        color="#f59e0b" // Amber
+        color="#FF7043" // Light Orange
       />
-      <StatChart 
+      <StatChart
         title="Equipment Items"
         value="34"
         icon={Package}
         data={equipmentData}
-        color="#10b981" // Emerald
+        color="#FF8A65" // Lighter Orange
       />
     </div>
   );

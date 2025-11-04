@@ -6,7 +6,7 @@ const Card: React.FC<React.PropsWithChildren<{ className?: string; title?: strin
   title,
   right,
 }) => (
-  <div className={`bg-white rounded-xl border border-gray-200 shadow-sm p-6 ${className}`}>
+  <div className={`bg-white rounded-xl border border-gray-200 shadow-md hover:shadow-lg transition-shadow duration-200 p-6 ${className}`}>
     {(title || right) && (
       <div className="mb-4 flex items-center justify-between">
         {title && <h3 className="text-lg font-semibold text-gray-800">{title}</h3>}

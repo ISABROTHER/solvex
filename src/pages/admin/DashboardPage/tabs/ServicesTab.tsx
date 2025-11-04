@@ -168,7 +168,7 @@ const ServicesTab: React.FC = () => {
         </div>
         <div className="flex justify-end gap-4 mt-6">
           <button onClick={handleCancel} className="px-4 py-2 font-semibold text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">Save</button>
         </div>
       </Card>
     );
@@ -201,7 +201,7 @@ const ServicesTab: React.FC = () => {
         <div className="text-center py-12 text-gray-500">
           <p>{view === 'active' ? 'No active services found.' : 'The trash is empty.'}</p>
           {view === 'active' && services.length === 0 && deletedServices.length === 0 && (
-             <button onClick={handleSeedDatabase} className="mt-4 flex items-center gap-2 mx-auto bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">
+             <button onClick={handleSeedDatabase} className="mt-4 flex items-center gap-2 mx-auto bg-[#FF5722] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#E64A19]">
                <Database size={16} /> Seed Initial Services
              </button>
           )}
@@ -234,7 +234,7 @@ const ServicesTab: React.FC = () => {
                     <button onClick={() => handleDelete(service)} className="p-2 text-red-500 hover:bg-red-100 rounded-md" aria-label={`Delete ${service.title}`}><Trash2 size={16} /></button>
                   </>
                 ) : (
-                   <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-blue-600 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
+                   <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-[#FF5722] bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
                     <RotateCcw size={16} /> Restore
                   </button>
                 )}
