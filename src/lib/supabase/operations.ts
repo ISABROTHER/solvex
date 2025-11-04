@@ -154,16 +154,51 @@ export const onServicesChange = (callback: (payload: any) => void) => {
   return channel;
 };
 
-export type CareerApplication = Database['public']['Tables']['job_applications']['Row'];
+export type CareerApplication = Database['public']['Tables']['submitted_applications']['Row'];
 
+/**
+ * Fetches applications from 'submitted_applications' and joins 'job_positions' data.
+ */
 export const getCareerApplications = async (status?: string) => {
-  let query = supabase.from('job_applications').select('*').order('created_at', { ascending: false });
+  let query = supabase
+    .from('submitted_applications') // <-- USES YOUR TABLE
+    .select(`
+      id,
+      first_name, 
+      last_name, 
+      email,
+      phone,
+      country_code,
+      job_position_id,
+      position_title,
+      cover_letter,
+      portfolio_url,
+      status,
+      created_at,
+      updated_at,
+      job_position:job_positions (
+        title,
+        description,
+        team_name,
+        team_id
+      )
+    `)
+    .order('created_at', { ascending: false });
+    
   if (status) query = query.eq('status', status);
   return query;
 };
 
+/**
+ * Updates an application's status in 'submitted_applications'.
+ */
 export const updateCareerApplicationStatus = async (id: string, status: string) => {
-  return supabase.from('job_applications').update({ status }).eq('id', id).select().single();
+  return supabase
+    .from('submitted_applications') // <-- USES YOUR TABLE
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single();
 };
 
 export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
