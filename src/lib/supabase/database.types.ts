@@ -50,36 +50,95 @@ export interface Database {
       profiles: {
         Row: {
           id: string
-          role: string
-          first_name: string | null
-          last_name: string | null
           email: string | null
+          full_name: string | null
+          employee_number: string | null
+          birth_date: string | null // date
+          national_id: string | null
+          position: string | null
+          start_date: string | null // date
+          end_date: string | null // date
+          home_address: string | null
           phone: string | null
-          company: string | null
-          updated_at: string
-          created_at: string
+          salary: number | null
+          payday: string | null
+          bank_account: string | null
+          bank_name: string | null
+          avatar_url: string | null
+          role: string
+          created_at: string | null
         }
         Insert: {
           id: string
-          role: string
-          first_name?: string | null
-          last_name?: string | null
           email?: string | null
+          full_name?: string | null
+          employee_number?: string | null
+          birth_date?: string | null
+          national_id?: string | null
+          position?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          home_address?: string | null
           phone?: string | null
-          company?: string | null
-          updated_at?: string
-          created_at?: string
+          salary?: number | null
+          payday?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          avatar_url?: string | null
+          role?: string
+          created_at?: string | null
         }
         Update: {
           id?: string
-          role?: string
-          first_name?: string | null
-          last_name?: string | null
           email?: string | null
+          full_name?: string | null
+          employee_number?: string | null
+          birth_date?: string | null
+          national_id?: string | null
+          position?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          home_address?: string | null
           phone?: string | null
-          company?: string | null
-          updated_at?: string
-          created_at?: string
+          salary?: number | null
+          payday?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          avatar_url?: string | null
+          role?: string
+          created_at?: string | null
+        }
+      }
+      tasks: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          deadline: string | null // date
+          status: string
+          assigned_to: string
+          created_by: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          deadline?: string | null
+          status?: string
+          assigned_to: string
+          created_by: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          deadline?: string | null
+          status?: string
+          assigned_to?: string
+          created_by?: string
+          created_at?: string | null
         }
       }
       services: {
@@ -255,54 +314,11 @@ export interface Database {
           updated_at?: string | null
         }
       }
-      job_applications: {
-        Row: {
-          id: string
-          full_name: string
-          email: string
-          phone: string
-          country_code: string
-          job_position_id: string | null
-          position_title: string | null
-          cover_letter: string | null
-          portfolio_url: string | null
-          status: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          full_name: string
-          email: string
-          phone: string
-          country_code: string
-          job_position_id?: string | null
-          position_title?: string | null
-          cover_letter?: string | null
-          portfolio_url?: string | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          full_name?: string
-          email?: string
-          phone?: string
-          country_code?: string
-          job_position_id?: string | null
-          position_title?: string | null
-          cover_letter?: string | null
-          portfolio_url?: string | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-      }
       submitted_applications: {
         Row: {
           id: string
-          full_name: string
+          first_name: string
+          last_name: string
           email: string
           phone: string
           country_code: string
@@ -316,7 +332,8 @@ export interface Database {
         }
         Insert: {
           id?: string
-          full_name: string
+          first_name: string
+          last_name: string
           email: string
           phone: string
           country_code: string
@@ -330,7 +347,8 @@ export interface Database {
         }
         Update: {
           id?: string
-          full_name?: string
+          first_name?: string
+          last_name?: string
           email?: string
           phone?: string
           country_code?: string
@@ -345,7 +363,12 @@ export interface Database {
       }
     }
     Views: {}
-    Functions: {}
+    Functions: {
+      is_admin: {
+        Args: {}
+        Returns: boolean
+      }
+    }
     Enums: {}
   }
 }
