@@ -255,53 +255,9 @@ export interface Database {
           updated_at?: string | null
         }
       }
-      job_applications: {
-        Row: {
-          id: string
-          first_name: string // <-- UPDATED
-          last_name: string // <-- UPDATED
-          email: string
-          phone: string
-          country_code: string
-          job_position_id: string | null
-          position_title: string | null
-          cover_letter: string | null
-          portfolio_url: string | null
-          status: string
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          first_name: string // <-- UPDATED
-          last_name: string // <-- UPDATED
-          email: string
-          phone: string
-          country_code: string
-          job_position_id?: string | null
-          position_title?: string | null
-          cover_letter?: string | null
-          portfolio_url?: string | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          first_name?: string // <-- UPDATED
-          last_name?: string // <-- UPDATED
-          email?: string
-          phone?: string
-          country_code?: string
-          job_position_id?: string | null
-          position_title?: string | null
-          cover_letter?: string | null
-          portfolio_url?: string | null
-          status?: string
-          created_at?: string
-          updated_at?: string
-        }
-      }
+      /* This is the only applications table your app should use.
+        The 'job_applications' table definition has been removed.
+      */
       submitted_applications: {
         Row: {
           id: string
