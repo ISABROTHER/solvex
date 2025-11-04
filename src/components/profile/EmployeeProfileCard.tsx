@@ -1,11 +1,12 @@
 // src/components/profile/EmployeeProfileCard.tsx
 import React from 'react';
-import { format } from 'date-fns'; // Already a dependency
+// import { format } from 'date-fns'; // <-- REMOVED THIS IMPORT
 import type { Profile } from '../../lib/supabase/operations';
 import Card from '../../pages/admin/DashboardPage/components/Card';
 import {
   User, Calendar, BadgePercent, Home, Phone, Banknote, Landmark, Key
 } from 'lucide-react';
+import { useAuth } from '../../features/auth/AuthProvider'; // <-- ADDED IMPORT
 
 interface ProfileCardProps {
   profile: Profile;
@@ -24,14 +25,19 @@ const DetailItem: React.FC<{ label: string, value: React.ReactNode, icon?: React
 );
 
 const EmployeeProfileCard: React.FC<ProfileCardProps> = ({ profile }) => {
-  const { user } = useAuth(); // Get user to check admin status
-  const { profile: adminProfile } = useAuth();
-  const isAdmin = adminProfile?.role === 'admin';
+  const { profile: authProfile } = useAuth(); // Get user to check admin status
+  const isAdmin = authProfile?.role === 'admin';
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     try {
-      return format(new Date(dateString), 'dd.MM.yyyy');
+      // --- FIX: Use built-in date formatting ---
+      return new Date(dateString).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }); // Formats as dd/mm/yyyy
+      // --- END FIX ---
     } catch (e) {
       return dateString; // Fallback if date is invalid
     }
