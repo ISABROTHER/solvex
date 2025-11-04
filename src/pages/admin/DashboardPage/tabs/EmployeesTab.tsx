@@ -85,13 +85,15 @@ const MOCK_DOCUMENTS: EmployeeDocument[] = [
 // --- END MOCK DATA ---
 
 
-// --- 1. ADDED HELPER FUNCTION BACK (FIXES BLANK SCREEN) ---
+// --- 1. ADD THIS HELPER FUNCTION BACK ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
+// --- END OF FIX ---
+
 
 // --- Reusable InfoRow ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
@@ -439,6 +441,7 @@ const EmployeesTab: React.FC = () => {
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
                   <InfoRow icon={Phone} label="Phone" value={selectedEmployee.phone} />
                   <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
+                  {/* This line was causing the crash */}
                   <InfoRow icon={Calendar} label="Birth Date" value={formatDate(selectedEmployee.birth_date)} />
                 </div>
               </Card>
@@ -447,6 +450,7 @@ const EmployeesTab: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
                   <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
+                  {/* This line was also causing the crash */}
                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
                   <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
                   <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary ? `GHS ${selectedEmployee.salary}` : 'N/A'} />
