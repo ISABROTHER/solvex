@@ -1,184 +1,339 @@
-import React, { useEffect, useState } from 'react';
-import { X, CloudUpload as UploadCloud } from 'lucide-react';
-import Select from 'react-select';
-import ApplicationConfirmationPopup from './ApplicationConfirmationPopup';
-import { countryCodesData } from '../../data/forms/country-codes.data';
-import CountryDropdown from './CountryDropdown';
-import { submitCareerApplication } from '../../lib/supabase/forms';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useForm, Controller, SubmitHandler } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
+import { X, Loader2 } from 'lucide-react';
+import Select from 'react-select';
+import CountryDropdown from './CountryDropdown'; // Ensure this path is correct
+import { submitCareerApplication } from '../../lib/supabase/forms'; // Ensure this path is correct
+import type { JobPosition } from '../../lib/supabase/operations'; // Import the type
+import { countryCodes } from '../../data/forms/country-codes.data'; // Import country codes
 
-import type { JobPosition } from '../../lib/supabase/operations';
+// --- Zod Validation Schema ---
+const phoneRegex = /^[0-9]{7,15}$/; // Simple regex for phone (7-15 digits)
+const urlRegex = /^(https|http):\/\/[^\s$.?#].[^\s]*$/; // Basic URL validation
 
-interface FormValidationErrors { [key: string]: string; }
+const applicationSchema = z.object({
+  firstName: z.string().min(2, 'First name is required'),
+  lastName: z.string().min(2, 'Last name is required'),
+  email: z.string().email('Invalid email address'),
+  countryCode: z.string().nonempty('Country code is required'),
+  phone: z.string().regex(phoneRegex, 'Invalid phone number (digits only)'),
+  appliedRoles: z.array(z.object({
+    value: z.string(),
+    label: z.string(),
+  })).min(1, 'You must select at least one role'),
+  coverLetter: z.string().min(50, 'Please write a cover letter (min 50 characters)'),
+  portfolioUrl: z.string().url('Invalid URL (must include http:// or https://)').optional().or(z.literal('')),
+});
 
+type ApplicationFormData = z.infer<typeof applicationSchema>;
+
+// Interface for the data we send to the Supabase function
+interface CareerApplicationData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  countryCode: string;
+  coverLetter: string;
+  portfolioUrl?: string;
+  appliedRoles: string[]; // Array of role IDs
+}
+
+// --- Component Props ---
 interface ApplicationFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  availableRoles: JobPosition[];
-  anchorId?: string | null;
+  roles: JobPosition[]; // Roles pre-selected by the user
+  allAvailableRoles: JobPosition[]; // All jobs for the dropdown
+  onSuccess: () => void;
 }
 
-const getDefaultCountry = () => countryCodesData.find(c => c.iso === 'GH');
-
-const countWords = (text: string): number => {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-};
-
-const customSelectStyles = {
-  control: (provided: any, state: { isFocused: any; }) => ({ ...provided, minHeight: '42px', height: 'auto', border: state.isFocused ? '1px solid #FF5722' : '1px solid #D1D5DB', borderRadius: '0.5rem', boxShadow: 'none', backgroundColor: '#F9FAFB', '&:hover': { borderColor: '#9CA3AF' }, }),
-  option: (provided: any, state: { isSelected: any; isFocused: any; }) => ({ ...provided, backgroundColor: state.isSelected ? '#FF5722' : state.isFocused ? '#FF57221A' : 'white', color: state.isSelected ? 'white' : '#1F2937', '&:active': { backgroundColor: '#FF57223A' }, }),
-  placeholder: (provided: any) => ({...provided, color: '#6B7280'}),
-  menu: (provided: any) => ({...provided, zIndex: 9999 }),
-  multiValue: (base: any) => ({ ...base, backgroundColor: 'rgba(255, 87, 34, 0.1)', borderRadius: '6px' }),
-  multiValueLabel: (base: any) => ({ ...base, color: '#C10100', fontWeight: 500 }),
-};
-
-const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({ isOpen, onClose, availableRoles, anchorId }) => {
-  const [formData, setFormData] = useState({ firstName: '', surname: '', email: '', phone: '', coverLetter: '', portfolioUrl: '' });
+const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
+  isOpen,
+  onClose,
+  roles,
+  allAvailableRoles,
+  onSuccess,
+}) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [wordCount, setWordCount] = useState(0);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [submittedData, setSubmittedData] = useState<any>(null);
-  const [selectedCountry, setSelectedCountry] = useState(getDefaultCountry()!);
-  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  const [errors, setErrors] = useState<FormValidationErrors>({});
+  const [error, setError] = useState<string | null>(null);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (name === 'coverLetter') setWordCount(countWords(value));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
-  };
+  // --- Form Persistence (Optional but recommended) ---
+  const persistenceKey = 'careerApplicationForm';
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (isSubmitting) return;
+  // --- Map Roles for React-Select ---
+  const roleOptions = useMemo(() => {
+    return allAvailableRoles.map(role => ({
+      value: role.id,
+      label: `${role.title} (${role.team_name || 'General'})`
+    }));
+  }, [allAvailableRoles]);
 
-    const validationErrors: FormValidationErrors = {};
-    if (!formData.firstName.trim()) validationErrors.firstName = "First name is required.";
-    if (!formData.surname.trim()) validationErrors.surname = "Surname is required.";
-    if (!formData.email.trim()) validationErrors.email = "Email is required.";
-    if (!formData.phone.trim()) validationErrors.phone = "Phone number is required.";
-    if (!formData.coverLetter.trim()) validationErrors.coverLetter = "Cover letter is required.";
-    if (selectedRoles.length === 0) validationErrors.roles = "Please select at least one role.";
-    
-    setErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) {
-      setError('Please fill out all required fields correctly.');
-      return;
+  const defaultSelectedRoles = useMemo(() => {
+    return roleOptions.filter(option => roles.some(role => role.id === option.value));
+  }, [roles, roleOptions]);
+  
+  // Find default country code (e.g., Ghana "+233")
+  const defaultCountryCode = countryCodes.find(c => c.code === "GH")?.dial_code || "+233";
+
+  // --- React-Hook-Form Initialization ---
+  const {
+    control,
+    handleSubmit,
+    register,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<ApplicationFormData>({
+    resolver: zodResolver(applicationSchema),
+    defaultValues: {
+      firstName: '',
+      lastName: '',
+      email: '',
+      countryCode: defaultCountryCode,
+      phone: '',
+      appliedRoles: defaultSelectedRoles,
+      coverLetter: '',
+      portfolioUrl: '',
+    },
+  });
+  
+  // --- Load from LocalStorage ---
+   useEffect(() => {
+    const savedData = localStorage.getItem(persistenceKey);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        // Ensure appliedRoles is in the { value, label } format
+        if (parsedData.appliedRoles && parsedData.appliedRoles.length > 0 && typeof parsedData.appliedRoles[0] === 'string') {
+           parsedData.appliedRoles = parsedData.appliedRoles.map(roleId => 
+             roleOptions.find(opt => opt.value === roleId)
+           ).filter(Boolean); // Filter out any roles that no longer exist
+        }
+        reset(parsedData);
+      } catch (e) {
+        console.error("Failed to parse saved form data", e);
+        localStorage.removeItem(persistenceKey);
+      }
+    } else {
+        // If no saved data, set default roles
+        reset({
+            ...applicationSchema.partial().default(),
+            countryCode: defaultCountryCode,
+            appliedRoles: defaultSelectedRoles
+        });
     }
+  }, [reset, roleOptions, defaultSelectedRoles, persistenceKey, defaultCountryCode]);
+  
+  // --- Save to LocalStorage ---
+  const watchedValues = watch();
+  useEffect(() => {
+    localStorage.setItem(persistenceKey, JSON.stringify(watchedValues));
+  }, [watchedValues, persistenceKey]);
+  
+  // --- Reset form on close/success ---
+  useEffect(() => {
+    if (isOpen) {
+      // When modal opens, ensure default roles are set
+      reset({ ...watchedValues, appliedRoles: defaultSelectedRoles });
+    }
+  }, [isOpen, defaultSelectedRoles, reset]);
 
+
+  // --- Form Submission Handler ---
+  const onSubmit: SubmitHandler<ApplicationFormData> = async (data) => {
     setIsSubmitting(true);
-    setError('');
+    setError(null);
     
+    // Map form data to the shape expected by the API
+    const formData: CareerApplicationData = {
+      firstName: data.firstName,
+      lastName: data.lastName,
+      email: data.email,
+      phone: data.phone,
+      countryCode: data.countryCode, // This is just the string value, e.g. "+1"
+      coverLetter: data.coverLetter,
+      portfolioUrl: data.portfolioUrl || undefined,
+      appliedRoles: data.appliedRoles.map(role => role.value) // Array of role IDs
+    };
+
     try {
-      const response = await submitCareerApplication({
-        firstName: formData.firstName,
-        lastName: formData.surname,
-        email: formData.email,
-        phone: formData.phone,
-        countryCode: selectedCountry.code,
-        coverLetter: formData.coverLetter,
-        portfolioUrl: formData.portfolioUrl || undefined,
-        appliedRoles: selectedRoles,
-      });
-
-      console.log('Application submission response:', response);
-
-      if (response.error) throw new Error(response.error);
+      const { error: submitError } = await submitCareerApplication(formData);
       
-      setSubmittedData({ firstName: formData.firstName, appliedRoles: selectedRoles });
-      setShowConfirmation(true);
-      // Reset form on successful submission
-      setFormData({ firstName: '', surname: '', email: '', phone: '', coverLetter: '', portfolioUrl: '' });
-      setSelectedRoles([]);
-      setWordCount(0);
-      setErrors({});
+      if (submitError) {
+        throw submitError;
+      }
       
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to submit application. Please try again.');
+      // Clear form persistence on success
+      if (persistenceKey) {
+        localStorage.removeItem(persistenceKey);
+      }
+      reset(); // Reset form fields
+      onSuccess();
+      
+    } catch (err: any) { // <-- Make sure 'err' is typed as 'any'
+      console.error('Application submission error:', err);
+      
+      // --- THIS IS THE FIX ---
+      // We must set the error *message* (a string), not the whole error object.
+      setError(err.message || 'An unknown error occurred. Please try again.');
+      // --- END OF FIX ---
+      
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <>
-      <AnimatePresence>
-        {isOpen && (
-          <div role="dialog" aria-modal="true" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div className="absolute inset-0 bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-            <motion.div
-              layoutId={anchorId || undefined}
-              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl flex flex-col h-[85vh]"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-            >
-              <div className="flex-shrink-0 p-6 flex justify-between items-center border-b">
-                <h3 className="text-xl font-bold text-gray-900">Application Form</h3>
-                <motion.button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={20} /></motion.button>
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/50"
+            onClick={onClose}
+          />
+          
+          {/* Modal Panel */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex-shrink-0 p-6 flex justify-between items-center border-b">
+              <h2 className="text-xl font-bold text-gray-800">Apply Now</h2>
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            {/* Form */}
+            <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto p-6 space-y-5">
+              
+              {/* Personal Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">First Name</label>
+                  <input {...register('firstName')} className={`mt-1 w-full p-2 border rounded-md ${errors.firstName ? 'border-red-500' : 'border-gray-300'}`} />
+                  {errors.firstName && <p className="text-xs text-red-600 mt-1">{errors.firstName.message}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Last Name</label>
+                  <input {...register('lastName')} className={`mt-1 w-full p-2 border rounded-md ${errors.lastName ? 'border-red-500' : 'border-gray-300'}`} />
+                  {errors.lastName && <p className="text-xs text-red-600 mt-1">{errors.lastName.message}</p>}
+                </div>
               </div>
-              <div className="p-6 md:p-8 overflow-y-auto flex-1">
-                <form onSubmit={handleSubmit} noValidate className="space-y-6">
-                  <div>
-                    <label htmlFor="roles" className="block text-sm font-medium text-gray-700 mb-1">Role(s) you are applying for*</label>
+
+              {/* Contact Info */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Email Address</label>
+                <input type="email" {...register('email')} className={`mt-1 w-full p-2 border rounded-md ${errors.email ? 'border-red-500' : 'border-gray-300'}`} />
+                {errors.email && <p className="text-xs text-red-600 mt-1">{errors.email.message}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Phone Number</label>
+                <div className="flex mt-1">
+                  <Controller
+                    name="countryCode"
+                    control={control}
+                    rules={{ required: true }}
+                    render={({ field }) => (
+                      <CountryDropdown
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
+                  <input
+                    type="tel"
+                    {...register('phone')}
+                    placeholder="e.g. 244123456"
+                    className={`flex-1 w-full p-2 border rounded-r-md ${errors.phone ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                </div>
+                 {(errors.countryCode || errors.phone) && <p className="text-xs text-red-600 mt-1">{errors.phone?.message || errors.countryCode?.message}</p>}
+              </div>
+
+              {/* Roles */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Applying for</label>
+                 <Controller
+                  name="appliedRoles"
+                  control={control}
+                  rules={{ required: 'You must select at least one role.' }}
+                  render={({ field }) => (
                     <Select
-                      isMulti id="roles" name="roles"
-                      options={availableRoles.map(r => ({ value: r.id, label: r.title }))}
-                      styles={{...customSelectStyles, control: (base, state) => ({ ...customSelectStyles.control(base, state), borderColor: errors.roles ? '#EF4444' : '#D1D5DB' })}}
-                      placeholder="Select one or more roles..."
-                      onChange={(options) => setSelectedRoles((options || []).map(o => o.value))}
-                      value={selectedRoles.map(r => {
-                        const role = availableRoles.find(ar => ar.id === r);
-                        return { value: r, label: role?.title || r };
-                      })}
+                      {...field}
+                      isMulti
+                      options={roleOptions}
+                      className={`mt-1 ${errors.appliedRoles ? 'react-select-error' : ''}`}
+                      classNamePrefix="react-select"
+                      placeholder="Select roles..."
                     />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">First Name*</label>
-                      <input type="text" name="firstName" id="firstName" value={formData.firstName} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-gray-50 ${errors.firstName ? 'border-red-500' : 'border-gray-300'}`} />
-                    </div>
-                    <div>
-                      <label htmlFor="surname" className="block text-sm font-medium text-gray-700 mb-1">Surname*</label>
-                      <input type="text" name="surname" id="surname" value={formData.surname} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-gray-50 ${errors.surname ? 'border-red-500' : 'border-gray-300'}`} />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email*</label>
-                    <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-gray-50 ${errors.email ? 'border-red-500' : 'border-gray-300'}`} />
-                  </div>
-                  <div>
-                    <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">Phone Number*</label>
-                    <div className="flex">
-                      <CountryDropdown countries={countryCodesData} selectedCountry={selectedCountry} onSelect={setSelectedCountry} className="mr-[-1px]" />
-                      <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} className={`flex-1 min-w-0 px-3 py-2 border rounded-r-lg bg-gray-50 ${errors.phone ? 'border-red-500' : 'border-gray-300'}`} />
-                    </div>
-                  </div>
-                  <div>
-                    <label htmlFor="coverLetter" className="block text-sm font-medium text-gray-700 mb-1">Cover Letter* (max 100 words)</label>
-                    <textarea name="coverLetter" id="coverLetter" rows={4} value={formData.coverLetter} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-gray-50 resize-none ${errors.coverLetter ? 'border-red-500' : 'border-gray-300'}`} />
-                    <div className="flex justify-between items-center mt-1"><span className={`text-xs ${wordCount > 100 ? 'text-red-500' : 'text-gray-500'}`}>{wordCount}/100 words</span></div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Portfolio Link (optional)</label>
-                    <input type="url" name="portfolioUrl" id="portfolioUrl" value={formData.portfolioUrl} onChange={handleChange} placeholder="https://yourportfolio.com" className="w-full px-3 py-2 border rounded-lg bg-gray-50" />
-                  </div>
-                  {error && <div className="text-red-600 text-sm text-center bg-red-100 p-3 rounded-lg">{error}</div>}
-                  <div className="flex justify-end space-x-4 pt-4">
-                    <motion.button type="button" onClick={onClose} className="px-6 py-2 text-sm font-semibold text-gray-700 rounded-lg hover:bg-gray-100" whileTap={{scale: 0.95}}>Cancel</motion.button>
-                    <motion.button type="submit" disabled={isSubmitting} className="px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50" whileTap={{scale: 0.95}}>{isSubmitting ? 'Submitting...' : 'Submit Application'}</motion.button>
-                  </div>
-                </form>
+                  )}
+                />
+                {errors.appliedRoles && <p className="text-xs text-red-600 mt-1">{errors.appliedRoles.message}</p>}
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      <ApplicationConfirmationPopup isOpen={showConfirmation} onClose={() => { setShowConfirmation(false); onClose(); }} applicationData={submittedData} />
-    </>
+
+              {/* Portfolio */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Portfolio/Website URL (Optional)</label>
+                <input {...register('portfolioUrl')} placeholder="https://..." className={`mt-1 w-full p-2 border rounded-md ${errors.portfolioUrl ? 'border-red-500' : 'border-gray-300'}`} />
+                {errors.portfolioUrl && <p className="text-xs text-red-600 mt-1">{errors.portfolioUrl.message}</p>}
+              </div>
+              
+              {/* Cover Letter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Cover Letter</label>
+                <textarea
+                  {...register('coverLetter')}
+                  rows={6}
+                  className={`mt-1 w-full p-2 border rounded-md ${errors.coverLetter ? 'border-red-500' : 'border-gray-300'}`}
+                  placeholder="Tell us why you're a great fit for this role..."
+                />
+                {errors.coverLetter && <p className="text-xs text-red-600 mt-1">{errors.coverLetter.message}</p>}
+              </div>
+              
+              {/* General Error Message */}
+              {error && (
+                <div className="mt-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg text-sm">
+                  <strong>Error:</strong> {error}
+                </div>
+              )}
+
+            </form>
+            
+            {/* Footer / Submit Button */}
+            <div className="flex-shrink-0 p-6 border-t flex justify-end bg-gray-50">
+              <button
+                type="submit"
+                onClick={handleSubmit(onSubmit)}
+                disabled={isSubmitting}
+                className="w-full md:w-auto px-8 py-3 bg-[#FF5722] text-white font-semibold rounded-lg shadow-md hover:bg-[#E64A19] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Application'
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 };
 
