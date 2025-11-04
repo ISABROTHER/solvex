@@ -203,12 +203,28 @@ export const updateCareerApplicationStatus = async (id: string, status: string) 
 
 export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
 
+/**
+ * Fetches all *open* job positions. (For public careers page)
+ */
 export const getOpenJobPositions = async () => {
-  return supabase.from('job_positions').select('*').eq('status', 'open').is('deleted_at', null).order('title');
+  return supabase
+    .from('job_positions')
+    .select('*')
+    .eq('status', 'open')
+    .is('deleted_at', null)
+    .order('title');
 };
 
+/**
+ * Fetches all *active* (not deleted) teams. (For public careers page)
+ */
 export const getActiveTeams = async () => {
-  return supabase.from('teams').select('*').is('deleted_at', null).order('name');
+  return supabase
+    .from('teams')
+    .select('*')
+    .is('deleted_at', null) // Use 'is' or 'neq' depending on your 'is_deleted' column
+    .neq('is_deleted', true)
+    .order('name');
 };
 
 // Mapped type for rental equipment display in the UI
@@ -250,6 +266,9 @@ export const getRentalEquipment = async () => {
   return { data: mappedData, error: null };
 };
 
+/**
+ * Fetches all *active* teams for the admin panel.
+ */
 export const getAllTeams = async () => {
   // Only select teams that are NOT soft-deleted.
   return supabase
@@ -301,6 +320,9 @@ export const onRentalGearChange = (callback: (payload: any) => void) => {
   return channel;
 };
 
+/**
+ * Fetches *all* job positions for the admin panel.
+ */
 export const getAllJobPositions = async () => {
   return supabase.from('job_positions').select('*').order('title');
 };
@@ -317,7 +339,6 @@ export const deleteJobPosition = async (id: string) => {
   return supabase.from('job_positions').update({ deleted_at: new Date().toISOString(), is_deleted: true }).eq('id', id).select().single();
 };
 
-// --- START: NEW FUNCTIONS FOR DELETED TEAMS ---
 export const getDeletedTeams = async () => {
   return supabase
     .from('teams')
@@ -334,4 +355,3 @@ export const restoreTeam = async (id: string) => {
     .select()
     .single();
 };
-// --- END: NEW FUNCTIONS ---
