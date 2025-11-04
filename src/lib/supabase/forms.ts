@@ -56,28 +56,46 @@ export const submitContactInquiry = async (data: any) => {
  * This now correctly points to the 'submitted_applications' table.
  */
 export const submitCareerApplication = async (data: CareerApplicationData) => {
-  // We need to insert one row for EACH role the user applied for.
-  const applications = data.appliedRoles.map(roleId => ({
-    full_name: `${data.firstName} ${data.lastName}`.trim(),
-    email: data.email,
-    phone: data.phone,
-    country_code: data.countryCode,
-    cover_letter: data.coverLetter,
-    portfolio_url: data.portfolioUrl,
-    job_position_id: roleId,
-    status: 'pending' as 'pending',
-  }));
+  // --- START OF FIX: Added try...catch block ---
+  try {
+    // We need to insert one row for EACH role the user applied for.
+    const applications = data.appliedRoles.map(roleId => ({
+      first_name: data.firstName, 
+      last_name: data.lastName, 
+      email: data.email,
+      phone: data.phone,
+      country_code: data.countryCode,
+      cover_letter: data.coverLetter,
+      portfolio_url: data.portfolioUrl,
+      job_position_id: roleId, // Link to the job_positions table
+      status: 'pending' as 'pending', // Default status
+    }));
 
-  // Insert the array of application objects
-  const { error } = await (supabase
-    .from('job_applications') as any)
-    .insert(applications); 
+    // Use type from generated types for type safety
+    type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert'];
 
-  if (error) {
-    console.error('Supabase career application error:', error);
+    // Insert the array of application objects
+    const { error } = await supabase
+      .from('submitted_applications') 
+      .insert(applications as JobApplicationInsert[]);
+
+    if (error) {
+      console.error('Supabase career application error:', error);
+      throw error; // Throw the error to be caught below
+    }
+
+    return { error: null }; // Success
+    
+  } catch (err: any) {
+    console.error('Critical error in submitCareerApplication:', err);
+    // Ensure we always return an object with a .message property
+    if (err && err.message) {
+      return { error: err };
+    }
+    // If the error is not a standard error object, create one
+    return { error: new Error(String(err) || 'Unknown error in forms.ts') };
   }
-
-  return { error };
+  // --- END OF FIX ---
 };
 
 
