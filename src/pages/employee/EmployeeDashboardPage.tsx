@@ -25,8 +25,10 @@ import {
   Save,
   X,
   Upload,
-  ClipboardList, // <-- ADDED ICON
-  FileDown       // <-- ADDED ICON
+  ClipboardList, // Added
+  FileDown,      // Added
+  FileUp,        // Added
+  Eye            // Added
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -50,6 +52,8 @@ interface Profile {
   payday: string | null;
   bank_account: string | null;
   bank_name: string | null;
+  signed_contract_url: string | null;  // Added for documents
+  signed_contract_name: string | null; // Added for documents
 }
 
 interface Task {
@@ -179,6 +183,35 @@ const TaskItem: React.FC<{
   );
 };
 
+// --- NEW PDF VIEWER MODAL ---
+const PdfViewerModal: React.FC<{ pdfUrl: string; onClose: () => void }> = ({ pdfUrl, onClose }) => (
+  <AnimatePresence>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+      >
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+          <h3 className="text-white font-semibold">Document Viewer</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+          {/* Use Google Docs viewer as a fallback for PDFs that browsers might block */}
+          <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg" 
+            title="PDF Viewer" 
+          />
+        </div>
+      </motion.div>
+    </div>
+  </AnimatePresence>
+);
+
 // --- MAIN ---
 
 const EmployeeDashboardPage: React.FC = () => {
@@ -203,12 +236,13 @@ const EmployeeDashboardPage: React.FC = () => {
   const [editBankAccount, setEditBankAccount] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // --- MOCK DATA FOR DOCUMENTS (REPLACE THIS LATER) ---
-  const mockDocuments = [
-    { name: 'Employment Contract.pdf', url: '#' },
-    { name: 'NDA Agreement.pdf', url: '#' },
-    { name: 'Employee Handbook.pdf', url: '#' },
-  ];
+  // --- NEW STATE FOR DOCUMENTS ---
+  const [signedDocument, setSignedDocument] = useState<{ name: string; url: string } | null>(null);
+  const [documentUploading, setDocumentUploading] = useState(false);
+  const [viewingPdf, setViewingPdf] = useState<string | null>(null); // PDF URL for modal
+  // Placeholder for the company's unsigned contract
+  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' };
+
 
   useEffect(() => {
     if (user?.id) {
@@ -225,7 +259,7 @@ const EmployeeDashboardPage: React.FC = () => {
     try {
       const { data: profileData, error: profileError } = await (supabase as any)
         .from('profiles')
-        .select('*')
+        .select('*') // This will now fetch signed_contract_url and signed_contract_name
         .eq('id', user.id)
         .maybeSingle();
 
@@ -239,6 +273,13 @@ const EmployeeDashboardPage: React.FC = () => {
         setEditAddress(profileData?.home_address || '');
         setEditBankName(profileData?.bank_name || '');
         setEditBankAccount(profileData?.bank_account || '');
+        
+        // --- NEW: Load signed document state from profile ---
+        if (profileData?.signed_contract_url && profileData?.signed_contract_name) {
+          setSignedDocument({ name: profileData.signed_contract_name, url: profileData.signed_contract_url });
+        } else {
+          setSignedDocument(null);
+        }
       }
 
       const { data: tasksData, error: tasksError } = await (supabase as any)
@@ -338,7 +379,6 @@ const EmployeeDashboardPage: React.FC = () => {
 
   const onUploadAvatar = async (file: File) => {
     if (!user?.id || !file) return;
-    // Change bucket name if yours differs:
     const BUCKET = 'avatars';
     const MAX_MB = 5;
 
@@ -360,36 +400,72 @@ const EmployeeDashboardPage: React.FC = () => {
         cacheControl: '3600',
         upsert: false
       });
-      if (upErr) {
-        console.error('Upload error:', upErr);
-        alert('Failed to upload image.');
-        return;
-      }
+      if (upErr) throw upErr;
 
       const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
       const publicUrl = pub?.publicUrl;
-      if (!publicUrl) {
-        alert('Could not get image URL.');
-        return;
-      }
+      if (!publicUrl) throw new Error('Could not get public URL.');
 
       const { error: profErr } = await (supabase as any)
         .from('profiles')
         .update({ avatar_url: publicUrl })
         .eq('id', user.id);
-
-      if (profErr) {
-        console.error('Profile update error:', profErr);
-        alert('Failed to update profile picture.');
-        return;
-      }
+      if (profErr) throw profErr;
 
       setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
-    } catch (e) {
-      console.error(e);
-      alert('Unexpected error during upload.');
+    } catch (e: any) {
+      console.error('Error uploading avatar:', e);
+      alert(`Failed to upload image: ${e.message}`);
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  // --- NEW: FUNCTION TO UPLOAD SIGNED CONTRACT ---
+  const onUploadSignedContract = async (file: File) => {
+    if (!user?.id || !file) return;
+    // IMPORTANT: Create this bucket in your Supabase Storage
+    const BUCKET = 'employee-documents'; 
+    const MAX_MB = 10; // 10MB for PDFs
+
+    if (file.type !== 'application/pdf') {
+      alert('Please upload a PDF file.');
+      return;
+    }
+    if (file.size > MAX_MB * 1024 * 1024) {
+      alert(`File too large. Max ${MAX_MB}MB.`);
+      return;
+    }
+
+    setDocumentUploading(true);
+    try {
+      const path = `${user.id}/signed_contract_${Date.now()}.pdf`;
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file);
+      if (upErr) throw upErr;
+
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      const publicUrl = pub?.publicUrl;
+      if (!publicUrl) throw new Error('Could not get public URL.');
+
+      // IMPORTANT: Add 'signed_contract_url' and 'signed_contract_name' to your 'profiles' table
+      const updates = {
+        signed_contract_url: publicUrl,
+        signed_contract_name: file.name
+      };
+      const { error: profErr } = await (supabase as any)
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id);
+      if (profErr) throw profErr;
+
+      setSignedDocument({ name: file.name, url: publicUrl });
+      setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
+    
+    } catch (e: any) {
+      console.error('Error uploading signed contract:', e);
+      alert(`Failed to upload document: ${e.message}`);
+    } finally {
+      setDocumentUploading(false);
     }
   };
 
@@ -505,7 +581,6 @@ const EmployeeDashboardPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
           {/* --- MAIN CONTENT (TASKS) --- */}
-          {/* On mobile, this appears first. On desktop, it takes 3/5 width. */}
           <div className="lg:col-span-3 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -586,7 +661,6 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
 
           {/* --- SIDEBAR (PROFILE) --- */}
-          {/* On mobile, this appears second. On desktop, it takes 2/5 width. */}
           <div className="lg:col-span-2 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -717,7 +791,7 @@ const EmployeeDashboardPage: React.FC = () => {
               )}
             </motion.div>
 
-            {/* --- NEW: My Documents Card --- */}
+            {/* --- MODIFIED: My Documents Card --- */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -727,28 +801,84 @@ const EmployeeDashboardPage: React.FC = () => {
                 <ClipboardList className="w-5 h-5 text-[#FF5722]" />
                 My Documents
               </h4>
-              <div className="space-y-3">
-                {mockDocuments.map((doc) => (
-                  <a
-                    key={doc.name}
-                    href={doc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors group"
-                  >
-                    <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                      <FileText size={16} className="text-red-500 flex-shrink-0" />
-                      <span className="truncate group-hover:underline">{doc.name}</span>
+              <div className="space-y-4">
+                
+                {/* Unsigned Contract */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
+                  <span className="flex items-center gap-2.5 font-medium text-gray-700">
+                    <FileText size={16} className="text-gray-500 flex-shrink-0" />
+                    <span className="truncate">{unsignedContract.name}</span>
+                  </span>
+                  <div className="flex gap-2 mt-2 sm:mt-0 sm:flex-shrink-0">
+                    <button
+                      onClick={() => setViewingPdf(unsignedContract.url)} // Use mock URL
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                    >
+                      <Eye size={14} /> View
+                    </button>
+                    <a
+                      href={unsignedContract.url} // Use mock URL
+                      download="Employment_Contract_Unsigned.pdf"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                    >
+                      <FileDown size={14} /> Download
+                    </a>
+                  </div>
+                </div>
+
+                {/* Signed Contract */}
+                {signedDocument ? (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
+                    <span className="flex items-center gap-2.5 font-medium text-green-800">
+                      <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
+                      <span className="truncate">{signedDocument.name}</span>
                     </span>
-                    <FileDown size={16} className="text-gray-400 group-hover:text-gray-700 transition-colors flex-shrink-0" />
-                  </a>
-                ))}
-                {mockDocuments.length === 0 && (
-                   <p className="text-sm text-gray-500 text-center py-4">No documents uploaded.</p>
+                    <div className="flex gap-2 mt-2 sm:mt-0 sm:flex-shrink-0">
+                      <button
+                        onClick={() => setViewingPdf(signedDocument.url)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
+                      >
+                        <Eye size={14} /> View
+                      </button>
+                      <a
+                        href={signedDocument.url}
+                        download={signedDocument.name}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
+                      >
+                        <FileDown size={14} /> Download
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="relative flex flex-col items-center justify-center p-6 rounded-lg border-2 border-dashed border-gray-300 hover:border-[#FF5722] hover:bg-orange-50 transition-colors cursor-pointer">
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={documentUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onUploadSignedContract(file);
+                      }}
+                    />
+                    {documentUploading ? (
+                      <>
+                        <Loader2 size={24} className="text-gray-500 animate-spin" />
+                        <span className="mt-2 text-sm font-medium text-gray-600">Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FileUp size={24} className="text-gray-400" />
+                        <span className="mt-2 text-sm font-semibold text-[#FF5722]">Upload Signed Contract</span>
+                        <span className="mt-1 text-xs text-gray-500">PDF only, max 10MB</span>
+                      </>
+                    )}
+                  </label>
                 )}
               </div>
             </motion.div>
-
+            
+            {/* Employment Details Card (moved down) */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -768,6 +898,7 @@ const EmployeeDashboardPage: React.FC = () => {
               </div>
             </motion.div>
 
+            {/* Financial Details Card (moved down) */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -791,6 +922,11 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* PDF Viewer Modal */}
+      <AnimatePresence>
+        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} onClose={() => setViewingPdf(null)} />}
+      </AnimatePresence>
     </div>
   );
 };
