@@ -17,10 +17,7 @@ import {
   Building,
   CheckCircle,
   Clock,
-  AlertOctagon,
   Award,
-  ListTodo,
-  TrendingUp,
   Target
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -70,19 +67,6 @@ const formatDate = (dateString: string | null) => {
 };
 
 // --- REUSABLE UI COMPONENTS ---
-
-// A small card for key stats
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
-  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
-    <div className={`p-3 rounded-full ${color}`}>
-      <Icon size={20} className="text-white" />
-    </div>
-    <div>
-      <p className="text-sm font-medium text-gray-500">{title}</p>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-    </div>
-  </div>
-);
 
 // A single item in the task list
 const TaskItem: React.FC<{ task: Task; onStatusChange: (taskId: string, newStatus: Task['status']) => void; isUpdating: boolean }> = ({ task, onStatusChange, isUpdating }) => {
@@ -251,10 +235,6 @@ const EmployeeDashboardPage: React.FC = () => {
     );
   }
 
-  const pendingTasks = tasks.filter(t => t.status === 'pending').length;
-  const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
-  const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status !== 'completed').length;
-
   return (
     <div className="min-h-screen bg-gray-100">
       
@@ -281,20 +261,13 @@ const EmployeeDashboardPage: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* --- Welcome Message --- */}
-        <div className="mb-6">
+        <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900">
             Welcome back, {profile?.first_name || 'Employee'}!
           </h2>
-          <p className="text-lg text-gray-600">Here's what's happening today.</p>
         </div>
 
-        {/* --- Stat Cards --- */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <StatCard title="Total Tasks" value={tasks.length} icon={ListTodo} color="bg-blue-500" />
-          <StatCard title="Pending" value={pendingTasks} icon={Clock} color="bg-yellow-500" />
-          <StatCard title="In Progress" value={inProgressTasks} icon={TrendingUp} color="bg-indigo-500" />
-          <StatCard title="High Priority" value={highPriorityTasks} icon={AlertOctagon} color="bg-red-500" />
-        </div>
+        {/* --- Stat Cards (Removed) --- */}
 
         {/* --- Main Layout Grid --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
