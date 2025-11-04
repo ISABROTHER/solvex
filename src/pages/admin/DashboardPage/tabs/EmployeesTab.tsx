@@ -43,8 +43,15 @@ import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
-// We'll move these types to a shared file later
-import { Assignment, Milestone, AssignmentComment } from './AssignmentsTab'; 
+// Assignment types (simplified for employee tab)
+type Assignment = {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  due_date: string;
+  assignees: Array<{ id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }>;
+}; 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -343,9 +350,9 @@ const EmployeesTab: React.FC = () => {
   // --- Assignment Panel Handlers (Mocked) ---
   const handleUpdateStatus = (newStatus: string) => {
     if (!selectedAssignment) return;
-    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus as Status } : null);
-    setAssignments(prev => 
-      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus as Status } : a)
+    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
+    setAssignments(prev =>
+      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
     );
     addToast({ type: 'info', title: 'Status Updated' });
   };
