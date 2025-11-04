@@ -104,6 +104,42 @@ const statusMeta = (status: Task['status']) => {
 
 // --- REUSABLE UI ---
 
+// --- NEW PDF VIEWER MODAL ---
+const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
+  <AnimatePresence>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+      <motion.div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+      >
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+          {/* Use Google Docs viewer as a fallback for PDFs that browsers might block */}
+          <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg" 
+            title="PDF Viewer" 
+          />
+        </div>
+      </motion.div>
+    </div>
+  </AnimatePresence>
+);
+
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
   icon: Icon,
   label,
@@ -183,35 +219,6 @@ const TaskItem: React.FC<{
   );
 };
 
-// --- NEW PDF VIEWER MODAL ---
-const PdfViewerModal: React.FC<{ pdfUrl: string; onClose: () => void }> = ({ pdfUrl, onClose }) => (
-  <AnimatePresence>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
-      >
-        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
-          <h3 className="text-white font-semibold">Document Viewer</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="flex-1 p-2">
-          {/* Use Google Docs viewer as a fallback for PDFs that browsers might block */}
-          <iframe 
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
-            className="w-full h-full border-0 rounded-b-lg" 
-            title="PDF Viewer" 
-          />
-        </div>
-      </motion.div>
-    </div>
-  </AnimatePresence>
-);
-
 // --- MAIN ---
 
 const EmployeeDashboardPage: React.FC = () => {
@@ -240,9 +247,9 @@ const EmployeeDashboardPage: React.FC = () => {
   const [signedDocument, setSignedDocument] = useState<{ name: string; url: string } | null>(null);
   const [documentUploading, setDocumentUploading] = useState(false);
   const [viewingPdf, setViewingPdf] = useState<string | null>(null); // PDF URL for modal
+  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>(''); // Title for modal
   // Placeholder for the company's unsigned contract
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' };
-
+  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // You can change this URL
 
   useEffect(() => {
     if (user?.id) {
@@ -469,6 +476,13 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
+  // --- NEW: Helper to open PDF viewer ---
+  const handleViewPdf = (url: string, title: string) => {
+    setViewingPdf(url);
+    setViewingPdfTitle(title);
+  };
+
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-gray-50">
@@ -581,6 +595,7 @@ const EmployeeDashboardPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
           {/* --- MAIN CONTENT (TASKS) --- */}
+          {/* On mobile, this appears first. On desktop, it takes 3/5 width. */}
           <div className="lg:col-span-3 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -661,6 +676,7 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
 
           {/* --- SIDEBAR (PROFILE) --- */}
+          {/* On mobile, this appears second. On desktop, it takes 2/5 width. */}
           <div className="lg:col-span-2 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -804,20 +820,20 @@ const EmployeeDashboardPage: React.FC = () => {
               <div className="space-y-4">
                 
                 {/* Unsigned Contract */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
                   <span className="flex items-center gap-2.5 font-medium text-gray-700">
                     <FileText size={16} className="text-gray-500 flex-shrink-0" />
                     <span className="truncate">{unsignedContract.name}</span>
                   </span>
-                  <div className="flex gap-2 mt-2 sm:mt-0 sm:flex-shrink-0">
+                  <div className="flex gap-2 sm:flex-shrink-0">
                     <button
-                      onClick={() => setViewingPdf(unsignedContract.url)} // Use mock URL
+                      onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                     >
                       <Eye size={14} /> View
                     </button>
                     <a
-                      href={unsignedContract.url} // Use mock URL
+                      href={unsignedContract.url}
                       download="Employment_Contract_Unsigned.pdf"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                     >
@@ -828,14 +844,14 @@ const EmployeeDashboardPage: React.FC = () => {
 
                 {/* Signed Contract */}
                 {signedDocument ? (
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg bg-green-50 border border-green-200">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
                     <span className="flex items-center gap-2.5 font-medium text-green-800">
                       <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
-                      <span className="truncate">{signedDocument.name}</span>
+                      <span className="truncate" title={signedDocument.name}>{signedDocument.name}</span>
                     </span>
-                    <div className="flex gap-2 mt-2 sm:mt-0 sm:flex-shrink-0">
+                    <div className="flex gap-2 sm:flex-shrink-0">
                       <button
-                        onClick={() => setViewingPdf(signedDocument.url)}
+                        onClick={() => handleViewPdf(signedDocument.url, signedDocument.name)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
                       >
                         <Eye size={14} /> View
@@ -925,7 +941,13 @@ const EmployeeDashboardPage: React.FC = () => {
 
       {/* PDF Viewer Modal */}
       <AnimatePresence>
-        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} onClose={() => setViewingPdf(null)} />}
+        {viewingPdf && (
+          <PdfViewerModal 
+            pdfUrl={viewingPdf} 
+            title={viewingPdfTitle} 
+            onClose={() => setViewingPdf(null)} 
+          />
+        )}
       </AnimatePresence>
     </div>
   );
