@@ -1,35 +1,46 @@
 // src/pages/Profile.tsx
-import React from 'react';
-import useSWR from 'swr';
-import { getAuthedUserProfile, getMyTasks } from '../lib/supabase/operations';
+import React, { useState, useEffect, useCallback } from 'react';
+import { getMyTasks } from '../lib/supabase/operations';
 import { useAuth } from '../features/auth/AuthProvider';
 import { Loader2, AlertCircle } from 'lucide-react';
 import EmployeeProfileCard from '../components/profile/EmployeeProfileCard';
 import AvatarUploader from '../components/profile/AvatarUploader';
 import MyTasks from '../components/profile/MyTasks';
 import Card from './admin/DashboardPage/components/Card'; // Re-using Admin Card
+import type { Task } from '../lib/supabase/operations';
 
 const ProfilePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, profile, loading: loadingAuth, refreshProfile } = useAuth();
   
-  // Fetch profile data
-  const { 
-    data: profile, 
-    error: profileError, 
-    isLoading: loadingProfile,
-    mutate: mutateProfile // We'll use this to refresh after avatar upload
-  } = useSWR(user ? 'userProfile' : null, getAuthedUserProfile);
-  
-  // Fetch task data
-  const { 
-    data: tasksData, 
-    error: tasksError, 
-    isLoading: loadingTasks,
-    mutate: mutateTasks // To refresh tasks
-  } = useSWR(user ? 'myTasks' : null, getMyTasks);
+  // --- STATE FOR TASKS ---
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const isLoading = loadingProfile || loadingTasks;
-  const error = profileError || tasksError;
+  // --- DATA FETCHING ---
+  const fetchTasks = useCallback(async () => {
+    if (!user) return;
+    
+    setLoadingTasks(true);
+    setError(null);
+    try {
+      const { data, error: tasksError } = await getMyTasks();
+      if (tasksError) throw tasksError;
+      setTasks(data || []);
+    } catch (err: any) {
+      console.error("Error fetching tasks:", err);
+      setError(err.message || "Could not load tasks.");
+    } finally {
+      setLoadingTasks(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // --- RENDER ---
+  const isLoading = loadingAuth || loadingTasks;
 
   if (isLoading) {
     return (
@@ -39,19 +50,17 @@ const ProfilePage: React.FC = () => {
     );
   }
 
-  if (error || !profile?.data) {
+  if (error || !profile) {
     return (
       <Card title="Error">
         <div className="flex flex-col items-center justify-center py-10 text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
           <h3 className="text-xl font-semibold text-gray-800">Could not load profile</h3>
-          <p className="text-gray-600 mt-2">{error?.message || "An unknown error occurred."}</p>
+          <p className="text-gray-600 mt-2">{error || "User profile not found."}</p>
         </div>
       </Card>
     );
   }
-
-  const tasks = tasksData?.data || [];
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
@@ -64,18 +73,18 @@ const ProfilePage: React.FC = () => {
           <Card>
             <div className="flex flex-col items-center p-4">
               <AvatarUploader
-                currentAvatarUrl={profile.data.avatar_url}
+                currentAvatarUrl={profile.avatar_url}
                 onUploadSuccess={() => {
                   // Re-fetch the profile data to show new image
-                  mutateProfile(); 
+                  refreshProfile(); 
                 }}
               />
               <h2 className="mt-4 text-2xl font-semibold text-gray-900 text-center">
-                {profile.data.full_name}
+                {profile.full_name}
               </h2>
-              <p className="text-gray-600">{profile.data.position || 'Employee'}</p>
+              <p className="text-gray-600">{profile.position || 'Employee'}</p>
               <p className="text-sm text-gray-500 mt-1">
-                Employee #: {profile.data.employee_number || 'N/A'}
+                Employee #: {profile.employee_number || 'N/A'}
               </p>
             </div>
           </Card>
@@ -83,9 +92,9 @@ const ProfilePage: React.FC = () => {
         
         {/* Right Column (Details + Tasks) */}
         <div className="lg:col-span-2 space-y-8">
-          <EmployeeProfileCard profile={profile.data} />
+          <EmployeeProfileCard profile={profile} />
           
-          <MyTasks tasks={tasks} onUpdate={mutateTasks} />
+          <MyTasks tasks={tasks} onUpdate={fetchTasks} />
         </div>
         
       </div>
