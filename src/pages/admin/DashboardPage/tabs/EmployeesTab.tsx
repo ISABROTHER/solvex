@@ -31,8 +31,9 @@ import {
   Trash2,
   Edit2,
   PlusCircle,
-  Download, // <-- 1. IMPORT NEW ICONS
+  Download,
   UploadCloud,
+  ChevronDown, // <-- 1. IMPORT ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
@@ -42,7 +43,6 @@ import EmployeeEditModal from '../components/EmployeeEditModal';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
-// 2. DEFINE TYPE FOR NEW DOCUMENT TABLE
 type AdminDocument = Database['public']['Tables']['employee_documents']['Row'];
 
 // --- HELPERS ---
@@ -131,13 +131,14 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // Mock URL
   
-  // --- 3. STATE FOR ADMIN DOCUMENTS ---
+  // --- State for Admin Documents ---
   const [adminDocuments, setAdminDocuments] = useState<AdminDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [newDocName, setNewDocName] = useState('');
   const [newDocFile, setNewDocFile] = useState<File | null>(null);
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
+  const [showDocUpload, setShowDocUpload] = useState(false); // <-- 2. State for toggling form
 
   const fetchData = useCallback(async () => {
     // We don't set loading(true) here to avoid UI flicker on background refresh
@@ -186,7 +187,6 @@ const EmployeesTab: React.FC = () => {
       })
       .subscribe();
       
-    // 4. ADD REAL-TIME LISTENER FOR NEW DOCUMENTS
     const docsChannel = supabase
       .channel('public:employee_documents')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_documents' }, (payload) => {
@@ -200,11 +200,11 @@ const EmployeesTab: React.FC = () => {
     return () => {
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(taskChannel);
-      supabase.removeChannel(docsChannel); // Don't forget to unsubscribe
+      supabase.removeChannel(docsChannel);
     };
-  }, [fetchData, selectedEmployee]); // Add selectedEmployee to dependency array
+  }, [fetchData, selectedEmployee]);
 
-  // --- 5. FUNCTION TO FETCH ADMIN-UPLOADED DOCS ---
+  // --- Function to fetch admin-uploaded docs ---
   const fetchAdminDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
@@ -223,7 +223,7 @@ const EmployeesTab: React.FC = () => {
       }
   };
   
-  // --- 6. FETCH DOCS WHEN EMPLOYEE IS SELECTED ---
+  // --- Fetch docs when employee is selected ---
   useEffect(() => {
       if (selectedEmployee) {
           fetchAdminDocuments(selectedEmployee.id);
@@ -377,7 +377,7 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
   
-  // --- 7. HANDLERS FOR ADMIN DOCUMENT UPLOAD ---
+  // --- Handlers for Admin Document Upload ---
   const handleUploadAdminDoc = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!newDocFile || !newDocName.trim() || !selectedEmployee || !user) {
@@ -422,6 +422,7 @@ const EmployeesTab: React.FC = () => {
           addToast({ type: 'success', title: 'Document Uploaded!', message: `${newDocName} is now visible to ${selectedEmployee.first_name}.` });
           setNewDocName('');
           setNewDocFile(null);
+          setShowDocUpload(false); // <-- 3. Hide form on success
           // UI will auto-refresh via real-time listener
           
       } catch (err: any) {
@@ -563,9 +564,10 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
+              {/* --- 4. MODIFIED DOCUMENTS CARD --- */}
               <Card title="Documents">
                 <div className="space-y-4">
-                  {/* Unsigned Contract */}
+                  {/* --- Unsigned Contract --- */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
                     <span className="flex items-center gap-2.5 font-medium text-gray-700">
                       <FileText size={16} className="text-gray-500" />
@@ -576,7 +578,8 @@ const EmployeesTab: React.FC = () => {
                       <a href={unsignedContract.url} download="Employment_Contract_Unsigned.pdf" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><FileDown size={14} /> Download</a>
                     </div>
                   </div>
-                  {/* Signed Contract */}
+                  
+                  {/* --- Signed Contract (from employee) --- */}
                   {selectedEmployee.signed_contract_url ? (
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
                       <span className="flex items-center gap-2.5 font-medium text-green-800">
@@ -593,81 +596,103 @@ const EmployeesTab: React.FC = () => {
                       <p className="text-sm text-gray-500">Employee has not uploaded their signed contract.</p>
                     </div>
                   )}
-                </div>
-              </Card>
 
-              {/* --- 8. NEW ADMIN DOCUMENTS CARD --- */}
-              <Card title="Admin Documents">
-                <form onSubmit={handleUploadAdminDoc} className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                  <h4 className="font-medium text-gray-800">Upload New Document</h4>
-                  {docUploadError && (
-                    <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
-                      <AlertCircle size={16} /> {docUploadError}
-                    </div>
-                  )}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Document Name *</label>
-                    <input
-                      type="text"
-                      value={newDocName}
-                      onChange={(e) => setNewDocName(e.target.value)}
-                      placeholder="e.g., October 2025 Payslip"
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">File *</label>
-                    <input
-                      type="file"
-                      onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
-                      className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isUploadingDoc || !newDocFile || !newDocName}
-                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                  >
-                    {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-                    {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
-                  </button>
-                </form>
-                
-                <div className="border-t mt-4 pt-4">
-                  <h4 className="font-medium text-gray-800 mb-2">Uploaded Files</h4>
-                  {loadingDocs ? (
-                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-                  ) : adminDocuments.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-4">No documents uploaded for this employee.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {adminDocuments.map(doc => (
-                        <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-gray-200">
-                          <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                            <FileText size={16} className="text-gray-500" />
-                            <span className="truncate" title={doc.document_name}>{doc.document_name}</span>
-                          </span>
-                          <div className="flex gap-2 flex-shrink-0">
-                            <a
-                              href={doc.storage_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
-                            >
-                              <Download size={14} /> Download
-                            </a>
-                             <button
-                              onClick={() => handleDeleteAdminDoc(doc)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                  {/* --- Admin Uploaded Documents --- */}
+                  <div className="border-t pt-4 space-y-3">
+                    <h4 className="font-medium text-gray-800">Admin Uploads</h4>
+                    {loadingDocs ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                    ) : adminDocuments.length === 0 ? (
+                      <p className="text-sm text-gray-500 text-center py-2">No documents uploaded by admin.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {adminDocuments.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-gray-200">
+                            <span className="flex items-center gap-2.5 font-medium text-gray-700">
+                              <FileText size={16} className="text-gray-500" />
+                              <span className="truncate" title={doc.document_name}>{doc.document_name}</span>
+                            </span>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <a
+                                href={doc.storage_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                              >
+                                <Download size={14} /> Download
+                              </a>
+                              <button
+                                onClick={() => handleDeleteAdminDoc(doc)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* --- Upload Form Toggle Button --- */}
+                  <div className="border-t pt-4">
+                    <button
+                      onClick={() => setShowDocUpload(!showDocUpload)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700"
+                    >
+                      <span className="flex items-center gap-2">
+                        <UploadCloud size={16} />
+                        Upload Document
+                      </span>
+                      <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* --- Collapsible Upload Form --- */}
+                  <AnimatePresence>
+                    {showDocUpload && (
+                      <motion.form
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        onSubmit={handleUploadAdminDoc} 
+                        className="space-y-3 pt-4 overflow-hidden"
+                      >
+                        {docUploadError && (
+                          <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                            <AlertCircle size={16} /> {docUploadError}
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Document Name *</label>
+                          <input
+                            type="text"
+                            value={newDocName}
+                            onChange={(e) => setNewDocName(e.target.value)}
+                            placeholder="e.g., October 2025 Payslip"
+                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                          />
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">File *</label>
+                          <input
+                            type="file"
+                            onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
+                            className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          disabled={isUploadingDoc || !newDocFile || !newDocName}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                          {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
+                        </button>
+                      </motion.form>
+                    )}
+                  </AnimatePresence>
                 </div>
               </Card>
 
