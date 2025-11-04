@@ -821,49 +821,53 @@ const EmployeeDashboardPage: React.FC = () => {
                 
                 {/* Unsigned Contract */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <span className="flex items-center gap-2.5 font-medium text-gray-700">
+                  <span className="flex items-center gap-2.5 font-medium text-gray-700 min-w-0">
                     <FileText size={16} className="text-gray-500 flex-shrink-0" />
                     <span className="truncate">{unsignedContract.name}</span>
                   </span>
-                  <div className="flex gap-2 sm:flex-shrink-0">
+                  {/* --- FIX START --- */}
+                  <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0 sm:flex-shrink-0">
                     <button
                       onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                     >
                       <Eye size={14} /> View
                     </button>
                     <a
                       href={unsignedContract.url}
                       download="Employment_Contract_Unsigned.pdf"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                     >
                       <FileDown size={14} /> Download
                     </a>
                   </div>
+                  {/* --- FIX END --- */}
                 </div>
 
                 {/* Signed Contract */}
                 {signedDocument ? (
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                    <span className="flex items-center gap-2.5 font-medium text-green-800">
+                    <span className="flex items-center gap-2.5 font-medium text-green-800 min-w-0">
                       <CheckCircle size={16} className="text-green-600 flex-shrink-0" />
                       <span className="truncate" title={signedDocument.name}>{signedDocument.name}</span>
                     </span>
-                    <div className="flex gap-2 sm:flex-shrink-0">
+                    {/* --- FIX START --- */}
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto mt-2 sm:mt-0 sm:flex-shrink-0">
                       <button
                         onClick={() => handleViewPdf(signedDocument.url, signedDocument.name)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
                       >
                         <Eye size={14} /> View
                       </button>
                       <a
                         href={signedDocument.url}
                         download={signedDocument.name}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"
                       >
                         <FileDown size={14} /> Download
                       </a>
                     </div>
+                    {/* --- FIX END --- */}
                   </div>
                 ) : (
                   <label className="relative flex flex-col items-center justify-center p-6 rounded-lg border-2 border-dashed border-gray-300 hover:border-[#FF5722] hover:bg-orange-50 transition-colors cursor-pointer">
@@ -947,7 +951,7 @@ const EmployeeDashboardPage: React.FC = () => {
             title={viewingPdfTitle} 
             onClose={() => setViewingPdf(null)} 
           />
-        )} 
+        )}
       </AnimatePresence>
     </div>
   );
