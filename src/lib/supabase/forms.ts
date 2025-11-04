@@ -53,7 +53,7 @@ export const submitContactInquiry = async (data: any) => {
 
 /**
  * Submits data from the Career Application form.
- * This now correctly points to the 'job_applications' table.
+ * This now correctly points to the 'submitted_applications' table.
  */
 export const submitCareerApplication = async (data: CareerApplicationData) => {
   // We need to insert one row for EACH role the user applied for.
@@ -69,11 +69,11 @@ export const submitCareerApplication = async (data: CareerApplicationData) => {
   }));
 
   // Use type from generated types for type safety
-  type JobApplicationInsert = Database['public']['Tables']['job_applications']['Insert'];
+  type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert'];
 
   // Insert the array of application objects
   const { error } = await supabase
-    .from('job_applications')
+    .from('submitted_applications') // <-- CORRECTED TABLE NAME
     .insert(applications as JobApplicationInsert[]); // Cast to satisfy type-checker if needed
 
   if (error) {
