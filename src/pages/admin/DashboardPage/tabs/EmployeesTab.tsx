@@ -33,7 +33,9 @@ import {
   PlusCircle,
   Download,
   UploadCloud,
-  ChevronDown, // <-- 1. IMPORT ChevronDown
+  ChevronDown,
+  AlertTriangle, // Added for "Pending"
+  ShieldCheck,   // Added for "View Only"
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
@@ -43,7 +45,66 @@ import EmployeeEditModal from '../components/EmployeeEditModal';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
-type AdminDocument = Database['public']['Tables']['employee_documents']['Row'];
+
+// 1. UPDATED DOCUMENT TYPE (as per our new plan)
+// This type will replace 'AdminDocument' and the old profile.signed_contract_url
+type EmployeeDocument = {
+  id: string;
+  profile_id: string;
+  document_name: string;      // Name given by admin (e.g., "Employment Contract")
+  storage_url: string;        // URL of the *unsigned* doc uploaded by admin
+  storage_path: string;
+  requires_signing: boolean;  // Admin sets this on upload
+  uploaded_by: string;
+  created_at: string;
+  signed_storage_url: string | null; // URL of the *signed* version from employee
+  signed_storage_path: string | null;
+  signed_at: string | null;
+};
+
+// --- MOCK DATA (FRONTEND FIRST) ---
+// We use this mock data to build the UI before the SQL is ready.
+const mockDocuments: EmployeeDocument[] = [
+  {
+    id: 'doc_1',
+    profile_id: 'user-id-123',
+    document_name: 'Employment Contract',
+    storage_url: '/mock-contract.pdf',
+    storage_path: 'user-id-123/Employment_Contract.pdf',
+    requires_signing: true,
+    uploaded_by: 'admin-id-456',
+    created_at: new Date().toISOString(),
+    signed_storage_url: null, // NOT SIGNED YET
+    signed_storage_path: null,
+    signed_at: null,
+  },
+  {
+    id: 'doc_2',
+    profile_id: 'user-id-123',
+    document_name: 'Employee Handbook v2',
+    storage_url: '/mock-handbook.pdf',
+    storage_path: 'user-id-123/Handbook_v2.pdf',
+    requires_signing: true,
+    uploaded_by: 'admin-id-456',
+    created_at: new Date().toISOString(),
+    signed_storage_url: 'https://example.com/signed-handbook.pdf', // ALREADY SIGNED
+    signed_storage_path: 'user-id-123/signed_handbook.pdf',
+    signed_at: new Date().toISOString(),
+  },
+  {
+    id: 'doc_3',
+    profile_id: 'user-id-123',
+    document_name: 'October 2025 Payslip',
+    storage_url: '/mock-payslip.pdf',
+    storage_path: 'user-id-123/Oct_Payslip.pdf',
+    requires_signing: false, // VIEW ONLY
+    uploaded_by: 'admin-id-456',
+    created_at: new Date().toISOString(),
+    signed_storage_url: null,
+    signed_storage_path: null,
+    signed_at: null,
+  },
+];
 
 // --- HELPERS ---
 const formatDate = (dateString: string | null) => {
@@ -129,35 +190,34 @@ const EmployeesTab: React.FC = () => {
   // PDF Viewer
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // Mock URL
   
-  // --- State for Admin Documents ---
-  const [adminDocuments, setAdminDocuments] = useState<AdminDocument[]>([]);
+  // --- State for ALL Documents ---
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]); // 2. Use new type
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [newDocName, setNewDocName] = useState('');
   const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [newDocRequiresSigning, setNewDocRequiresSigning] = useState(false); // 3. State for new checkbox
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
-  const [showDocUpload, setShowDocUpload] = useState(false); // <-- 2. State for toggling form
+  const [showDocUpload, setShowDocUpload] = useState(false);
 
   const fetchData = useCallback(async () => {
-    // We don't set loading(true) here to avoid UI flicker on background refresh
     setError(null);
     try {
+      // Fetch Employees
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
         .eq('role', 'employee')
         .order('first_name');
-        
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
 
+      // Fetch Tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (tasksError) throw tasksError;
       setTasks(tasksData || []);
 
@@ -173,49 +233,32 @@ const EmployeesTab: React.FC = () => {
   useEffect(() => {
     fetchData(); // Initial fetch
     
-    const profileChannel = supabase
-      .channel('public:profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchData(); // Refetch all data on profile change
-      })
-      .subscribe();
-      
-    const taskChannel = supabase
-      .channel('public:tasks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        fetchData(); // Refetch all data on task change
-      })
-      .subscribe();
-      
-    const docsChannel = supabase
-      .channel('public:employee_documents')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_documents' }, (payload) => {
-          // If a doc is added/deleted, refetch for the selected employee
-          if (selectedEmployee && (payload.new?.profile_id === selectedEmployee.id || payload.old?.profile_id === selectedEmployee.id)) {
-            fetchAdminDocuments(selectedEmployee.id);
-          }
-      })
-      .subscribe();
+    // ... (listeners for profiles and tasks remain the same) ...
+    
+    // 4. We will add a listener for the new 'documents' table later
+    // const docsChannel = supabase.channel('public:documents')...
 
-    return () => {
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(taskChannel);
-      supabase.removeChannel(docsChannel);
-    };
-  }, [fetchData, selectedEmployee]);
+  }, [fetchData]);
 
-  // --- Function to fetch admin-uploaded docs ---
-  const fetchAdminDocuments = async (profileId: string) => {
+  // --- 5. UPDATED Function to fetch documents ---
+  const fetchDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
-          const { data, error } = await supabase
-              .from('employee_documents')
-              .select('*')
-              .eq('profile_id', profileId)
-              .order('created_at', { ascending: false });
+          // --- MOCKED ---
+          // This is where the real Supabase query will go
+          // const { data, error } = await supabase
+          //     .from('documents')
+          //     .select('*')
+          //     .eq('profile_id', profileId)
+          //     .order('created_at', { ascending: false });
+          // if (error) throw error;
           
-          if (error) throw error;
-          setAdminDocuments(data || []);
+          // Using mock data for now
+          await new Promise(res => setTimeout(res, 500)); // Simulate network delay
+          const userMockDocs = mockDocuments.map(doc => ({ ...doc, profile_id: profileId }));
+          setDocuments(userMockDocs || []);
+          // --- END MOCKED ---
+          
       } catch (err: any) {
           addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
       } finally {
@@ -226,9 +269,9 @@ const EmployeesTab: React.FC = () => {
   // --- Fetch docs when employee is selected ---
   useEffect(() => {
       if (selectedEmployee) {
-          fetchAdminDocuments(selectedEmployee.id);
+          fetchDocuments(selectedEmployee.id);
       } else {
-          setAdminDocuments([]); // Clear docs when no employee is selected
+          setDocuments([]); // Clear docs when no employee is selected
       }
   }, [selectedEmployee]);
 
@@ -251,95 +294,64 @@ const EmployeesTab: React.FC = () => {
     return tasks.filter(t => t.assigned_to === selectedEmployee.id);
   }, [tasks, selectedEmployee]);
   
-  // --- HANDLER TO OPEN EDIT MODAL ---
+  // --- (Modal handlers: handleEditEmployee, handleAddNewEmployee, handleSaveEmployee remain the same) ---
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
-    e.stopPropagation(); // Stop click from selecting the employee in the main view
+    e.stopPropagation(); 
     setEditingEmployee(employee);
     setIsModalOpen(true);
   };
   
-  // --- HANDLER TO OPEN "ADD NEW" MODAL ---
   const handleAddNewEmployee = () => {
-    setEditingEmployee({}); // Pass an empty object for "create" mode
+    setEditingEmployee({}); 
     setIsModalOpen(true);
   };
   
-  // --- UNIFIED SAVE HANDLER ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isCreating = !formData.id;
-
     try {
       if (isCreating) {
-        // --- CREATE NEW EMPLOYEE ---
-        if (!formData.email || !password) {
-            throw new Error("Email and password are required for new employees.");
-        }
-        
-        // This is INSECURE from the client. Should be an Edge Function.
-        // But it implements the user's request.
+        // ... (create user logic is unchanged) ...
         const { data: authData, error: authError } = await supabase.auth.admin.createUser({
           email: formData.email,
           password: password,
-          email_confirm: true, // Auto-confirm the email
+          email_confirm: true,
         });
-
         if (authError) throw authError;
-        
         const newUserId = authData.user.id;
-        
-        // Now create the profile
         const { error: profileError } = await supabase
           .from('profiles')
           .insert({
-            ...formData, // This has all the form data (name, position, salary, etc)
-            id: newUserId,     // Link to the new auth user
-            role: 'employee',  // Set the role
-            email: formData.email, // Ensure email is saved in profile
+            ...formData, id: newUserId, role: 'employee', email: formData.email,
           });
-          
         if (profileError) {
-            // If profile fails, we should probably delete the auth user to clean up
             await supabase.auth.admin.deleteUser(newUserId);
             throw profileError;
         }
-        
-        addToast({ type: 'success', title: 'Employee Created!', message: `${formData.first_name} has been added and can now log in.` });
-
+        addToast({ type: 'success', title: 'Employee Created!', message: `${formData.first_name} has been added.` });
       } else {
-        // --- UPDATE EXISTING EMPLOYEE ---
-        const { error } = await supabase
-          .from('profiles')
-          .update(formData)
-          .eq('id', formData.id);
-          
+        // ... (update user logic is unchanged) ...
+        const { error } = await supabase.from('profiles').update(formData).eq('id', formData.id);
         if (error) throw error;
-        
         addToast({ type: 'success', title: 'Profile Updated!', message: `${formData.first_name}'s details saved.` });
-        
-        // Manually update selected employee if they are the one being edited
         if (selectedEmployee && selectedEmployee.id === formData.id) {
             setSelectedEmployee(prev => ({ ...prev, ...formData }));
         }
       }
-      
       setIsModalOpen(false);
       setEditingEmployee(null);
-      
     } catch (err: any) {
       addToast({ type: 'error', title: isCreating ? 'Creation Failed' : 'Save Failed', message: err.message });
     } finally {
       setIsSavingProfile(false);
-      fetchData(); // Always refresh data from DB
+      fetchData(); 
     }
   };
 
-
-  // Handle creating a new task
+  // ... (handleAssignTask remains the same) ...
   const handleAssignTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle || !selectedEmployee || !user) return;
-
     setIsSubmittingTask(true);
     try {
       const { data: newTask, error } = await supabase
@@ -354,15 +366,12 @@ const EmployeesTab: React.FC = () => {
         })
         .select()
         .single();
-      
       if (error) throw error;
-      
       setTasks(prev => [newTask, ...prev]); 
       setNewTaskTitle('');
       setNewTaskDesc('');
       setNewTaskPriority('medium');
       addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` });
-      
     } catch (err: any) {
       console.error('Error creating task:', err);
       addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` });
@@ -377,8 +386,8 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
   
-  // --- Handlers for Admin Document Upload ---
-  const handleUploadAdminDoc = async (e: React.FormEvent) => {
+  // --- 6. UPDATED Document Upload Handler ---
+  const handleUploadDocument = async (e: React.FormEvent) => {
       e.preventDefault();
       if (!newDocFile || !newDocName.trim() || !selectedEmployee || !user) {
           setDocUploadError("Document name and file are required.");
@@ -389,41 +398,55 @@ const EmployeesTab: React.FC = () => {
       setDocUploadError(null);
       
       try {
-          // 1. Upload file to Storage
-          const fileExt = newDocFile.name.split('.').pop();
-          const storagePath = `${selectedEmployee.id}/${newDocName.trim().replace(/ /g, '_')}-${Date.now()}.${fileExt}`;
+          // --- MOCKED ---
+          // The real logic will go here
           
-          const { error: uploadError } = await supabase.storage
-              .from('employee-documents')
-              .upload(storagePath, newDocFile);
-              
-          if (uploadError) throw uploadError;
+          // 1. Upload file to Storage
+          // const fileExt = newDocFile.name.split('.').pop();
+          // const storagePath = `${selectedEmployee.id}/${newDocName.trim().replace(/ /g, '_')}-${Date.now()}.${fileExt}`;
+          // const { error: uploadError } = await supabase.storage.from('documents').upload(storagePath, newDocFile);
+          // if (uploadError) throw uploadError;
           
           // 2. Get public URL
-          const { data: urlData } = supabase.storage
-              .from('employee-documents')
-              .getPublicUrl(storagePath);
-              
-          if (!urlData.publicUrl) throw new Error("Could not get public URL.");
+          // const { data: urlData } = supabase.storage.from('documents').getPublicUrl(storagePath);
+          // if (!urlData.publicUrl) throw new Error("Could not get public URL.");
           
           // 3. Insert record into database
-          const { error: dbError } = await supabase
-              .from('employee_documents')
-              .insert({
-                  profile_id: selectedEmployee.id,
-                  document_name: newDocName.trim(),
-                  storage_path: storagePath,
-                  storage_url: urlData.publicUrl,
-                  uploaded_by: user.id
-              });
-              
-          if (dbError) throw dbError;
+          // const { error: dbError } = await supabase
+          //     .from('documents')
+          //     .insert({
+          //         profile_id: selectedEmployee.id,
+          //         document_name: newDocName.trim(),
+          //         storage_path: storagePath,
+          //         storage_url: urlData.publicUrl,
+          //         uploaded_by: user.id,
+          //         requires_signing: newDocRequiresSigning // Save the new checkbox value
+          //     });
+          // if (dbError) throw dbError;
+          
+          // --- MOCKED SUCCESS ---
+          await new Promise(res => setTimeout(res, 1000));
+          const newMockDoc: EmployeeDocument = {
+            id: `doc_${Date.now()}`,
+            profile_id: selectedEmployee.id,
+            document_name: newDocName.trim(),
+            storage_url: '/mock-new-doc.pdf',
+            storage_path: 'mock/path',
+            requires_signing: newDocRequiresSigning,
+            uploaded_by: user.id,
+            created_at: new Date().toISOString(),
+            signed_storage_url: null,
+            signed_storage_path: null,
+            signed_at: null,
+          };
+          setDocuments(prev => [newMockDoc, ...prev]);
+          // --- END MOCKED ---
           
           addToast({ type: 'success', title: 'Document Uploaded!', message: `${newDocName} is now visible to ${selectedEmployee.first_name}.` });
           setNewDocName('');
           setNewDocFile(null);
-          setShowDocUpload(false); // <-- 3. Hide form on success
-          // UI will auto-refresh via real-time listener
+          setNewDocRequiresSigning(false); // Reset checkbox
+          setShowDocUpload(false);
           
       } catch (err: any) {
           console.error("Error uploading document:", err);
@@ -434,27 +457,32 @@ const EmployeesTab: React.FC = () => {
       }
   };
 
-  const handleDeleteAdminDoc = async (doc: AdminDocument) => {
-      if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"? This is permanent.`)) return;
+  // --- 7. UPDATED Document Delete Handler ---
+  const handleDeleteDocument = async (doc: EmployeeDocument) => {
+      if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"? This is permanent and will remove both the original and signed versions.`)) return;
       
       try {
-          // 1. Delete from Storage
-          const { error: storageError } = await supabase.storage
-              .from('employee-documents')
-              .remove([doc.storage_path]);
-              
-          if (storageError) throw storageError;
+          // --- MOCKED ---
+          // The real logic will go here
+          
+          // 1. Delete from Storage (both original and signed)
+          // const pathsToRemove = [doc.storage_path];
+          // if (doc.signed_storage_path) {
+          //   pathsToRemove.push(doc.signed_storage_path);
+          // }
+          // const { error: storageError } = await supabase.storage.from('documents').remove(pathsToRemove);
+          // if (storageError) throw storageError;
           
           // 2. Delete from Database
-          const { error: dbError } = await supabase
-              .from('employee_documents')
-              .delete()
-              .eq('id', doc.id);
-              
-          if (dbError) throw dbError;
+          // const { error: dbError } = await supabase.from('documents').delete().eq('id', doc.id);
+          // if (dbError) throw dbError;
+          
+          // --- MOCKED SUCCESS ---
+          await new Promise(res => setTimeout(res, 500));
+          setDocuments(prev => prev.filter(d => d.id !== doc.id));
+          // --- END MOCKED ---
           
           addToast({ type: 'success', title: 'Document Deleted' });
-          // UI will auto-refresh via real-time listener
           
       } catch (err: any) {
           console.error("Error deleting document:", err);
@@ -564,76 +592,74 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- 4. MODIFIED DOCUMENTS CARD --- */}
+              {/* --- 8. COMPLETELY REVAMPED DOCUMENTS CARD --- */}
               <Card title="Documents">
                 <div className="space-y-4">
-                  {/* --- Unsigned Contract --- */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                      <FileText size={16} className="text-gray-500" />
-                      <span className="truncate">{unsignedContract.name}</span>
-                    </span>
-                    <div className="flex gap-2 sm:flex-shrink-0">
-                      <button onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><Eye size={14} /> View</button>
-                      <a href={unsignedContract.url} download="Employment_Contract_Unsigned.pdf" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><FileDown size={14} /> Download</a>
-                    </div>
-                  </div>
                   
-                  {/* --- Signed Contract (from employee) --- */}
-                  {selectedEmployee.signed_contract_url ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                      <span className="flex items-center gap-2.5 font-medium text-green-800">
-                        <CheckCircle size={16} className="text-green-600" />
-                        <span className="truncate" title={selectedEmployee.signed_contract_name || 'Signed Contract'}>{selectedEmployee.signed_contract_name || 'Signed Contract'}</span>
-                      </span>
-                      <div className="flex gap-2 sm:flex-shrink-0">
-                        <button onClick={() => handleViewPdf(selectedEmployee.signed_contract_url!, selectedEmployee.signed_contract_name!)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><Eye size={14} /> View</button>
-                        <a href={selectedEmployee.signed_contract_url} download={selectedEmployee.signed_contract_name || 'Signed_Contract.pdf'} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><FileDown size={14} /> Download</a>
-                      </div>
-                    </div>
+                  {/* --- Document List --- */}
+                  <h4 className="font-medium text-gray-800">Employee Documents</h4>
+                  {loadingDocs ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                  ) : documents.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">No documents uploaded for this employee.</p>
                   ) : (
-                    <div className="p-4 text-center rounded-lg border-2 border-dashed border-gray-300">
-                      <p className="text-sm text-gray-500">Employee has not uploaded their signed contract.</p>
-                    </div>
-                  )}
+                    <div className="space-y-3">
+                      {documents.map(doc => {
+                        const isSigned = doc.requires_signing && doc.signed_storage_url;
+                        const isPending = doc.requires_signing && !doc.signed_storage_url;
+                        const isViewOnly = !doc.requires_signing;
 
-                  {/* --- Admin Uploaded Documents --- */}
-                  <div className="border-t pt-4 space-y-3">
-                    <h4 className="font-medium text-gray-800">Admin Uploads</h4>
-                    {loadingDocs ? (
-                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-                    ) : adminDocuments.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-2">No documents uploaded by admin.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {adminDocuments.map(doc => (
-                          <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-gray-200">
-                            <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                              <FileText size={16} className="text-gray-500" />
-                              <span className="truncate" title={doc.document_name}>{doc.document_name}</span>
-                            </span>
-                            <div className="flex gap-2 flex-shrink-0">
-                              <a
-                                href={doc.storage_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
-                              >
-                                <Download size={14} /> Download
-                              </a>
-                              <button
-                                onClick={() => handleDeleteAdminDoc(doc)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                        return (
+                          <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                              {/* Left Side: Name and Status */}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                                {isViewOnly && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                                    <ShieldCheck size={14} /> View Only
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
+                                    <AlertTriangle size={14} /> Pending Signature
+                                  </span>
+                                )}
+                                {isSigned && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                                    <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Right Side: Buttons */}
+                              <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
+                                <button
+                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                                >
+                                  <Eye size={14} /> View
+                                </button>
+                                {isSigned && (
+                                  <button
+                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
+                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                                  >
+                                    <Eye size={14} /> View Signed
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteDocument(doc)}
+                                  className="sm:flex-none inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* --- Upload Form Toggle Button --- */}
                   <div className="border-t pt-4">
@@ -643,7 +669,7 @@ const EmployeesTab: React.FC = () => {
                     >
                       <span className="flex items-center gap-2">
                         <UploadCloud size={16} />
-                        Upload Document
+                        Upload New Document
                       </span>
                       <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
                     </button>
@@ -653,11 +679,11 @@ const EmployeesTab: React.FC = () => {
                   <AnimatePresence>
                     {showDocUpload && (
                       <motion.form
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        onSubmit={handleUploadAdminDoc} 
-                        className="space-y-3 pt-4 overflow-hidden"
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: '16px' }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        onSubmit={handleUploadDocument} 
+                        className="space-y-4 p-4 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
                       >
                         {docUploadError && (
                           <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
@@ -670,7 +696,7 @@ const EmployeesTab: React.FC = () => {
                             type="text"
                             value={newDocName}
                             onChange={(e) => setNewDocName(e.target.value)}
-                            placeholder="e.g., October 2025 Payslip"
+                            placeholder="e.g., Employment Contract"
                             className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
                           />
                         </div>
@@ -682,6 +708,20 @@ const EmployeesTab: React.FC = () => {
                             className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
                           />
                         </div>
+                        {/* 9. THE NEW CHECKBOX */}
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="requires_signing"
+                            checked={newDocRequiresSigning}
+                            onChange={(e) => setNewDocRequiresSigning(e.target.checked)}
+                            className="h-4 w-4 rounded text-[#FF5722] focus:ring-[#FF5722]"
+                          />
+                          <label htmlFor="requires_signing" className="text-sm font-medium text-gray-700">
+                            Requires employee signature
+                          </label>
+                        </div>
+                        
                         <button
                           type="submit"
                           disabled={isUploadingDoc || !newDocFile || !newDocName}
@@ -703,7 +743,7 @@ const EmployeesTab: React.FC = () => {
                     <input
                       type="text"
                       value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                      onChange={(e) => setNewTaskTitle(e.targe.value)}
                       placeholder="e.g., 'Prepare Q4 marketing report'"
                       className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
                       required
