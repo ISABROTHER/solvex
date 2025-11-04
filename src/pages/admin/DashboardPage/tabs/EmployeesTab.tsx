@@ -29,15 +29,14 @@ import {
   X,
   FileUp,
   Trash2,
-  Edit2, // <-- 1. IMPORT Edit2 ICON
+  Edit2, // Icon is correctly imported
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
-import EmployeeEditModal from '../components/EmployeeEditModal'; // <-- 2. IMPORT THE NEW MODAL
+import EmployeeEditModal from '../components/EmployeeEditModal'; // Import the modal
 
 // --- TYPE DEFINITIONS ---
 
-// 3. EXPORT THE PROFILE TYPE
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
 
@@ -110,7 +109,7 @@ const EmployeesTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null); // <-- 4. State for modal
+  const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
@@ -198,26 +197,33 @@ const EmployeesTab: React.FC = () => {
     return tasks.filter(t => t.assigned_to === selectedEmployee.id);
   }, [tasks, selectedEmployee]);
   
-  // --- 5. HANDLER TO OPEN EDIT MODAL ---
+  // --- HANDLER TO OPEN EDIT MODAL ---
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
     e.stopPropagation(); // Stop click from selecting the employee in the main view
     setEditingEmployee(employee);
     setIsModalOpen(true);
   };
   
-  // --- 6. HANDLER TO SAVE PROFILE CHANGES ---
+  // --- HANDLER TO SAVE PROFILE CHANGES ---
   const handleSaveProfile = async (updatedProfile: Profile) => {
     setIsSavingProfile(true);
     try {
+      // Remove properties that shouldn't be updated or are not in 'profiles' table
+      const { tasks, ...profileData } = updatedProfile;
+      
       const { error } = await supabase
         .from('profiles')
-        .update(updatedProfile)
+        .update(profileData)
         .eq('id', updatedProfile.id);
         
       if (error) throw error;
       
       addToast({ type: 'success', title: 'Profile Updated!', message: `${updatedProfile.first_name}'s details saved.` });
-      // Data will refresh automatically via Supabase listener
+      
+      // Manually update selected employee if they are the one being edited
+      if (selectedEmployee && selectedEmployee.id === updatedProfile.id) {
+          setSelectedEmployee(updatedProfile);
+      }
       
     } catch (err: any) {
       addToast({ type: 'error', title: 'Save Failed', message: err.message });
@@ -225,6 +231,7 @@ const EmployeesTab: React.FC = () => {
       setIsSavingProfile(false);
       setIsModalOpen(false);
       setEditingEmployee(null);
+      fetchData(); // Force refresh data from DB
     }
   };
 
@@ -296,10 +303,11 @@ const EmployeesTab: React.FC = () => {
         <div className="flex-1 overflow-y-auto -mr-6 -ml-6 pr-3 pl-6">
           <div className="space-y-2">
             {filteredEmployees.map(employee => (
-              <button
+              <div
                 key={employee.id}
                 onClick={() => setSelectedEmployee(employee)}
-                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg text-left transition-colors ${
+                // Use a div as the main clickable element
+                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer ${
                   selectedEmployee?.id === employee.id ? 'bg-[#FF5722]/10' : 'hover:bg-gray-50'
                 }`}
               >
@@ -316,15 +324,15 @@ const EmployeesTab: React.FC = () => {
                     <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
                   </div>
                 </div>
-                 {/* --- 7. ADD EDIT BUTTON --- */}
+                {/* --- FIX: Made button visible --- */}
                 <button
                   onClick={(e) => handleEditEmployee(e, employee)}
-                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors flex-shrink-0"
                   title={`Edit ${employee.first_name}`}
                 >
                   <Edit2 size={16} />
                 </button>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -478,7 +486,7 @@ const EmployeesTab: React.FC = () => {
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
       
-      {/* --- 8. ADD THE EDIT MODAL --- */}
+      {/* --- The Edit Modal --- */}
       <EmployeeEditModal
         isOpen={isModalOpen}
         onClose={() => {
