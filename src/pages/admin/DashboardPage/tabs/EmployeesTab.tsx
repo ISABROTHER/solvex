@@ -26,15 +26,26 @@ import {
   CheckCircle,
   Plus,
   Send,
-  X
+  X,
+  FileUp, // Added missing icon
+  Trash2, // Added missing icon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../../../../contexts/ToastContext'; // <-- 1. IMPORT useToast
+import { useToast } from '../../../../contexts/ToastContext'; // Import useToast
 
-// --- TYPES (from your EmployeeDashboard & DB Schema) ---
+// --- TYPE DEFINITIONS ---
 
 type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
+
+// --- 1. ADD THIS HELPER FUNCTION ---
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+// --- END OF FUNCTION ---
 
 // --- Reusable InfoRow (from EmployeeDashboard) ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
@@ -86,19 +97,11 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
-// --- 2. ADD HELPER FUNCTION ---
-const formatDate = (dateString: string | null) => {
-  if (!dateString) return 'N/A';
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-};
-
 // --- MAIN TAB COMPONENT ---
 
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
-  const { addToast } = useToast(); // <-- 3. INITIALIZE useToast
+  const { addToast } = useToast(); // Initialize toast
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,11 +201,11 @@ const EmployeesTab: React.FC = () => {
       setNewTaskTitle('');
       setNewTaskDesc('');
       setNewTaskPriority('medium');
-      addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` }); // <-- 4. USE TOAST
+      addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` });
       
     } catch (err: any) {
       console.error('Error creating task:', err);
-      addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` }); // <-- 4. USE TOAST
+      addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` });
     } finally {
       setIsSubmittingTask(false);
     }
@@ -288,7 +291,8 @@ const EmployeesTab: React.FC = () => {
 
               <Card title="Employment Details">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <InfoRow icon={Award} label="Position" value={selectedEmployee.position} />
+                  {/* <InfoRow icon={Award} label="Position" value={selectedEmployee.position} /> */} {/* 'Award' is not defined, replaced with Briefcase */}
+                  <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
                   <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
                   <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
@@ -348,7 +352,7 @@ const EmployeesTab: React.FC = () => {
                     <label className="text-sm font-medium text-gray-700">Description (Optional)</label>
                     <textarea
                       value={newTaskDesc}
-                      onChange={(e) => setNewTaskDesc(e.target.value)}
+                      onChange={(e) => setNewTaskDesc(e.targe.value)}
                       placeholder="Add more details..."
                       rows={3}
                       className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
