@@ -19,6 +19,7 @@ const icons = {
   services: Wrench,
   jobs: Briefcase,
   applications: FileCheck,
+  employees: Users, // <-- 1. ADD ICON
   settings: Settings,
 };
 
@@ -30,6 +31,7 @@ const navItems = [
   { name: 'Services', path: 'services', icon: 'services' },
   { name: 'Jobs', path: 'jobs', icon: 'jobs' },
   { name: 'Applications', path: 'applications', icon: 'applications' },
+  { name: 'Employees', path: 'employees', icon: 'employees' }, // <-- 2. ADD NAV ITEM
   { name: 'Settings', path: 'settings', icon: 'settings' },
 ];
 
