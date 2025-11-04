@@ -29,10 +29,11 @@ import {
   FileDown,
   FileUp,
   Eye,
-  Trash2 // <-- ADDED ICON
+  Trash2,
+  Home // <-- ADDED ICON
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../../contexts/ToastContext'; // <-- ADDED TOAST
+import { useToast } from '../../contexts/ToastContext'; 
 
 // --- TYPE DEFINITIONS ---
 
@@ -475,7 +476,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // --- NEW: FUNCTION TO REMOVE SIGNED CONTRACT ---
   const onRemoveSignedContract = async () => {
     if (!user?.id || !signedDocument || !profile?.signed_contract_url) return;
     
@@ -485,16 +485,13 @@ const EmployeeDashboardPage: React.FC = () => {
 
     setIsRemovingDocument(true);
     try {
-      // 1. Extract file path from URL
       const BUCKET = 'employee-documents';
       const url = profile.signed_contract_url;
-      const path = url.substring(url.indexOf(`/${BUCKET}/`) + BUCKET.length + 2); // Get path like 'userid/filename.pdf'
+      const path = url.substring(url.indexOf(`/${BUCKET}/`) + BUCKET.length + 2); 
 
-      // 2. Delete from Storage
       const { error: storageErr } = await supabase.storage.from(BUCKET).remove([path]);
-      if (storageErr) throw storageErr; // Throw error to be caught
+      if (storageErr) throw storageErr; 
 
-      // 3. Update profile to remove link
       const updates = {
         signed_contract_url: null,
         signed_contract_name: null
@@ -505,7 +502,6 @@ const EmployeeDashboardPage: React.FC = () => {
         .eq('id', user.id);
       if (profErr) throw profErr;
 
-      // 4. Update local state
       setSignedDocument(null);
       setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
       addToast({ type: 'success', title: 'Document Removed', message: 'You can now upload a new one.' });
@@ -518,8 +514,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-
-  // --- NEW: Helper to open PDF viewer ---
   const handleViewPdf = (url: string, title: string) => {
     setViewingPdf(url);
     setViewingPdfTitle(title);
@@ -547,9 +541,18 @@ const EmployeeDashboardPage: React.FC = () => {
             <h1 className="text-xl font-bold text-gray-900">Employee Dashboard</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* --- NEW BUTTON HERE --- */}
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
+              title="Main Site"
+            >
+              <Home size={16} />
+              <span className="hidden sm:inline">Main Site</span>
+            </a>
             <button
               onClick={fetchProfileAndTasks}
-              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
               title="Refresh"
             >
               <RefreshCw size={16} />
@@ -906,7 +909,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       >
                         <FileDown size={14} /> Download
                       </a>
-                      {/* --- NEW: REMOVE BUTTON --- */}
                       <button
                         onClick={onRemoveSignedContract}
                         disabled={isRemovingDocument}
