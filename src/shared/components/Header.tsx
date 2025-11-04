@@ -17,11 +17,11 @@ const mainNav = [
 const Header: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const { cart } = useCart();
+  const { cartCount } = useCart();
   const location = useLocation();
   const { user, loading, isAdmin, isClient, logout } = useAuth();
 
-  const cartItemCount = cart.length;
+  const cartItemCount = cartCount;
 
   useEffect(() => {
     const handleScroll = () => {
