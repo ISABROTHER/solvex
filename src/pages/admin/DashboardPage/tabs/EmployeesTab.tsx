@@ -30,16 +30,20 @@ import {
   FileUp,
   Trash2,
   Edit2,
-  PlusCircle, // <-- 1. IMPORT PlusCircle
+  PlusCircle,
+  Download, // <-- 1. IMPORT NEW ICONS
+  UploadCloud,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
-import EmployeeEditModal from '../components/EmployeeEditModal'; // Import the modal
+import EmployeeEditModal from '../components/EmployeeEditModal';
 
 // --- TYPE DEFINITIONS ---
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
+// 2. DEFINE TYPE FOR NEW DOCUMENT TABLE
+type AdminDocument = Database['public']['Tables']['employee_documents']['Row'];
 
 // --- HELPERS ---
 const formatDate = (dateString: string | null) => {
@@ -110,7 +114,7 @@ const EmployeesTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Partial<Profile> | null>(null); // Use Partial<Profile>
+  const [editingEmployee, setEditingEmployee] = useState<Partial<Profile> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
@@ -126,6 +130,14 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // Mock URL
+  
+  // --- 3. STATE FOR ADMIN DOCUMENTS ---
+  const [adminDocuments, setAdminDocuments] = useState<AdminDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     // We don't set loading(true) here to avoid UI flicker on background refresh
@@ -173,12 +185,53 @@ const EmployeesTab: React.FC = () => {
         fetchData(); // Refetch all data on task change
       })
       .subscribe();
+      
+    // 4. ADD REAL-TIME LISTENER FOR NEW DOCUMENTS
+    const docsChannel = supabase
+      .channel('public:employee_documents')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'employee_documents' }, (payload) => {
+          // If a doc is added/deleted, refetch for the selected employee
+          if (selectedEmployee && (payload.new?.profile_id === selectedEmployee.id || payload.old?.profile_id === selectedEmployee.id)) {
+            fetchAdminDocuments(selectedEmployee.id);
+          }
+      })
+      .subscribe();
 
     return () => {
       supabase.removeChannel(profileChannel);
       supabase.removeChannel(taskChannel);
+      supabase.removeChannel(docsChannel); // Don't forget to unsubscribe
     };
-  }, [fetchData]);
+  }, [fetchData, selectedEmployee]); // Add selectedEmployee to dependency array
+
+  // --- 5. FUNCTION TO FETCH ADMIN-UPLOADED DOCS ---
+  const fetchAdminDocuments = async (profileId: string) => {
+      setLoadingDocs(true);
+      try {
+          const { data, error } = await supabase
+              .from('employee_documents')
+              .select('*')
+              .eq('profile_id', profileId)
+              .order('created_at', { ascending: false });
+          
+          if (error) throw error;
+          setAdminDocuments(data || []);
+      } catch (err: any) {
+          addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
+      } finally {
+          setLoadingDocs(false);
+      }
+  };
+  
+  // --- 6. FETCH DOCS WHEN EMPLOYEE IS SELECTED ---
+  useEffect(() => {
+      if (selectedEmployee) {
+          fetchAdminDocuments(selectedEmployee.id);
+      } else {
+          setAdminDocuments([]); // Clear docs when no employee is selected
+      }
+  }, [selectedEmployee]);
+
 
   // Filter employees based on search
   const filteredEmployees = useMemo(() => {
@@ -205,13 +258,13 @@ const EmployeesTab: React.FC = () => {
     setIsModalOpen(true);
   };
   
-  // --- 2. HANDLER TO OPEN "ADD NEW" MODAL ---
+  // --- HANDLER TO OPEN "ADD NEW" MODAL ---
   const handleAddNewEmployee = () => {
     setEditingEmployee({}); // Pass an empty object for "create" mode
     setIsModalOpen(true);
   };
   
-  // --- 3. UNIFIED SAVE HANDLER ---
+  // --- UNIFIED SAVE HANDLER ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isCreating = !formData.id;
@@ -323,6 +376,91 @@ const EmployeesTab: React.FC = () => {
     setViewingPdf(url);
     setViewingPdfTitle(title);
   };
+  
+  // --- 7. HANDLERS FOR ADMIN DOCUMENT UPLOAD ---
+  const handleUploadAdminDoc = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!newDocFile || !newDocName.trim() || !selectedEmployee || !user) {
+          setDocUploadError("Document name and file are required.");
+          return;
+      }
+      
+      setIsUploadingDoc(true);
+      setDocUploadError(null);
+      
+      try {
+          // 1. Upload file to Storage
+          const fileExt = newDocFile.name.split('.').pop();
+          const storagePath = `${selectedEmployee.id}/${newDocName.trim().replace(/ /g, '_')}-${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+              .from('employee-documents')
+              .upload(storagePath, newDocFile);
+              
+          if (uploadError) throw uploadError;
+          
+          // 2. Get public URL
+          const { data: urlData } = supabase.storage
+              .from('employee-documents')
+              .getPublicUrl(storagePath);
+              
+          if (!urlData.publicUrl) throw new Error("Could not get public URL.");
+          
+          // 3. Insert record into database
+          const { error: dbError } = await supabase
+              .from('employee_documents')
+              .insert({
+                  profile_id: selectedEmployee.id,
+                  document_name: newDocName.trim(),
+                  storage_path: storagePath,
+                  storage_url: urlData.publicUrl,
+                  uploaded_by: user.id
+              });
+              
+          if (dbError) throw dbError;
+          
+          addToast({ type: 'success', title: 'Document Uploaded!', message: `${newDocName} is now visible to ${selectedEmployee.first_name}.` });
+          setNewDocName('');
+          setNewDocFile(null);
+          // UI will auto-refresh via real-time listener
+          
+      } catch (err: any) {
+          console.error("Error uploading document:", err);
+          setDocUploadError(err.message);
+          addToast({ type: 'error', title: 'Upload Failed', message: err.message });
+      } finally {
+          setIsUploadingDoc(false);
+      }
+  };
+
+  const handleDeleteAdminDoc = async (doc: AdminDocument) => {
+      if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"? This is permanent.`)) return;
+      
+      try {
+          // 1. Delete from Storage
+          const { error: storageError } = await supabase.storage
+              .from('employee-documents')
+              .remove([doc.storage_path]);
+              
+          if (storageError) throw storageError;
+          
+          // 2. Delete from Database
+          const { error: dbError } = await supabase
+              .from('employee_documents')
+              .delete()
+              .eq('id', doc.id);
+              
+          if (dbError) throw dbError;
+          
+          addToast({ type: 'success', title: 'Document Deleted' });
+          // UI will auto-refresh via real-time listener
+          
+      } catch (err: any) {
+          console.error("Error deleting document:", err);
+          addToast({ type: 'error', title: 'Delete Failed', message: err.message });
+      }
+  };
+
 
   if (loading && employees.length === 0) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
@@ -336,7 +474,6 @@ const EmployeesTab: React.FC = () => {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
       {/* --- Column 1: Employee List --- */}
       <Card className="lg:col-span-1 flex flex-col" title="Employees">
-        {/* --- 4. ADD "ADD NEW" BUTTON --- */}
         <button
           onClick={handleAddNewEmployee}
           className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
@@ -454,6 +591,81 @@ const EmployeesTab: React.FC = () => {
                   ) : (
                     <div className="p-4 text-center rounded-lg border-2 border-dashed border-gray-300">
                       <p className="text-sm text-gray-500">Employee has not uploaded their signed contract.</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+
+              {/* --- 8. NEW ADMIN DOCUMENTS CARD --- */}
+              <Card title="Admin Documents">
+                <form onSubmit={handleUploadAdminDoc} className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                  <h4 className="font-medium text-gray-800">Upload New Document</h4>
+                  {docUploadError && (
+                    <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                      <AlertCircle size={16} /> {docUploadError}
+                    </div>
+                  )}
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Document Name *</label>
+                    <input
+                      type="text"
+                      value={newDocName}
+                      onChange={(e) => setNewDocName(e.target.value)}
+                      placeholder="e.g., October 2025 Payslip"
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">File *</label>
+                    <input
+                      type="file"
+                      onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
+                      className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isUploadingDoc || !newDocFile || !newDocName}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                    {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
+                  </button>
+                </form>
+                
+                <div className="border-t mt-4 pt-4">
+                  <h4 className="font-medium text-gray-800 mb-2">Uploaded Files</h4>
+                  {loadingDocs ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                  ) : adminDocuments.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-4">No documents uploaded for this employee.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {adminDocuments.map(doc => (
+                        <div key={doc.id} className="flex items-center justify-between p-3 rounded-lg bg-white border border-gray-200">
+                          <span className="flex items-center gap-2.5 font-medium text-gray-700">
+                            <FileText size={16} className="text-gray-500" />
+                            <span className="truncate" title={doc.document_name}>{doc.document_name}</span>
+                          </span>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <a
+                              href={doc.storage_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              download
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                            >
+                              <Download size={14} /> Download
+                            </a>
+                             <button
+                              onClick={() => handleDeleteAdminDoc(doc)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-red-200 text-red-600 bg-red-50 hover:bg-red-100"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
