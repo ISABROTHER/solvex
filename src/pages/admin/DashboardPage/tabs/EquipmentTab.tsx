@@ -60,7 +60,7 @@ const EditEquipmentModal = ({ isOpen, onClose, equipment, onSave }) => {
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="px-4 py-2 font-semibold text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">Save Changes</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save Changes</button>
         </div>
       </div>
     </div>
@@ -188,8 +188,10 @@ const EquipmentTab: React.FC = () => {
             <thead className="bg-gray-50">
               <tr className="text-left text-gray-600">
                 <th className="px-4 py-2 font-semibold">Name</th>
-                <th className="px-4 py-2 font-semibold">Category</th>
-                <th className="px-4 py-2 font-semibold">Price/Day</th>
+                {/* --- MODIFICATION: Hidden on mobile --- */}
+                <th className="px-4 py-2 font-semibold hidden md:table-cell">Category</th>
+                <th className="px-4 py-2 font-semibold hidden md:table-cell">Price/Day</th>
+                {/* --- END MODIFICATION --- */}
                 <th className="px-4 py-2 font-semibold text-center">Status</th>
                 <th className="px-4 py-2 font-semibold text-right">Actions</th>
               </tr>
@@ -200,8 +202,10 @@ const EquipmentTab: React.FC = () => {
                 return (
                   <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
-                    <td className="px-4 py-3 text-gray-600">{item.category}</td>
-                    <td className="px-4 py-3 text-gray-600">GHS {item.price_per_day ? parseFloat(item.price_per_day).toFixed(2) : 'N/A'}</td> 
+                    {/* --- MODIFICATION: Hidden on mobile --- */}
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{item.category}</td>
+                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">GHS {item.price_per_day ? parseFloat(item.price_per_day).toFixed(2) : 'N/A'}</td> 
+                    {/* --- END MODIFICATION --- */}
                     <td className="px-4 py-3 text-center">
                         <button
                             onClick={() => handleToggleAvailability(item)}
@@ -241,7 +245,7 @@ const EquipmentTab: React.FC = () => {
         <p className="text-sm text-gray-600 mb-4">The most common reason for **"Failed to Update"** is a missing **Row Level Security (RLS)** policy that grants the authenticated admin user write access. You should run the database sync to ensure the necessary policies are applied.</p>
         <button
             onClick={() => addToast({ type: 'info', title: 'Action Required', message: 'Please navigate to the Settings tab and click "Sync Now" to fix RLS permissions.' })}
-            className="flex items-center gap-2 bg-[#FF5722] text-white px-4 py-2 rounded-lg hover:bg-[#E64A19] transition-colors"
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Database className="w-4 h-4" /> Go to Settings Tab to Sync
         </button>
