@@ -18,12 +18,15 @@ const AdminRoute: React.FC = () => {
     );
   }
 
+  // Redirect employees to their dashboard
+  if (isAuthenticated && role === 'employee') {
+    console.warn(`AdminRoute: Employee trying to access admin area. Redirecting to employee dashboard.`);
+    return <Navigate to="/employee/dashboard" replace />;
+  }
+
   // Redirect to login if not authenticated OR if role is explicitly NOT 'admin'
-  // We allow null role briefly during loading, but not after loading is complete.
   if (!isAuthenticated || role !== 'admin') {
      console.warn(`AdminRoute: Access DENIED. isAuthenticated: ${isAuthenticated}, Role: ${role}, isLoading: ${isLoading}`);
-    // Redirect them to the login page, passing the current location
-    // So they can redirect back after logging in successfully as admin
     return <Navigate to="/my-page" state={{ from: location, defaultTab: 'admin' }} replace />;
   }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // --- CONTEXT & AUTH IMPORTS ---
-import { AuthProvider, ClientRoute, AdminRoute, MyPage } from './features/auth';
+import { AuthProvider, ClientRoute, AdminRoute, EmployeeRoute, MyPage } from './features/auth';
 import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext'; // ADD THIS LINE
@@ -32,6 +32,7 @@ import ProfilePage from './pages/client/ProfilePage';
 import RequestsPage from './pages/client/RequestsPage';
 import RequestDetailPage from './pages/client/RequestDetailPage';
 import NewRequestPage from './pages/client/NewRequestPage';
+import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
 
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
@@ -85,6 +86,11 @@ function App() {
                     <Route path="/client/new" element={<NewRequestPage />} />
                     <Route path="/client/requests/:id" element={<RequestDetailPage />} />
                   </Route>
+                </Route>
+
+                {/* Employee-Only Pages */}
+                <Route element={<EmployeeRoute />}>
+                  <Route path="/employee/dashboard" element={<EmployeeDashboardPage />} />
                 </Route>
 
                 {/* Fallback Redirect */}
