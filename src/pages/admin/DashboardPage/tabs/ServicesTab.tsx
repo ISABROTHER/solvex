@@ -168,7 +168,7 @@ const ServicesTab: React.FC = () => {
         </div>
         <div className="flex justify-end gap-4 mt-6">
           <button onClick={handleCancel} className="px-4 py-2 font-semibold text-gray-700 rounded-lg hover:bg-gray-100">Cancel</button>
-          <button onClick={handleSave} className="px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19]">Save</button>
+          <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700">Save</button>
         </div>
       </Card>
     );
@@ -201,7 +201,7 @@ const ServicesTab: React.FC = () => {
         <div className="text-center py-12 text-gray-500">
           <p>{view === 'active' ? 'No active services found.' : 'The trash is empty.'}</p>
           {view === 'active' && services.length === 0 && deletedServices.length === 0 && (
-             <button onClick={handleSeedDatabase} className="mt-4 flex items-center gap-2 mx-auto bg-[#FF5722] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-[#E64A19]">
+             <button onClick={handleSeedDatabase} className="mt-4 flex items-center gap-2 mx-auto bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700">
                <Database size={16} /> Seed Initial Services
              </button>
           )}
@@ -209,10 +209,12 @@ const ServicesTab: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {currentList.map(service => (
-            <div key={service.id} className={`flex items-center justify-between p-4 rounded-lg border ${view === 'deleted' ? 'bg-red-50 border-red-200' : 'bg-gray-50'}`}>
-              <div className="flex items-center gap-4">
+            // --- MODIFICATION: Make layout vertical on mobile ---
+            <div key={service.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-lg border ${view === 'deleted' ? 'bg-red-50 border-red-200' : 'bg-gray-50'}`}>
+              <div className="flex items-center gap-4 w-full">
+            {/* --- END MODIFICATION --- */}
                 <img src={service.image_url || 'https://via.placeholder.com/150'} alt={service.title} className="w-16 h-16 object-cover rounded-md bg-gray-200" style={{ objectFit: (service.image_fit || 'cover') as any, objectPosition: service.image_position || 'center', transform: `rotate(${service.image_rotation || 0}deg)` }} />
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-3">
                     <h4 className="font-bold text-gray-800">{service.title}</h4>
                     {view === 'active' && (
@@ -224,7 +226,9 @@ const ServicesTab: React.FC = () => {
                   <p className="text-xs text-gray-600 max-w-md mt-1">{service.summary}</p>
                 </div>
               </div>
-              <div className="flex gap-2">
+              {/* --- MODIFICATION: Align buttons to the end on mobile --- */}
+              <div className="flex gap-2 self-end mt-4 md:mt-0">
+              {/* --- END MODIFICATION --- */}
                 {view === 'active' ? (
                   <>
                     <button onClick={() => handlePublish(service)} className={`p-2 rounded-md ${service.status === 'published' ? 'text-gray-500 bg-gray-200 hover:bg-gray-300' : 'text-green-600 bg-green-100 hover:bg-green-200'}`} aria-label={service.status === 'published' ? `Unpublish ${service.title}` : `Publish ${service.title}`}>
@@ -234,7 +238,7 @@ const ServicesTab: React.FC = () => {
                     <button onClick={() => handleDelete(service)} className="p-2 text-red-500 hover:bg-red-100 rounded-md" aria-label={`Delete ${service.title}`}><Trash2 size={16} /></button>
                   </>
                 ) : (
-                   <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-[#FF5722] bg-orange-100 hover:bg-orange-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
+                   <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-blue-600 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
                     <RotateCcw size={16} /> Restore
                   </button>
                 )}
