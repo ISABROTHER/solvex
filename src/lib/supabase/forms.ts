@@ -1,90 +1,357 @@
-// src/lib/supabase/forms.ts
-import { supabase } from './client';
-import type { Database } from './database.types';
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
-// Define the shape of the application data coming from the form
-interface CareerApplicationData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  countryCode: string;
-  coverLetter: string;
-  portfolioUrl?: string;
-  appliedRoles: string[]; // This should be an array of job_position IDs
-}
-
-interface AccessRequestData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  company?: string;
-  reason?: string;
-}
-
-// Add other form data interfaces (Contact, Rental) if needed
-
-export const supabaseForms = {
-  /**
-   * Submits data from the Request Access form.
-   */
-  submitAccessRequest: async (data: AccessRequestData) => {
-    const { error } = await (supabase
-      .from('access_requests') as any) // Cast as 'any' to avoid type issues if table isn't in generated types
-      .insert({
-        first_name: data.firstName,
-        last_name: data.lastName,
-        email: data.email,
-        phone: data.phone,
-        company_name: data.company,
-        reason: data.reason,
-        status: 'pending',
-      });
-    return { error };
-  },
-
-};
-
-export const submitContactInquiry = async (data: any) => {
-  console.warn('submitContactInquiry not implemented');
-  return { error: null };
-};
-
-/**
- * Submits data from the Career Application form.
- * This now correctly points to the 'submitted_applications' table.
- */
-export const submitCareerApplication = async (data: CareerApplicationData) => {
-  // We need to insert one row for EACH role the user applied for.
-  const applications = data.appliedRoles.map(roleId => ({
-    full_name: `${data.firstName} ${data.lastName}`,
-    email: data.email,
-    phone: data.phone,
-    country_code: data.countryCode,
-    cover_letter: data.coverLetter,
-    portfolio_url: data.portfolioUrl,
-    job_position_id: roleId, // Link to the job_positions table
-    status: 'pending' as 'pending', // Default status
-  }));
-
-  // Use type from generated types for type safety
-  type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert'];
-
-  // Insert the array of application objects
-  const { error } = await supabase
-    .from('submitted_applications') // <-- CORRECTED TABLE NAME
-    .insert(applications as JobApplicationInsert[]); // Cast to satisfy type-checker if needed
-
-  if (error) {
-    console.error('Supabase career application error:', error);
+export interface Database {
+  public: {
+    Tables: {
+      access_requests: {
+        Row: {
+          id: string
+          first_name: string
+          last_name: string
+          email: string
+          phone: string
+          company_name: string | null
+          reason: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          first_name: string
+          last_name: string
+          email: string
+          phone: string
+          company_name?: string | null
+          reason?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          first_name?: string
+          last_name?: string
+          email?: string
+          phone?: string
+          company_name?: string | null
+          reason?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      profiles: {
+        Row: {
+          id: string
+          role: string
+          first_name: string | null
+          last_name: string | null
+          email: string | null
+          phone: string | null
+          company: string | null
+          updated_at: string
+          created_at: string
+        }
+        Insert: {
+          id: string
+          role: string
+          first_name?: string | null
+          last_name?: string | null
+          email?: string | null
+          phone?: string | null
+          company?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          role?: string
+          first_name?: string | null
+          last_name?: string | null
+          email?: string | null
+          phone?: string | null
+          company?: string | null
+          updated_at?: string
+          created_at?: string
+        }
+      }
+      services: {
+        Row: {
+          id: string
+          title: string
+          summary: string | null
+          image_url: string | null
+          title_color: string | null
+          description: string | null
+          sub_services: string[] | null
+          outcome: string | null
+          status: string | null
+          is_deleted: boolean
+          deleted_at: string | null
+          image_fit: string | null
+          image_position: string | null
+          image_rotation: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          summary?: string | null
+          image_url?: string | null
+          title_color?: string | null
+          description?: string | null
+          sub_services?: string[] | null
+          outcome?: string | null
+          status?: string | null
+          is_deleted?: boolean
+          deleted_at?: string | null
+          image_fit?: string | null
+          image_position?: string | null
+          image_rotation?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          summary?: string | null
+          image_url?: string | null
+          title_color?: string | null
+          description?: string | null
+          sub_services?: string[] | null
+          outcome?: string | null
+          status?: string | null
+          is_deleted?: boolean
+          deleted_at?: string | null
+          image_fit?: string | null
+          image_position?: string | null
+          image_rotation?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      rental_gear: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          category: string | null
+          price_per_day: number
+          is_available: boolean
+          image_url: string | null
+          video_url: string | null
+          features: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          category?: string | null
+          price_per_day: number
+          is_available?: boolean
+          image_url?: string | null
+          video_url?: string | null
+          features?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          category?: string | null
+          price_per_day?: number
+          is_available?: boolean
+          image_url?: string | null
+          video_url?: string | null
+          features?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      teams: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          image_url: string | null
+          display_order: number | null
+          is_deleted: boolean | null
+          deleted_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          image_url?: string | null
+          display_order?: number | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          image_url?: string | null
+          display_order?: number | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      job_positions: {
+        Row: {
+          id: string
+          title: string
+          description: string | null
+          team_name: string
+          team_id: string | null
+          requirements: string | null
+          status: string | null
+          is_deleted: boolean | null
+          deleted_at: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          description?: string | null
+          team_name: string
+          team_id?: string | null
+          requirements?: string | null
+          status?: string | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: string | null
+          team_name?: string
+          team_id?: string | null
+          requirements?: string | null
+          status?: string | null
+          is_deleted?: boolean | null
+          deleted_at?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      job_applications: {
+        Row: {
+          id: string
+          first_name: string // <-- UPDATED
+          last_name: string // <-- UPDATED
+          email: string
+          phone: string
+          country_code: string
+          job_position_id: string | null
+          position_title: string | null
+          cover_letter: string | null
+          portfolio_url: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          first_name: string // <-- UPDATED
+          last_name: string // <-- UPDATED
+          email: string
+          phone: string
+          country_code: string
+          job_position_id?: string | null
+          position_title?: string | null
+          cover_letter?: string | null
+          portfolio_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          first_name?: string // <-- UPDATED
+          last_name?: string // <-- UPDATED
+          email?: string
+          phone?: string
+          country_code?: string
+          job_position_id?: string | null
+          position_title?: string | null
+          cover_letter?: string | null
+          portfolio_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      submitted_applications: {
+        Row: {
+          id: string
+          first_name: string // <-- UPDATED
+          last_name: string // <-- UPDATED
+          email: string
+          phone: string
+          country_code: string
+          job_position_id: string | null
+          position_title: string | null
+          cover_letter: string | null
+          portfolio_url: string | null
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          first_name: string // <-- UPDATED
+          last_name: string // <-- UPDATED
+          email: string
+          phone: string
+          country_code: string
+          job_position_id?: string | null
+          position_title?: string | null
+          cover_letter?: string | null
+          portfolio_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          first_name?: string // <-- UPDATED
+          last_name?: string // <-- UPDATED
+          email?: string
+          phone?: string
+          country_code?: string
+          job_position_id?: string | null
+          position_title?: string | null
+          cover_letter?: string | null
+          portfolio_url?: string | null
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+    }
+    Views: {}
+    Functions: {}
+    Enums: {}
   }
-
-  return { error };
-};
-
-
-export const submitRentalBooking = async (data: any) => {
-  console.warn('submitRentalBooking not implemented');
-  return { error: null };
-};
+}
