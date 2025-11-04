@@ -36,29 +36,29 @@ import {
   ChevronDown,
   AlertTriangle,
   ShieldCheck,
-  List, // <-- 1. IMPORT List
+  List,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
-// 2. IMPORT THE ASSIGNMENT COMPONENTS FROM LAST TIME
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
-// 3. IMPORT THE NEW ASSIGNMENT TYPES (we'll move these to a shared file later)
+// We'll move these types to a shared file later
 import { Assignment, Milestone, AssignmentComment } from './AssignmentsTab'; 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
-// 4. THIS TYPE IS NOW DEPRECATED
-// type Task = Database['public']['Tables']['tasks']['Row']; 
 type EmployeeDocument = {
-  // ... (document type definition remains)
-  id: string, document_name: string, storage_url: string, requires_signing: boolean,
-  signed_storage_url: string | null, signed_at: string | null
+  id: string;
+  profile_id: string;
+  document_name: string;
+  storage_url: string;
+  requires_signing: boolean;
+  signed_storage_url: string | null;
+  signed_at: string | null;
 };
 
 // --- MOCK DATA (FRONTEND-FIRST) ---
-// We'll use this to populate the new UI
 const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
 const MOCK_ASSIGNMENTS: Assignment[] = [
   {
@@ -68,7 +68,6 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     status: 'In Progress',
     due_date: '2025-11-15',
     assignees: [MOCK_USER_1],
-    //... (other fields added in panel)
   },
   {
     id: 'assign_3',
@@ -77,7 +76,6 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     status: 'Overdue',
     due_date: '2025-11-03',
     assignees: [MOCK_USER_1],
-    //... (other fields added in panel)
   },
 ];
 const MOCK_DOCUMENTS: EmployeeDocument[] = [
@@ -87,7 +85,7 @@ const MOCK_DOCUMENTS: EmployeeDocument[] = [
 // --- END MOCK DATA ---
 
 
-// --- HELPERS ---
+// --- 1. ADDED HELPER FUNCTION BACK (FIXES BLANK SCREEN) ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
@@ -95,7 +93,7 @@ const formatDate = (dateString: string | null) => {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-// ... (InfoRow and PdfViewerModal components remain unchanged) ...
+// --- Reusable InfoRow ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
   icon: Icon,
   label,
@@ -109,6 +107,8 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
     </div>
   </div>
 );
+
+// --- Reusable PDF Viewer ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
@@ -148,7 +148,6 @@ const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
-  // const [tasks, setTasks] = useState<Task[]>([]); // 5. REMOVED
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -158,8 +157,6 @@ const EmployeesTab: React.FC = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // --- 6. REMOVED Task Form State ---
 
   // --- State for Documents ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
@@ -175,13 +172,12 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- 7. NEW STATE FOR ASSIGNMENTS ---
+  // --- State for Assignments ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
   const [isSavingAssignment, setIsSavingAssignment] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
-
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -193,9 +189,6 @@ const EmployeesTab: React.FC = () => {
         .order('first_name');
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
-      
-      // 8. REMOVED task fetch
-      
     } catch (err: any) {
       console.error('Error fetching employee data:', err);
       setError('Failed to load employee data. Check RLS policies.');
@@ -205,30 +198,16 @@ const EmployeesTab: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    fetchData(); // Initial fetch
-    
-    // ... (profileChannel listener remains) ...
-    // ... (docsChannel listener remains) ...
-    
-    // 9. We'll add a real-time listener for 'assignments' later
-    
+    fetchData(); 
+    // ... (listeners will be added here later) ...
   }, [fetchData]);
 
-  // --- 10. NEW: Function to fetch assignments for selected employee ---
+  // --- Function to fetch assignments ---
   const fetchAssignments = async (profileId: string) => {
     setLoadingAssignments(true);
     try {
-      // --- MOCKED ---
-      // Real query:
-      // const { data, error } = await supabase
-      //   .from('assignments')
-      //   .select('*, assignees:assignment_assignees(profile_id)')
-      //   .eq('assignees.profile_id', profileId)
-      // if (error) throw error;
-      
       await new Promise(res => setTimeout(res, 500)); // Simulate load
       setAssignments(MOCK_ASSIGNMENTS);
-      // --- END MOCKED ---
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
     } finally {
@@ -240,10 +219,8 @@ const EmployeesTab: React.FC = () => {
   const fetchDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
-          // --- MOCKED ---
           await new Promise(res => setTimeout(res, 500)); 
           setDocuments(MOCK_DOCUMENTS);
-          // --- END MOCKED ---
       } catch (err: any) {
           addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
       } finally {
@@ -251,17 +228,16 @@ const EmployeesTab: React.FC = () => {
       }
   };
   
-  // --- Fetch docs AND assignments when employee is selected ---
+  // --- Fetch data on employee selection ---
   useEffect(() => {
       if (selectedEmployee) {
           fetchDocuments(selectedEmployee.id);
-          fetchAssignments(selectedEmployee.id); // 11. ADDED
+          fetchAssignments(selectedEmployee.id);
       } else {
           setDocuments([]); 
-          setAssignments([]); // 11. ADDED
+          setAssignments([]);
       }
   }, [selectedEmployee]);
-
 
   // Filter employees
   const filteredEmployees = useMemo(() => {
@@ -275,9 +251,7 @@ const EmployeesTab: React.FC = () => {
     );
   }, [employees, searchQuery]);
   
-  // 12. REMOVED 'employeeTasks' useMemo
-
-  // ... (Employee modal handlers remain unchanged) ...
+  // --- Employee Modal Handlers ---
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
     e.stopPropagation(); 
     setEditingEmployee(employee);
@@ -288,42 +262,83 @@ const EmployeesTab: React.FC = () => {
     setIsModalOpen(true);
   };
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
-    // ... (logic is unchanged) ...
+    // ... (Mocked logic) ...
+    setIsSavingProfile(true);
+    await new Promise(res => setTimeout(res, 1000));
+    addToast({ type: 'success', title: 'Employee Saved (Mock)' });
+    setIsSavingProfile(false);
+    setIsModalOpen(false);
+    setEditingEmployee(null);
   };
   
-  // 13. REMOVED 'handleAssignTask'
-  
-  // ... (Document handlers remain unchanged) ...
+  // --- Document Handlers ---
   const handleViewPdf = (url: string, title: string) => {
     setViewingPdf(url);
     setViewingPdfTitle(title);
   };
+  
   const handleUploadDocument = async (e: React.FormEvent) => {
-    // ... (logic is unchanged) ...
+    e.preventDefault();
+    if (!newDocFile || !newDocName.trim()) {
+        setDocUploadError("Document name and file are required.");
+        return;
+    }
+    setIsUploadingDoc(true);
+    setDocUploadError(null);
+    try {
+      // --- MOCKED SUCCESS ---
+      await new Promise(res => setTimeout(res, 1000));
+      const newMockDoc: EmployeeDocument = {
+        id: `doc_${Date.now()}`,
+        document_name: newDocName.trim(),
+        storage_url: '/mock-new-doc.pdf',
+        requires_signing: newDocRequiresSigning,
+        signed_storage_url: null,
+        signed_at: null,
+      };
+      setDocuments(prev => [newMockDoc, ...prev]);
+      // --- END MOCKED ---
+      addToast({ type: 'success', title: 'Document Uploaded!' });
+      setNewDocName('');
+      setNewDocFile(null);
+      setNewDocRequiresSigning(false);
+      setShowDocUpload(false);
+    } catch (err: any) {
+      setDocUploadError(err.message);
+      addToast({ type: 'error', title: 'Upload Failed', message: err.message });
+    } finally {
+      setIsUploadingDoc(false);
+    }
   };
+
   const handleDeleteDocument = async (doc: EmployeeDocument) => {
-     // ... (logic is unchanged) ...
+    if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"?`)) return;
+    try {
+      // --- MOCKED SUCCESS ---
+      await new Promise(res => setTimeout(res, 500));
+      setDocuments(prev => prev.filter(d => d.id !== doc.id));
+      // --- END MOCKED ---
+      addToast({ type: 'success', title: 'Document Deleted' });
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Delete Failed', message: err.message });
+    }
   };
   
-  // --- 14. NEW ASSIGNMENT MODAL HANDLERS ---
+  // --- Assignment Modal Handlers ---
   const handleOpenCreateAssignment = () => {
     setIsCreateAssignModalOpen(true);
-    // We could pre-fill the selectedEmployee in the modal if we modify it
   };
   
   const handleSaveAssignment = async (data: any) => {
     setIsSavingAssignment(true);
-    // --- MOCKED ---
-    // Real Supabase logic will go here
     await new Promise(res => setTimeout(res, 1000));
     addToast({ type: 'success', title: 'Assignment Created!' });
-    // --- END MOCKED ---
     setIsSavingAssignment(false);
     setIsCreateAssignModalOpen(false);
-    if(selectedEmployee) fetchAssignments(selectedEmployee.id); // Refetch
+    if(selectedEmployee) fetchAssignments(selectedEmployee.id);
   };
   
-  // --- 15. NEW ASSIGNMENT PANEL HANDLERS (MOCKED) ---
+  // --- Assignment Panel Handlers (Mocked) ---
   const handleUpdateStatus = (newStatus: string) => {
     if (!selectedAssignment) return;
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus as Status } : null);
@@ -419,7 +434,6 @@ const EmployeesTab: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {/* Profile, Employment, and Documents cards are unchanged */}
               <Card title="Profile & Contact">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
@@ -441,11 +455,148 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
+              {/* --- 2. RESTORED DOCUMENTS CARD --- */}
               <Card title="Documents">
-                {/* ... (All the document UI from the previous step goes here - no changes) ... */}
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-800">Employee Documents</h4>
+                  {loadingDocs ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                  ) : documents.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">No documents uploaded for this employee.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {documents.map(doc => {
+                        const isSigned = doc.requires_signing && doc.signed_storage_url;
+                        const isPending = doc.requires_signing && !doc.signed_storage_url;
+                        const isViewOnly = !doc.requires_signing;
+
+                        return (
+                          <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                              {/* Left Side: Name and Status */}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                                {isViewOnly && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                                    <ShieldCheck size={14} /> View Only
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
+                                    <AlertTriangle size={14} /> Pending Signature
+                                  </span>
+                                )}
+                                {isSigned && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                                    <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Right Side: Buttons */}
+                              <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
+                                <button
+                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                                >
+                                  <Eye size={14} /> View
+                                </button>
+                                {isSigned && (
+                                  <button
+                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
+                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                                  >
+                                    <Eye size={14} /> View Signed
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteDocument(doc)}
+                                  className="sm:flex-none inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* --- Upload Form Toggle Button --- */}
+                  <div className="border-t pt-4">
+                    <button
+                      onClick={() => setShowDocUpload(!showDocUpload)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700"
+                    >
+                      <span className="flex items-center gap-2">
+                        <UploadCloud size={16} />
+                        Upload New Document
+                      </span>
+                      <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* --- Collapsible Upload Form --- */}
+                  <AnimatePresence>
+                    {showDocUpload && (
+                      <motion.form
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: '16px' }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        onSubmit={handleUploadDocument} 
+                        className="space-y-4 p-4 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
+                      >
+                        {docUploadError && (
+                          <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                            <AlertCircle size={16} /> {docUploadError}
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Document Name *</label>
+                          <input
+                            type="text"
+                            value={newDocName}
+                            onChange={(e) => setNewDocName(e.target.value)}
+                            placeholder="e.g., Employment Contract"
+                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">File *</label>
+                          <input
+                            type="file"
+                            onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
+                            className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="requires_signing"
+                            checked={newDocRequiresSigning}
+                            onChange={(e) => setNewDocRequiresSigning(e.target.checked)}
+                            className="h-4 w-4 rounded text-[#FF5722] focus:ring-[#FF5722]"
+                          />
+                          <label htmlFor="requires_signing" className="text-sm font-medium text-gray-700">
+                            Requires employee signature
+                          </label>
+                        </div>
+                        
+                        <button
+                          type="submit"
+                          disabled={isUploadingDoc || !newDocFile || !newDocName}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                          {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
+                        </button>
+                      </motion.form>
+                    )}
+                  </AnimatePresence>
+                </div>
               </Card>
 
-              {/* --- 16. NEW ASSIGNMENTS CARD --- */}
+              {/* --- NEW ASSIGNMENTS CARD --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -460,7 +611,6 @@ const EmployeesTab: React.FC = () => {
                   </button>
                 </div>
                 
-                {/* Assignment List for this Employee */}
                 {loadingAssignments ? (
                   <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
                 ) : assignments.length === 0 ? (
@@ -489,22 +639,16 @@ const EmployeesTab: React.FC = () => {
                   </div>
                 )}
               </Card>
-              
-              {/* --- 17. REMOVED OLD TASK CARDS --- */}
-
             </motion.div>
           </AnimatePresence>
         )}
       </div>
 
       {/* --- Modals & Panels --- */}
-      
-      {/* PDF Viewer */}
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
       
-      {/* Edit Employee Modal */}
       <EmployeeEditModal
         isOpen={isModalOpen}
         onClose={() => {
@@ -516,7 +660,6 @@ const EmployeesTab: React.FC = () => {
         isSaving={isSavingProfile}
       />
       
-      {/* 18. ADD NEW ASSIGNMENT MODALS/PANELS */}
       <CreateAssignmentModal
         isOpen={isCreateAssignModalOpen}
         onClose={() => setIsCreateAssignModalOpen(false)}
