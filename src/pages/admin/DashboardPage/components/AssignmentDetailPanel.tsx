@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, 
@@ -22,7 +22,22 @@ import {
   Edit3
 } from 'lucide-react';
 import { Profile } from '../tabs/EmployeesTab';
-import { Assignment, Milestone } from '../tabs/AssignmentsTab'; // We'll export these types
+
+// Define types locally since this is a mock component
+type Assignment = {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  due_date: string;
+  assignees: Array<{ id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }>;
+};
+
+type Milestone = {
+  id: string;
+  title: string;
+  completed: boolean;
+};
 
 // --- Reusable Components ---
 
