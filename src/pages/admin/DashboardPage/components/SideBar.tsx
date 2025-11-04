@@ -1,6 +1,7 @@
 // @ts-nocheck
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion'; // <-- IMPORT ANIMATION TOOLS
 import {
   LayoutDashboard, Users, FileText, Settings, LogOut,
   Package, Wrench, Briefcase, FileCheck, UsersRound,
@@ -90,8 +91,8 @@ const SideBar: React.FC<SideBarProps> = ({
               onClick={() => handleSelect(itemKey as TabKey)}
               className={`flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-[#FF5722]/10 text-[#FF5722] font-semibold' // <-- NEW Active
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' // <-- NEW Hover
+                  ? 'bg-[#FF5722]/10 text-[#FF5722] font-semibold' // Active
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' // Hover
               }`}
             >
               <IconComponent size={18} />
@@ -105,7 +106,7 @@ const SideBar: React.FC<SideBarProps> = ({
       <div className="px-4 pb-4">
         <button
           onClick={handleLogout}
-          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-50 hover:text-red-600 transition-colors text-gray-600" // <-- NEW Logout
+          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-50 hover:text-red-600 transition-colors text-gray-600"
         >
           <LogOut size={18} />
           <span>Logout</span>
@@ -114,21 +115,37 @@ const SideBar: React.FC<SideBarProps> = ({
     </>
   );
 
-  // --- MOBILE SIDEBAR RENDER ---
+  // --- MOBILE SIDEBAR RENDER (NOW ANIMATED) ---
   if (isMobile) {
     return (
-      <div className={`fixed inset-0 z-40 ${isOpenMobile ? 'block' : 'hidden'} lg:hidden`}>
-        {/* Backdrop */}
-        <div className="absolute inset-0 bg-black/60" onClick={onCloseMobile} />
-        {/* Panel */}
-        <div className="relative bg-white text-gray-600 w-72 h-full space-y-6 py-7 px-2 flex flex-col">
-          {sidebarContent}
-        </div>
-      </div>
+      <AnimatePresence>
+        {isOpenMobile && ( // Only render if open
+          <div className="fixed inset-0 z-40 lg:hidden">
+            {/* Backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={onCloseMobile}
+            />
+            {/* Panel */}
+            <motion.div
+              className="relative bg-white text-gray-600 w-72 h-full space-y-6 py-7 px-2 flex flex-col"
+              initial={{ x: "-100%" }} // Start off-screen left
+              animate={{ x: 0 }} // Animate to on-screen
+              exit={{ x: "-100%" }} // Animate off-screen left
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }} // Smooth animation
+            >
+              {sidebarContent}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     );
   }
 
-  // --- DESKTOP SIDEBAR RENDER ---
+  // --- DESKTOP SIDEBAR RENDER (Unchanged) ---
   return (
     <div className="bg-white text-gray-600 w-72 space-y-6 py-7 px-2 flex flex-col h-full border-r border-gray-200">
       {sidebarContent}
