@@ -91,8 +91,10 @@ const ClientsTab: React.FC = () => {
                          <thead className="bg-gray-50 border-b">
                           <tr className="text-left text-gray-600">
                             <th className="px-4 py-2 font-semibold">Client</th>
-                            <th className="px-4 py-2 font-semibold">Service/Project</th>
-                            <th className="px-4 py-2 font-semibold">Requested At</th>
+                            {/* --- MODIFICATION: Hidden on mobile --- */}
+                            <th className="px-4 py-2 font-semibold hidden md:table-cell">Service/Project</th>
+                            <th className="px-4 py-2 font-semibold hidden md:table-cell">Requested At</th>
+                            {/* --- END MODIFICATION --- */}
                             <th className="px-4 py-2 font-semibold text-center">Status</th>
                             <th className="px-4 py-2 font-semibold text-right">Actions</th>
                           </tr>
@@ -104,11 +106,13 @@ const ClientsTab: React.FC = () => {
                                       {r.clients?.full_name || r.clients?.email || 'Unknown Client'}
                                       <span className="block text-xs text-gray-500">{r.clients?.email}</span>
                                     </td>
-                                    <td className="px-4 py-3 text-gray-600">
+                                    {/* --- MODIFICATION: Hidden on mobile --- */}
+                                    <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
                                       <span className="font-semibold">{r.project_title || 'N/A'}</span>
                                       <span className="block text-xs text-gray-500 capitalize">{r.service_key.replace(/_/g, ' ')}</span>
                                     </td>
-                                     <td className="px-4 py-3 text-gray-600">{new Date(r.requested_at).toLocaleString()}</td>
+                                     <td className="px-4 py-3 text-gray-600 hidden md:table-cell">{new Date(r.requested_at).toLocaleString()}</td>
+                                    {/* --- END MODIFICATION --- */}
                                      <td className="px-4 py-3 text-center">
                                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold capitalize ring-1 ring-inset ${statusColorMap[r.status]}`}>
                                          {r.status.replace(/_/g, ' ')}
