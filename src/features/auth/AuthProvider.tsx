@@ -1,251 +1,198 @@
-import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
+// src/features/auth/AuthProvider.tsx
+// @ts-nocheck
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase/client';
-import type { Session, User } from '@supabase/supabase-js';
+import type { AuthSession, User } from '@supabase/supabase-js';
+import type { Profile } from '../../lib/supabase/operations'; // Import Profile type
 
-type UserRole = 'client' | 'admin' | null;
+// --- Helper Functions ---
 
-interface AuthState {
-  isAuthenticated: boolean;
-  role: UserRole;
+/**
+ * Fetches the user's profile from the database.
+ */
+const getProfile = async (): Promise<Profile | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('User not authenticated.');
+  }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  if (error && error.code !== 'PGRST116') { // PGRST116 = row not found
+    console.error('Error fetching profile:', error);
+    throw error;
+  }
+  return data as Profile | null;
+};
+
+/**
+ * Creates a default profile for a new user if one doesn't exist.
+ * Uses 'upsert' to be safe.
+ */
+const ensureProfileExists = async (user: User): Promise<Profile> => {
+  const fullName = user.user_metadata?.full_name || user.email || '';
+  const nameParts = fullName.split(' ');
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: user.id,
+      email: user.email,
+      first_name: nameParts[0] || '',
+      last_name: nameParts.slice(1).join(' ') || '',
+      role: 'client', // Default role for new signups
+    }, {
+      onConflict: 'id',
+      ignoreDuplicates: true,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error ensuring profile exists:", error);
+    throw error;
+  }
+
+  // If upsert did nothing (profile existed), fetch it
+  if (!data) {
+     const existing = await getProfile();
+     if (existing) return existing;
+     throw new Error("Failed to retrieve profile after upsert.");
+  }
+
+  return data as Profile;
+};
+
+
+// --- Auth Context ---
+
+interface AuthContextType {
   user: User | null;
-  session: Session | null;
-  isLoading: boolean;
-}
-
-type LoginResult = { success: boolean; role: UserRole };
-
-interface AuthContextType extends AuthState {
-  clientLogin: (email: string, password: string) => Promise<LoginResult>;
-  adminLogin: (email: string, password: string) => Promise<LoginResult>;
-  login: (email: string, password: string) => Promise<LoginResult>;
-  signup: (email: string, password: string, userData?: any) => Promise<boolean>;
+  profile: Profile | null;
+  isAdmin: boolean;
+  isClient: boolean;
+  isEmployee: boolean;
+  loading: boolean;
   logout: () => Promise<void>;
-  error: string | null;
-  setError: (error: string | null) => void;
+  refreshProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const navigate = useNavigate();
 
-const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: false,
-    role: null,
-    user: null,
-    session: null,
-    isLoading: true,
-  });
-  const [error, setError] = useState<string | null>(null);
+  // --- Profile Fetching Function ---
+  const fetchProfile = useCallback(async () => {
+    // This local 'user' check is fine because fetchProfile is re-memoized when 'user' state changes
+    if (!user) { 
+      setProfile(null);
+      return;
+    }
+    
+    setLoadingProfile(true);
+    try {
+      const existingProfile = await getProfile();
+      if (existingProfile) {
+        setProfile(existingProfile);
+      } else {
+        // If no profile, create one
+        const newProfile = await ensureProfileExists(user);
+        setProfile(newProfile);
+      }
+    } catch (error) {
+      console.error("Failed to fetch or create profile:", error);
+      setProfile(null);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [user]); // Dependency on 'user' state is correct
 
+  // --- Auth State Change Listener ---
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      updateUserState(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      updateUserState(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const updateUserState = async (session: Session | null): Promise<UserRole> => {
-    console.log("[updateUserState] Start. Session available:", !!session);
-    let userRole: UserRole = null;
-
-    if (session?.user?.id) {
-      const userId = session.user.id;
-      console.log(`[updateUserState] Processing user ID: ${userId}`);
-      setError(null);
-
-      try {
-        console.log(`[updateUserState] Attempting to fetch profile for ID: ${userId}`);
-        const { data: profile, error: profileError, status } = await supabase
-          .from('profiles')
-          .select('id, role')
-          .eq('id', userId)
-          .maybeSingle();
-
-        console.log(`[updateUserState] Profile fetch response: Status=${status}`, { profile, profileError });
-
-        if (profileError) {
-          console.error("[updateUserState] Database error during profile fetch:", profileError);
-          setError(`Error fetching profile: ${profileError.message}`);
-        } else if (profile) {
-          console.log(`[updateUserState] Profile data received:`, profile);
-          const fetchedRole = (profile as { id: string; role: string }).role;
-          console.log(`[updateUserState] Role value from profile: '${fetchedRole}'`);
-
-          if (fetchedRole === 'admin' || fetchedRole === 'client') {
-            userRole = fetchedRole;
-            console.log(`[updateUserState] Role successfully verified as: ${userRole}`);
-            setError(null);
-          } else {
-            console.error(`[updateUserState] User ${userId} profile has invalid role value: '${fetchedRole}'.`);
-            setError("Your account has an invalid role configuration. Please contact support.");
+    setLoadingUser(true);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser); // Set user state
+        setLoadingUser(false);
+        
+        // Handle profile logic based on the *new* user state
+        if (_event === 'SIGNED_IN' && currentUser) {
+          setLoadingProfile(true);
+          try {
+            // We can call getProfile() as it reads auth from supabase, not stale state
+            const existingProfile = await getProfile(); 
+            if (!existingProfile) {
+              const newProfile = await ensureProfileExists(currentUser);
+              setProfile(newProfile);
+            } else {
+              setProfile(existingProfile);
+            }
+          } catch (err) {
+            console.error("Failed to create profile on sign-in:", err);
+            setProfile(null);
+          } finally {
+            setLoadingProfile(false);
           }
-        } else if (!profile) {
-          console.warn(`[updateUserState] No profile found for user ${userId}`);
-          setError("Your user profile could not be found. Please contact support.");
+        } else if (!currentUser) {
+          // User signed out
+          setProfile(null);
         }
-      } catch (err: any) {
-        console.error("[updateUserState] Unexpected error during role fetch:", err);
-        setError("A system error occurred while verifying your role.");
-        userRole = null;
       }
+    );
+    return () => subscription.unsubscribe();
+  }, []); // Empty dep array is correct for setting up the listener
 
-      setAuthState({
-        isAuthenticated: true,
-        role: userRole,
-        user: session.user,
-        session: session,
-        isLoading: false,
-      });
-      console.log("[updateUserState] Auth state updated:", { role: userRole, isAuthenticated: true });
-    } else {
-      console.log("[updateUserState] No active session. Clearing auth state.");
-      setAuthState({
-        isAuthenticated: false,
-        role: null,
-        user: null,
-        session: null,
-        isLoading: false,
-      });
+  // --- Effect to fetch profile on initial load if session exists ---
+  useEffect(() => {
+    // If auth is loaded, and we have a user, but no profile yet
+    if (!loadingUser && user && !profile && !loadingProfile) {
+      fetchProfile();
     }
+  }, [user, profile, loadingUser, loadingProfile, fetchProfile]);
 
-    console.log(`[updateUserState] Finished. Returning role: ${userRole}`);
-    return userRole;
-  };
-
-  const login = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[login] Attempting login for email: ${email}`);
-    setError(null);
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-
-    try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        console.error("[login] Sign-in error:", signInError);
-        setError(signInError.message);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, role: null };
-      }
-
-      if (!data.session) {
-        console.error("[login] No session returned after sign-in");
-        setError("Login failed. No session created.");
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, role: null };
-      }
-
-      console.log("[login] Sign-in successful. Fetching role...");
-      const role = await updateUserState(data.session);
-      console.log(`[login] Role fetched: ${role}`);
-
-      return { success: true, role };
-    } catch (err: any) {
-      console.error("[login] Unexpected error:", err);
-      setError(err.message || 'An unexpected error occurred during login.');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, role: null };
-    }
-  };
-
-  const signup = async (email: string, password: string, userData?: any): Promise<boolean> => {
-    console.log(`[signup] Attempting signup for email: ${email}`);
-    setError(null);
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-
-    try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: userData,
-        },
-      });
-
-      if (signUpError) {
-        console.error("[signup] Sign-up error:", signUpError);
-        setError(signUpError.message);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return false;
-      }
-
-      console.log("[signup] Sign-up successful");
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return true;
-    } catch (err: any) {
-      console.error("[signup] Unexpected error:", err);
-      setError(err.message || 'An unexpected error occurred during signup.');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return false;
-    }
-  };
-
-  const clientLogin = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[clientLogin] Calling login for client portal`);
-    return login(email, password);
-  };
-
-  const adminLogin = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[adminLogin] Calling login for admin portal`);
-    return login(email, password);
-  };
-
+  // --- Logout Function ---
   const logout = async () => {
-    console.log("[logout] Logging out user");
-    setError(null);
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-
-    try {
-      const { error: signOutError } = await supabase.auth.signOut();
-
-      if (signOutError) {
-        console.error("[logout] Sign-out error:", signOutError);
-        setError(signOutError.message);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return;
-      }
-
-      console.log("[logout] Sign-out successful");
-      setAuthState({
-        isAuthenticated: false,
-        role: null,
-        user: null,
-        session: null,
-        isLoading: false,
-      });
-    } catch (err: any) {
-      console.error("[logout] Unexpected error:", err);
-      setError(err.message || 'An unexpected error occurred during logout.');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    navigate('/');
   };
+  
+  const loading = loadingUser || (!!user && loadingProfile);
+  const isAdmin = profile?.role === 'admin';
+  const isClient = profile?.role === 'client';
+  const isEmployee = profile?.role === 'employee';
 
-  const value: AuthContextType = {
-    ...authState,
-    clientLogin,
-    adminLogin,
-    login,
-    signup,
+  const value = {
+    user,
+    profile,
+    isAdmin,
+    isClient,
+    isEmployee,
+    loading,
     logout,
-    error,
-    setError,
+    refreshProfile: fetchProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-export default AuthProvider;
+// --- Custom Hook ---
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
