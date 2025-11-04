@@ -19,30 +19,73 @@ import {
   Building, 
   CreditCard,
   Briefcase,
+  ClipboardList,
   Eye,
   FileDown,
+  Clock,
   CheckCircle,
+  Plus,
   Send,
   X,
+  FileUp,
+  Trash2,
   Edit2,
   PlusCircle,
+  Download,
+  UploadCloud,
+  ChevronDown,
+  AlertTriangle,
+  ShieldCheck,
+  List,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
+// 1. IMPORT THE NEW COMPONENTS
+import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
+import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
+// 2. IMPORT FROM THE NEW SHARED TYPES FILE
+import { Profile, Assignment, EmployeeDocument, Status } from '../shared/types';
 
-// --- TYPE DEFINITIONS ---
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-// This 'Task' type comes from your ...183138_...sql migration
-type Task = Database['public']['Tables']['tasks']['Row'];
+// --- MOCK DATA (FRONTEND-FIRST) ---
+const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
+const MOCK_ASSIGNMENTS: Assignment[] = [
+  {
+    id: 'assign_1',
+    title: 'Client Brand Strategy Deck',
+    category: 'Design',
+    status: 'In Progress',
+    due_date: '2025-11-15',
+    assignees: [MOCK_USER_1],
+    description: 'Full deck', attachments: [], priority: 'medium', type: 'team',
+    start_date: null, milestones: [], supervisor: null, comments: [], deliverables: [],
+  },
+  {
+    id: 'assign_3',
+    title: 'Pitch Video Editing',
+    category: 'Production',
+    status: 'Overdue',
+    due_date: '2025-11-03',
+    assignees: [MOCK_USER_1],
+    description: 'Final edit', attachments: [], priority: 'high', type: 'individual',
+    start_date: null, milestones: [], supervisor: null, comments: [], deliverables: [],
+  },
+];
+const MOCK_DOCUMENTS: EmployeeDocument[] = [
+  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
+  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
+];
+// --- END MOCK DATA ---
 
-// --- 1. ADD THIS HELPER FUNCTION BACK (FIXES BLANK SCREEN) ---
+
+// --- HELPER FUNCTION (This was the cause of the blank screen) ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
+
 
 // --- Reusable InfoRow ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
@@ -99,7 +142,6 @@ const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]); // 2. RESTORED TASKS STATE
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -110,17 +152,26 @@ const EmployeesTab: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- 3. RESTORED TASK FORM STATE ---
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+  // --- State for Documents ---
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [newDocName, setNewDocName] = useState('');
+  const [newDocFile, setNewDocFile] = useState<File | null>(null);
+  const [newDocRequiresSigning, setNewDocRequiresSigning] = useState(false);
+  const [docUploadError, setDocUploadError] = useState<string | null>(null);
+  const [showDocUpload, setShowDocUpload] = useState(false);
 
-  // --- 4. RESTORED DOCUMENTS STATE (SIMPLE) ---
+  // PDF Viewer
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
-  // This is the mock unsigned contract from the original file
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' };
+
+  // --- 3. STATE FOR NEW ASSIGNMENTS ---
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
+  const [isSavingAssignment, setIsSavingAssignment] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
 
   const fetchData = useCallback(async () => {
     setError(null);
@@ -132,15 +183,6 @@ const EmployeesTab: React.FC = () => {
         .order('first_name');
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
-      
-      // 5. RESTORED TASK FETCH
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (tasksError) throw tasksError;
-      setTasks(tasksData || []);
-      
     } catch (err: any) {
       console.error('Error fetching employee data:', err);
       setError('Failed to load employee data. Check RLS policies.');
@@ -151,8 +193,63 @@ const EmployeesTab: React.FC = () => {
   
   useEffect(() => {
     fetchData(); 
-    // ... (listeners for profiles and tasks to be added if needed) ...
+    // ... (listeners will be added here later) ...
   }, [fetchData]);
+
+  // --- Function to fetch assignments ---
+  const fetchAssignments = async (profileId: string) => {
+    setLoadingAssignments(true);
+    try {
+      // MOCKED:
+      await new Promise(res => setTimeout(res, 500)); 
+      setAssignments(MOCK_ASSIGNMENTS);
+      //
+      // REAL QUERY WILL BE:
+      // const { data, error } = await supabase
+      //   .from('assignment_assignees')
+      //   .select('assignment:assignments!inner(*)')
+      //   .eq('profile_id', profileId);
+      // if (error) throw error;
+      // setAssignments(data.map(item => item.assignment));
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+  
+  // --- Function to fetch documents ---
+  const fetchDocuments = async (profileId: string) => {
+      setLoadingDocs(true);
+      try {
+          // MOCKED:
+          await new Promise(res => setTimeout(res, 500)); 
+          setDocuments(MOCK_DOCUMENTS);
+          //
+          // REAL QUERY WILL BE:
+          // const { data, error } = await supabase
+          //   .from('documents') // This table name needs to match your SQL
+          //   .select('*')
+          //   .eq('profile_id', profileId);
+          // if (error) throw error;
+          // setDocuments(data);
+      } catch (err: any) {
+          addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
+      } finally {
+          setLoadingDocs(false);
+      }
+  };
+  
+  // --- Fetch data on employee selection ---
+  useEffect(() => {
+      if (selectedEmployee) {
+          fetchDocuments(selectedEmployee.id);
+          fetchAssignments(selectedEmployee.id);
+      } else {
+          setDocuments([]); 
+          setAssignments([]);
+      }
+  }, [selectedEmployee]);
 
   // Filter employees
   const filteredEmployees = useMemo(() => {
@@ -165,12 +262,6 @@ const EmployeesTab: React.FC = () => {
       (e.position || '').toLowerCase().includes(q)
     );
   }, [employees, searchQuery]);
-  
-  // 6. RESTORED 'employeeTasks' FILTER
-  const employeeTasks = useMemo(() => {
-    if (!selectedEmployee) return [];
-    return tasks.filter(t => t.assigned_to === selectedEmployee.id);
-  }, [tasks, selectedEmployee]);
   
   // --- Employee Modal Handlers ---
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
@@ -198,41 +289,84 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
   
-  // --- 7. RESTORED 'handleAssignTask' ---
-  const handleAssignTask = async (e: React.FormEvent) => {
+  const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle || !selectedEmployee || !user) return;
-
-    setIsSubmittingTask(true);
+    if (!newDocFile || !newDocName.trim()) {
+        setDocUploadError("Document name and file are required.");
+        return;
+    }
+    setIsUploadingDoc(true);
+    setDocUploadError(null);
     try {
-      const { data: newTask, error } = await supabase
-        .from('tasks')
-        .insert({
-          title: newTaskTitle,
-          description: newTaskDesc || null,
-          priority: newTaskPriority,
-          status: 'pending',
-          assigned_to: selectedEmployee.id,
-          assigned_by: user.id
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      setTasks(prev => [newTask, ...prev]); 
-      setNewTaskTitle('');
-      setNewTaskDesc('');
-      setNewTaskPriority('medium');
-      addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` });
-      
+      // --- MOCKED SUCCESS ---
+      await new Promise(res => setTimeout(res, 1000));
+      const newMockDoc: EmployeeDocument = {
+        id: `doc_${Date.now()}`,
+        document_name: newDocName.trim(),
+        storage_url: '/mock-new-doc.pdf',
+        requires_signing: newDocRequiresSigning,
+        signed_storage_url: null,
+        signed_at: null,
+        profile_id: selectedEmployee!.id,
+        signed_storage_path: null
+      };
+      setDocuments(prev => [newMockDoc, ...prev]);
+      // --- END MOCKED ---
+      addToast({ type: 'success', title: 'Document Uploaded!' });
+      setNewDocName('');
+      setNewDocFile(null);
+      setNewDocRequiresSigning(false);
+      setShowDocUpload(false);
     } catch (err: any) {
-      console.error('Error creating task:', err);
-      addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` });
+      setDocUploadError(err.message);
+      addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
-      setIsSubmittingTask(false);
+      setIsUploadingDoc(false);
     }
   };
+
+  const handleDeleteDocument = async (doc: EmployeeDocument) => {
+    if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"?`)) return;
+    try {
+      // --- MOCKED SUCCESS ---
+      await new Promise(res => setTimeout(res, 500));
+      setDocuments(prev => prev.filter(d => d.id !== doc.id));
+      // --- END MOCKED ---
+      addToast({ type: 'success', title: 'Document Deleted' });
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Delete Failed', message: err.message });
+    }
+  };
+  
+  // --- Assignment Modal Handlers ---
+  const handleOpenCreateAssignment = () => {
+    setIsCreateAssignModalOpen(true);
+  };
+  
+  const handleSaveAssignment = async (data: any) => {
+    setIsSavingAssignment(true);
+    await new Promise(res => setTimeout(res, 1000));
+    addToast({ type: 'success', title: 'Assignment Created!' });
+    setIsSavingAssignment(false);
+    setIsCreateAssignModalOpen(false);
+    if(selectedEmployee) fetchAssignments(selectedEmployee.id);
+  };
+  
+  // --- Assignment Panel Handlers (Mocked) ---
+  const handleUpdateStatus = (newStatus: string) => {
+    if (!selectedAssignment) return;
+    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus as Status } : null);
+    setAssignments(prev =>
+      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus as Status } : a)
+    );
+    addToast({ type: 'info', title: 'Status Updated' });
+  };
+  const handlePostComment = (comment: string) => {
+    addToast({ type: 'info', title: 'Comment Posted (Mock)' });
+  };
+  const handleApprove = (id: string) => addToast({ type: 'success', title: 'Deliverable Approved (Mock)!' });
+  const handleRequestEdits = (id: string, msg: string) => addToast({ type: 'info', title: 'Edits Requested (Mock)' });
+  
 
   if (loading && employees.length === 0) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
@@ -335,108 +469,185 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* --- 8. RESTORED SIMPLE DOCUMENTS CARD --- */}
               <Card title="Documents">
                 <div className="space-y-4">
-                  {/* Unsigned Contract */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                      <FileText size={16} className="text-gray-500" />
-                      <span className="truncate">{unsignedContract.name}</span>
-                    </span>
-                    <div className="flex gap-2 sm:flex-shrink-0">
-                      <button onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><Eye size={14} /> View</button>
-                      <a href={unsignedContract.url} download="Employment_Contract_Unsigned.pdf" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><FileDown size={14} /> Download</a>
-                    </div>
-                  </div>
-                  {/* Signed Contract */}
-                  {selectedEmployee.signed_contract_url ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                      <span className="flex items-center gap-2.5 font-medium text-green-800">
-                        <CheckCircle size={16} className="text-green-600" />
-                        <span className="truncate" title={selectedEmployee.signed_contract_name || 'Signed Contract'}>{selectedEmployee.signed_contract_name || 'Signed Contract'}</span>
-                      </span>
-                      <div className="flex gap-2 sm:flex-shrink-0">
-                        <button onClick={() => handleViewPdf(selectedEmployee.signed_contract_url!, selectedEmployee.signed_contract_name!)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><Eye size={14} /> View</button>
-                        <a href={selectedEmployee.signed_contract_url} download={selectedEmployee.signed_contract_name || 'Signed_Contract.pdf'} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><FileDown size={14} /> Download</a>
-                      </div>
-                    </div>
+                  <h4 className="font-medium text-gray-800">Employee Documents</h4>
+                  {loadingDocs ? (
+                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                  ) : documents.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-2">No documents uploaded for this employee.</p>
                   ) : (
-                    <div className="p-4 text-center rounded-lg border-2 border-dashed border-gray-300">
-                      <p className="text-sm text-gray-500">Employee has not uploaded their signed contract.</p>
+                    <div className="space-y-3">
+                      {documents.map(doc => {
+                        const isSigned = doc.requires_signing && doc.signed_storage_url;
+                        const isPending = doc.requires_signing && !doc.signed_storage_url;
+                        const isViewOnly = !doc.requires_signing;
+
+                        return (
+                          <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                              {/* Left Side: Name and Status */}
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                                {isViewOnly && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                                    <ShieldCheck size={14} /> View Only
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
+                                    <AlertTriangle size={14} /> Pending Signature
+                                  </span>
+                                )}
+                                {isSigned && (
+                                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                                    <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Right Side: Buttons */}
+                              <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
+                                <button
+                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                                >
+                                  <Eye size={14} /> View
+                                </button>
+                                {isSigned && (
+                                  <button
+                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
+                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                                  >
+                                    <Eye size={14} /> View Signed
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteDocument(doc)}
+                                  className="sm:flex-none inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
+
+                  {/* --- Upload Form Toggle Button --- */}
+                  <div className="border-t pt-4">
+                    <button
+                      onClick={() => setShowDocUpload(!showDocUpload)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700"
+                    >
+                      <span className="flex items-center gap-2">
+                        <UploadCloud size={16} />
+                        Upload New Document
+                      </span>
+                      <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {/* --- Collapsible Upload Form --- */}
+                  <AnimatePresence>
+                    {showDocUpload && (
+                      <motion.form
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: '16px' }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        onSubmit={handleUploadDocument} 
+                        className="space-y-4 p-4 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
+                      >
+                        {docUploadError && (
+                          <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                            <AlertCircle size={16} /> {docUploadError}
+                          </div>
+                        )}
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">Document Name *</label>
+                          <input
+                            type="text"
+                            value={newDocName}
+                            onChange={(e) => setNewDocName(e.target.value)}
+                            placeholder="e.g., Employment Contract"
+                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-gray-700">File *</label>
+                          <input
+                            type="file"
+                            onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
+                            className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="requires_signing"
+                            checked={newDocRequiresSigning}
+                            onChange={(e) => setNewDocRequiresSigning(e.target.checked)}
+                            className="h-4 w-4 rounded text-[#FF5722] focus:ring-[#FF5722]"
+                          />
+                          <label htmlFor="requires_signing" className="text-sm font-medium text-gray-700">
+                            Requires employee signature
+                          </label>
+                        </div>
+                        
+                        <button
+                          type="submit"
+                          disabled={isUploadingDoc || !newDocFile || !newDocName}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                          {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
+                        </button>
+                      </motion.form>
+                    )}
+                  </AnimatePresence>
                 </div>
               </Card>
 
-              {/* --- 9. RESTORED SIMPLE "ASSIGN TASK" CARD --- */}
-              <Card title="Assign Task">
-                <form onSubmit={handleAssignTask} className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Task Title</label>
-                    <input
-                      type="text"
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="e.g., 'Prepare Q4 marketing report'"
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Description (Optional)</label>
-                    <textarea
-                      value={newTaskDesc}
-                      onChange={(e) => setNewTaskDesc(e.target.value)}
-                      placeholder="Add more details..."
-                      rows={3}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                    />
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Priority</label>
-                      <select
-                        value={newTaskPriority}
-                        onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                        className="mt-1 w-full sm:w-auto px-3 py-2 rounded-lg border border-gray-300"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingTask}
-                      className="inline-flex items-center justify-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50 sm:self-end"
-                    >
-                      {isSubmittingTask ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                      {isSubmittingTask ? 'Assigning...' : 'Assign Task'}
-                    </button>
-                  </div>
-                </form>
-              </Card>
-
-              {/* --- 10. RESTORED SIMPLE "TASK LIST" CARD --- */}
-              <Card title="Task List">
-                {employeeTasks.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No tasks assigned to this employee.</p>
+              {/* --- 4. REPLACED OLD TASK CARDS WITH NEW ASSIGNMENTS --- */}
+              <Card>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <List size={20} /> Assignments
+                  </h3>
+                  <button
+                    onClick={handleOpenCreateAssignment}
+                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                  >
+                    <PlusCircle size={16} />
+                    Create New
+                  </button>
+                </div>
+                
+                {loadingAssignments ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                ) : assignments.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-4">No assignments for this employee.</p>
                 ) : (
                   <div className="space-y-3">
-                    {employeeTasks.map(task => (
-                      <div key={task.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
-                        <div>
-                          <p className="font-medium text-gray-800">{task.title}</p>
-                          <p className="text-sm text-gray-500">{task.description}</p>
+                    {assignments.map(assignment => (
+                      <button 
+                        key={assignment.id} 
+                        onClick={() => setSelectedAssignment(assignment)}
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-left"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-800 truncate">{assignment.title}</p>
+                          <p className="text-sm text-gray-500">Due: {formatDate(assignment.due_date)}</p>
                         </div>
                         <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${
-                          task.status === 'completed' ? 'bg-green-100 text-green-700' : 
-                          task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
+                          assignment.status === 'Completed' ? 'bg-green-100 text-green-700' : 
+                          assignment.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
+                          assignment.status === 'Overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
                         }`}>
-                          {task.status.replace('_', ' ')}
+                          {assignment.status}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 )}
@@ -462,7 +673,21 @@ const EmployeesTab: React.FC = () => {
         isSaving={isSavingProfile}
       />
       
-      {/* --- 11. REMOVED THE ASSIGNMENT MODALS/PANELS --- */}
+      <CreateAssignmentModal
+        isOpen={isCreateAssignModalOpen}
+        onClose={() => setIsCreateAssignModalOpen(false)}
+        onSave={handleSaveAssignment}
+        isSaving={isSavingAssignment}
+      />
+      
+      <AssignmentDetailPanel
+        assignment={selectedAssignment}
+        onClose={() => setSelectedAssignment(null)}
+        onUpdateStatus={handleUpdateStatus}
+        onPostComment={handlePostComment}
+        onApproveDeliverable={handleApprove}
+        onRequestEdits={handleRequestEdits}
+      />
     </div>
   );
 };
