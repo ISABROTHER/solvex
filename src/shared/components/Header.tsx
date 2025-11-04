@@ -1,208 +1,130 @@
-// @ts-nocheck
-import React, { useState, useEffect } from 'react';
-import { NavLink, Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingCart, User, LogOut } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useCart } from '../../contexts/CartContext'; // Correct path
-import { useAuth } from '../../features/auth/AuthProvider'; // <-- THIS WAS THE BROKEN PATH
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Menu, X } from "lucide-react";
 
-const mainNav = [
-  { name: 'Home', path: '/' },
-  { name: 'Services', path: '/services' },
-  { name: 'Rentals', path: '/rentals' },
-  { name: 'Careers', path: '/careers' },
-  { name: 'Contact', path: '/contact' },
-];
-
-const Header: React.FC = () => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const { cart } = useCart();
+const Header = () => {
+  const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const location = useLocation();
-  const { user, loading, isAdmin, isClient, logout } = useAuth();
+  const navigate = useNavigate();
+  const menuRef = useRef<HTMLDivElement>(null);
+  const toggleButtonRef = useRef<HTMLButtonElement>(null);
 
-  const cartItemCount = cart.length;
-
+  const handleMyPageClick = () => {
+    setMobileMenuOpen(false);
+    navigate('/my-page');
+  };
+  
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
+    const link = document.createElement("link");
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Pacifico&display=swap";
+    link.rel = "stylesheet";
+    document.head.appendChild(link);
+
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setPrefersReducedMotion(mediaQuery.matches);
+    const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      document.head.removeChild(link);
+      mediaQuery.removeEventListener("change", handleChange);
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   useEffect(() => {
-    setIsOpen(false); // Close mobile menu on route change
-  }, [location.pathname]);
+    document.body.style.overflow = isMobileMenuOpen ? "hidden" : "unset";
+    return () => { document.body.style.overflow = "unset"; };
+  }, [isMobileMenuOpen]);
 
-  const headerClasses = `fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
-    isScrolled || isOpen
-      ? 'bg-black bg-opacity-90 backdrop-blur-lg shadow-lg'
-      : 'bg-transparent'
-  }`;
+  const closeAllMenus = () => {
+    setMobileMenuOpen(false);
+  };
   
-  const authLink = {
-    name: "My Page",
-    path: "/my-page" // This correctly points to the MyPage router component
+  const handleNavLinkClick = () => {
+    closeAllMenus();
   };
 
+  useEffect(() => {
+    closeAllMenus();
+  }, [location.pathname]);
+
+  // --- "ABOUT US" REMOVED FROM NAV ITEMS ---
+  const navItems = [
+    { name: "SERVICES", href: "/services" },
+    { name: "OUR GEAR", href: "/rentals" },
+    { name: "CAREERS", href: "/careers" },
+  ];
+  
   return (
-    <header className={headerClasses}>
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          
-          {/* Logo */}
-          <div className="flex-shrink-0">
-            <Link to="/" className="flex items-center space-x-2">
-              <img
-                className="h-9 w-auto"
-                src="https://i.imgur.com/MhcvKs3.png"
-                alt="SolveX Studios Logo"
-              />
-            </Link>
-          </div>
+    <>
+      <style>{`
+        .safe-padding-top { padding-top: env(safe-area-inset-top); }
+        .menu-item {
+          transition: opacity 300ms ease-out, transform 300ms ease-out;
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        .menu-open .menu-item { opacity: 1; transform: translateY(0); }
+      `}</style>
 
-          {/* Desktop Nav */}
-          <div className="hidden md:flex md:items-center md:space-x-6 lg:space-x-8">
-            {mainNav.map((item) => (
-              <NavLink
-                key={item.name}
-                to={item.path}
-                className={({ isActive }) =>
-                  `px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'text-white bg-[#FF5722]'
-                      : 'text-gray-300 hover:text-white'
-                  }`
-                }
-              >
-                {item.name}
-              </NavLink>
-            ))}
+      <header className="sticky top-0 z-30 header-shadow relative bg-[#FEF9EE]">
+        <div className="relative container mx-auto px-6 py-4 flex justify-between items-center">
+          <Link to="/" onClick={closeAllMenus} className="flex items-center gap-2">
+            <img src="https://i.imgur.com/eioVNZq.png" alt="Partner Logo" className="h-10" />
+            <img src="https://i.imgur.com/gFykwom.png" alt="SolveX Studios Logo" className="h-10 block md:hidden" />
+            <img src="https://i.imgur.com/5BH7zsq.png" alt="SolveX Studios Logo" className="h-10 hidden md:block" />
+          </Link>
+          <nav className="hidden md:flex space-x-4 items-center text-[#C10100]" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+            <Link to="/services" onClick={handleNavLinkClick} className={`px-3 py-2 rounded-md hover:bg-[#C10100]/10 transition-colors duration-300 tracking-wider text-lg`}>SERVICES</Link>
+            <Link to="/rentals" onClick={handleNavLinkClick} className={`px-3 py-2 rounded-md hover:bg-[#C10100]/10 transition-colors duration-300 tracking-wider text-lg`}>OUR GEAR</Link>
+            <Link to="/careers" onClick={handleNavLinkClick} className={`px-3 py-2 rounded-md hover:bg-[#C10100]/10 transition-colors duration-300 tracking-wider text-lg`}>CAREERS</Link>
 
-            {/* Auth Link */}
-            {!loading && (
-              <NavLink
-                to={authLink.path}
-                className={({ isActive }) =>
-                  `flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? 'text-white bg-[#FF5722]'
-                      : 'text-gray-300 hover:text-white'
-                  }`
-                }
-              >
-                <User size={16} />
-                {user ? (isAdmin ? 'Admin' : (isClient ? 'Portal' : 'Profile')) : 'Login'}
-              </NavLink>
-            )}
-
-            {/* Logout Button */}
-            {user && (
-              <button
-                onClick={logout}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:text-red-400 transition-colors"
-                title="Log Out"
-              >
-                <LogOut size={16} />
-              </button>
-            )}
-
-            {/* Cart Icon */}
-            <Link
-              to="/rentals" // Points to rentals page, cart is in a drawer
-              className="relative text-gray-300 hover:text-white"
-              aria-label="View Cart"
-            >
-              <ShoppingCart size={22} />
-              {cartItemCount > 0 && (
-                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#FF5722] text-xs font-bold text-white">
-                  {cartItemCount}
-                </span>
-              )}
-            </Link>
-          </div>
-
-          {/* Mobile Menu Button & Cart */}
-          <div className="flex items-center md:hidden">
-            <Link
-              to="/rentals" 
-              className="relative text-gray-300 hover:text-white mr-4"
-              aria-label="View Cart"
-            >
-              <ShoppingCart size={22} />
-              {cartItemCount > 0 && (
-                <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[#FF5722] text-xs font-bold text-white">
-                  {cartItemCount}
-                </span>
-              )}
-            </Link>
+            {/* --- "ABOUT US" DROPDOWN REMOVED --- */}
 
             <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white"
-              aria-expanded={isOpen}
-              aria-controls="mobile-menu"
+              onClick={handleMyPageClick}
+              className="ml-4 border border-[#C10100] text-[#C10100] hover:bg-[#C10100] hover:text-white font-bold py-2 px-4 rounded-lg text-base transition-colors"
             >
-              <span className="sr-only">Open main menu</span>
-              {isOpen ? <X size={24} /> : <Menu size={24} />}
+              MY PAGE
             </button>
+          </nav>
+          <button ref={toggleButtonRef} onClick={() => setMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden p-2 -mr-2 rounded-full">
+            <div className="relative w-6 h-6">{isMobileMenuOpen ? <X className="text-[#C10100]" /> : <Menu className="text-[#C10100]" />}</div>
+          </button>
+        </div>
+      </header>
+
+      <div className={`fixed inset-0 z-40 md:hidden ${isMobileMenuOpen ? "" : "pointer-events-none"}`}>
+        <div className={`absolute inset-0 bg-black/55 transition-opacity duration-300 ${isMobileMenuOpen ? "opacity-100" : "opacity-0"}`} onClick={closeAllMenus}></div>
+        <div id="mobile-menu-panel" ref={menuRef} role="dialog" aria-modal="true" className={`absolute top-0 left-0 w-full transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"} ${isMobileMenuOpen ? "menu-open" : ""} bg-white border-b border-gray-200 shadow-2xl`}>
+          <div className="safe-padding-top">
+            <div className="container mx-auto px-6 pt-20 pb-8">
+              <nav className="flex flex-col text-[#C10100]" style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
+                {navItems.map((item, index) => {
+                  const isActive = location.pathname === item.href;
+                  return (
+                    <div key={item.name} className="menu-item border-b border-gray-900/10" style={{ transitionDelay: prefersReducedMotion ? "0ms" : `${100 + index * 40}ms` }}>
+                      <Link to={item.href!} onClick={handleNavLinkClick} className={`relative block py-4 px-3 text-xl tracking-wider rounded-md hover:bg-[#C10100]/10 ${isActive ? "font-bold" : ""}`}>
+                        {isActive && (<span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 bg-[#C10100]/60 rounded-r-full"></span>)}
+                        {item.name}
+                      </Link>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={handleMyPageClick}
+                  className="block mt-4 w-full border border-[#C10100] text-[#C10100] hover:bg-[#C10100] hover:text-white font-bold py-3 px-4 rounded-lg text-center transition-colors"
+                >
+                  MY PAGE
+                </button>
+              </nav>
+            </div>
           </div>
         </div>
-      </nav>
-
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            id="mobile-menu"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="md:hidden bg-black bg-opacity-90"
-          >
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-              {mainNav.map((item) => (
-                <NavLink
-                  key={item.name}
-                  to={item.path}
-                  className={({ isActive }) =>
-                    `block px-3 py-2 rounded-md text-base font-medium ${
-                      isActive ? 'text-white bg-[#FF5722]' : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`
-                  }
-                >
-                  {item.name}
-                </NavLink>
-              ))}
-
-              {/* Auth Link */}
-              {!loading && (
-                <NavLink
-                  to={authLink.path}
-                   className={({ isActive }) =>
-                    `block px-3 py-2 rounded-md text-base font-medium ${
-                      isActive ? 'text-white bg-[#FF5722]' : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-                    }`
-                  }
-                >
-                  {user ? (isAdmin ? 'Admin' : (isClient ? 'Portal' : 'Profile')) : 'Login'}
-                </NavLink>
-              )}
-              {/* Logout Button */}
-              {user && (
-                <button
-                  onClick={logout}
-                  className="w-full text-left block px-3 py-2 rounded-md text-base font-medium text-gray-300 hover:bg-gray-700 hover:text-white"
-                >
-                  Logout
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </header>
+      </div>
+    </>
   );
 };
 
