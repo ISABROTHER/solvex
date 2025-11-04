@@ -1,504 +1,212 @@
 // @ts-nocheck
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../../../../lib/supabase/client';
-import type { Database } from '../../../../lib/supabase/database.types';
-import { useAuth } from '../../../../features/auth/AuthProvider';
-import Card from '../components/Card';
-import { 
-  Loader2, 
-  User, 
-  Search, 
-  AlertCircle, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  Hash, 
-  FileText, 
-  DollarSign, 
-  Building, 
-  CreditCard,
-  Briefcase,
-  ClipboardList,
-  Eye,
-  FileDown,
-  Clock,
-  CheckCircle,
-  Plus,
-  Send,
-  X,
-  FileUp,
-  Trash2,
-  Edit2, // Icon is correctly imported
-} from 'lucide-react';
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../../../../contexts/ToastContext';
-import EmployeeEditModal from '../components/EmployeeEditModal'; // Import the modal
+import { X, Save, Loader2, AlertCircle } from 'lucide-react';
+import { Profile } from '../tabs/EmployeesTab'; // Assuming type is exported from EmployeesTab
 
-// --- TYPE DEFINITIONS ---
+interface EmployeeEditModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  employee: Partial<Profile> | null; // Can be partial for creation
+  onSave: (updatedProfile: Partial<Profile>, password?: string) => Promise<void>; // Add password for creation
+  isSaving: boolean;
+}
 
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-type Task = Database['public']['Tables']['tasks']['Row'];
-
-// --- HELPERS ---
-const formatDate = (dateString: string | null) => {
-  if (!dateString) return 'N/A';
-  const d = new Date(dateString);
-  if (isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-};
-
-// --- Reusable InfoRow (from EmployeeDashboard) ---
-const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
-  icon: Icon,
-  label,
-  value
-}) => (
-  <div className="flex items-start gap-3">
-    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
-    <div>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="font-medium text-gray-900 break-words">{value || 'N/A'}</p>
-    </div>
+// Reusable input field component
+const InputField = ({ label, name, value, onChange, placeholder = '', type = 'text' }) => (
+  <div>
+    <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+      {label}
+    </label>
+    <input
+      type={type}
+      id={name}
+      name={name}
+      value={value || ''}
+      onChange={onChange}
+      placeholder={placeholder}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:ring-2 focus:ring-[#FF5722] focus:border-[#FF5722]"
+    />
   </div>
 );
 
-// --- Reusable PDF Viewer (from EmployeeDashboard) ---
-const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
-  <AnimatePresence>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
-      <motion.div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
-      >
-        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
-          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="flex-1 p-2">
-          <iframe 
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
-            className="w-full h-full border-0 rounded-b-lg" 
-            title="PDF Viewer" 
-          />
-        </div>
-      </motion.div>
-    </div>
-  </AnimatePresence>
-);
-
-// --- MAIN TAB COMPONENT ---
-
-const EmployeesTab: React.FC = () => {
-  const { user } = useAuth();
-  const { addToast } = useToast();
-  const [employees, setEmployees] = useState<Profile[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
+  isOpen,
+  onClose,
+  employee,
+  onSave,
+  isSaving,
+}) => {
+  const [formData, setFormData] = React.useState<Partial<Profile> | null>(null);
+  const [password, setPassword] = React.useState<string>(''); // State for new employee password
+  const [error, setError] = React.useState<string | null>(null);
   
-  const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  
-  const [searchQuery, setSearchQuery] = useState('');
+  // Determine if this is "Create" or "Edit" mode
+  const isCreating = !employee?.id;
 
-  // New Task Form State
-  const [newTaskTitle, setNewTaskTitle] = useState('');
-  const [newTaskDesc, setNewTaskDesc] = useState('');
-  const [newTaskPriority, setNewTaskPriority] = useState<'low' | 'medium' | 'high'>('medium');
-  const [isSubmittingTask, setIsSubmittingTask] = useState(false);
-
-  // PDF Viewer
-  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
-  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // Mock URL
-
-  const fetchData = useCallback(async () => {
-    // We don't set loading(true) here to avoid UI flicker on background refresh
+  React.useEffect(() => {
+    if (employee) {
+      setFormData(employee);
+    } else {
+      // It's a new employee, start with an empty form
+      setFormData({}); 
+    }
+    setPassword('');
     setError(null);
-    try {
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'employee')
-        .order('first_name');
-        
-      if (employeesError) throw employeesError;
-      setEmployees(employeesData || []);
+  }, [employee, isOpen]); // Reset form when modal opens or employee changes
 
-      const { data: tasksData, error: tasksError } = await supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (tasksError) throw tasksError;
-      setTasks(tasksData || []);
-
-    } catch (err: any) {
-      console.error('Error fetching employee data:', err);
-      setError('Failed to load employee data. Check RLS policies.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  
-  // Real-time listener setup
-  useEffect(() => {
-    fetchData(); // Initial fetch
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type } = e.target;
     
-    const profileChannel = supabase
-      .channel('public:profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchData(); // Refetch all data on profile change
-      })
-      .subscribe();
-      
-    const taskChannel = supabase
-      .channel('public:tasks')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
-        fetchData(); // Refetch all data on task change
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(profileChannel);
-      supabase.removeChannel(taskChannel);
-    };
-  }, [fetchData]);
-
-  // Filter employees based on search
-  const filteredEmployees = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    if (!q) return employees;
-    return employees.filter(e =>
-      (e.first_name || '').toLowerCase().includes(q) ||
-      (e.last_name || '').toLowerCase().includes(q) ||
-      (e.email || '').toLowerCase().includes(q) ||
-      (e.position || '').toLowerCase().includes(q)
-    );
-  }, [employees, searchQuery]);
-
-  // Filter tasks for the selected employee
-  const employeeTasks = useMemo(() => {
-    if (!selectedEmployee) return [];
-    return tasks.filter(t => t.assigned_to === selectedEmployee.id);
-  }, [tasks, selectedEmployee]);
-  
-  // --- HANDLER TO OPEN EDIT MODAL ---
-  const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
-    e.stopPropagation(); // Stop click from selecting the employee in the main view
-    setEditingEmployee(employee);
-    setIsModalOpen(true);
-  };
-  
-  // --- HANDLER TO SAVE PROFILE CHANGES ---
-  const handleSaveProfile = async (updatedProfile: Profile) => {
-    setIsSavingProfile(true);
-    try {
-      // Remove properties that shouldn't be updated or are not in 'profiles' table
-      const { tasks, ...profileData } = updatedProfile;
-      
-      const { error } = await supabase
-        .from('profiles')
-        .update(profileData)
-        .eq('id', updatedProfile.id);
-        
-      if (error) throw error;
-      
-      addToast({ type: 'success', title: 'Profile Updated!', message: `${updatedProfile.first_name}'s details saved.` });
-      
-      // Manually update selected employee if they are the one being edited
-      if (selectedEmployee && selectedEmployee.id === updatedProfile.id) {
-          setSelectedEmployee(updatedProfile);
-      }
-      
-    } catch (err: any) {
-      addToast({ type: 'error', title: 'Save Failed', message: err.message });
-    } finally {
-      setIsSavingProfile(false);
-      setIsModalOpen(false);
-      setEditingEmployee(null);
-      fetchData(); // Force refresh data from DB
+    let processedValue: string | number | null = value;
+    if (type === 'number') {
+      processedValue = value === '' ? null : parseFloat(value);
+    } else if (type === 'date') {
+        processedValue = value === '' ? null : value;
     }
+
+    setFormData(prev => (prev ? { ...prev, [name]: processedValue } : { [name]: processedValue }));
+    setError(null);
   };
 
-  // Handle creating a new task
-  const handleAssignTask = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle || !selectedEmployee || !user) return;
+    if (!formData) return;
 
-    setIsSubmittingTask(true);
-    try {
-      const { data: newTask, error } = await supabase
-        .from('tasks')
-        .insert({
-          title: newTaskTitle,
-          description: newTaskDesc || null,
-          priority: newTaskPriority,
-          status: 'pending',
-          assigned_to: selectedEmployee.id,
-          assigned_by: user.id
-        })
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // We can rely on the real-time listener, but this gives instant UI feedback
-      setTasks(prev => [newTask, ...prev]); 
-      setNewTaskTitle('');
-      setNewTaskDesc('');
-      setNewTaskPriority('medium');
-      addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` });
-      
-    } catch (err: any) {
-      console.error('Error creating task:', err);
-      addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` });
-    } finally {
-      setIsSubmittingTask(false);
+    if (isCreating) {
+      if (!formData.email || !password) {
+        setError('Email and password are required to create a new employee.');
+        return;
+      }
     }
-  };
-  
-  // Handle opening PDF
-  const handleViewPdf = (url: string, title: string) => {
-    setViewingPdf(url);
-    setViewingPdfTitle(title);
+
+    if (!formData.first_name || !formData.last_name || !formData.position) {
+      setError('First name, last name, and position are required.');
+      return;
+    }
+
+    await onSave(formData, isCreating ? password : undefined);
+    // Don't close here, let onSave (in parent) handle it on success
   };
 
-  if (loading && employees.length === 0) { // Only show full-page loader on first load
-    return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
-  }
-  
-  if (error) {
-    return <div className="text-center py-20 text-red-600 flex flex-col items-center gap-3"><AlertCircle className="w-6 h-6" />{error}</div>;
-  }
+  if (!isOpen || !formData) return null;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* --- Column 1: Employee List --- */}
-      <Card className="lg:col-span-1 flex flex-col" title="Employees">
-        <div className="relative mb-4">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search employees..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 w-full"
-          />
-        </div>
-        <div className="flex-1 overflow-y-auto -mr-6 -ml-6 pr-3 pl-6">
-          <div className="space-y-2">
-            {filteredEmployees.map(employee => (
-              <div
-                key={employee.id}
-                onClick={() => setSelectedEmployee(employee)}
-                // Use a div as the main clickable element
-                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer ${
-                  selectedEmployee?.id === employee.id ? 'bg-[#FF5722]/10' : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {employee.avatar_url ? (
-                    <img src={employee.avatar_url} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
-                  ) : (
-                    <span className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <User size={20} className="text-gray-500" />
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
-                    <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
-                  </div>
-                </div>
-                {/* --- FIX: Made button visible --- */}
-                <button
-                  onClick={(e) => handleEditEmployee(e, employee)}
-                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors flex-shrink-0"
-                  title={`Edit ${employee.first_name}`}
-                >
-                  <Edit2 size={16} />
-                </button>
-              </div>
-            ))}
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div
+          className="absolute inset-0 bg-black/60"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        >
+          {/* Header */}
+          <div className="flex-shrink-0 p-6 flex justify-between items-center border-b">
+            <h3 className="text-xl font-bold text-gray-900">
+              {isCreating ? "Add New Employee" : `Edit ${formData.first_name || ''} ${formData.last_name || ''}`}
+            </h3>
+            <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200">
+              <X size={20} />
+            </button>
           </div>
-        </div>
-      </Card>
 
-      {/* --- Column 2: Selected Employee Details --- */}
-      <div className="lg:col-span-2 space-y-6">
-        {!selectedEmployee ? (
-          <Card className="flex items-center justify-center h-full min-h-[400px]">
-            <p className="text-gray-500">Select an employee to view their details</p>
-          </Card>
-        ) : (
-          <AnimatePresence>
-            <motion.div
-              key={selectedEmployee.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
-            >
-              <Card title="Profile & Contact">
+          {/* Form Content */}
+          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
+            {error && (
+              <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
+                <AlertCircle size={16} /> {error}
+              </div>
+            )}
+            
+            {/* --- Authentication Fields (Create Mode Only) --- */}
+            {isCreating && (
+              <>
+                <h4 className="font-semibold text-gray-800 border-b pb-2">Authentication</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
-                  <InfoRow icon={Phone} label="Phone" value={selectedEmployee.phone} />
-                  <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
-                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(selectedEmployee.birth_date)} />
+                    <InputField label="Email *" name="email" value={formData.email} onChange={handleChange} type="email" placeholder="employee@solvex.com" />
+                    <InputField label="Password *" name="password" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Min. 6 characters" />
                 </div>
-              </Card>
+              </>
+            )}
+            
+            <h4 className="font-semibold text-gray-800 border-b pb-2">Personal Details</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="First Name *" name="first_name" value={formData.first_name} onChange={handleChange} />
+              <InputField label="Last Name *" name="last_name" value={formData.last_name} onChange={handleChange} />
+            </div>
+            
+            {!isCreating && (
+                 <InputField label="Email (Read-only)" name="email" value={formData.email} onChange={() => {}} />
+            )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Phone" name="phone" value={formData.phone} onChange={handleChange} placeholder="+233..." />
+              <InputField label="Birth Date" name="birth_date" value={formData.birth_date} onChange={handleChange} type="date" />
+            </div>
+            <InputField label="Home Address" name="home_address" value={formData.home_address} onChange={handleChange} placeholder="Street, City" />
+             <InputField label="National ID" name="national_id" value={formData.national_id} onChange={handleChange} placeholder="GHA-..." />
 
-              <Card title="Employment Details">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
-                  <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
-                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
-                  <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
-                  <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary ? `GHS ${selectedEmployee.salary}` : 'N/A'} />
-                  <InfoRow icon={Building} label="Bank" value={selectedEmployee.bank_name} />
-                  <InfoRow icon={CreditCard} label="Account #" value={selectedEmployee.bank_account} />
-                </div>
-              </Card>
+            <h4 className="font-semibold text-gray-800 border-b pb-2 pt-4">Employment Details</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Position *" name="position" value={formData.position} onChange={handleChange} placeholder="e.g., Graphic Designer" />
+              <InputField label="Employee Number" name="employee_number" value={formData.employee_number} onChange={handleChange} placeholder="EMP-001" />
+            </div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Start Date" name="start_date" value={formData.start_date} onChange={handleChange} type="date" />
+              <InputField label="End Date (Optional)" name="end_date" value={formData.end_date} onChange={handleChange} type="date" />
+            </div>
 
-              <Card title="Documents">
-                <div className="space-y-4">
-                  {/* Unsigned Contract */}
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                    <span className="flex items-center gap-2.5 font-medium text-gray-700">
-                      <FileText size={16} className="text-gray-500" />
-                      <span className="truncate">{unsignedContract.name}</span>
-                    </span>
-                    <div className="flex gap-2 sm:flex-shrink-0">
-                      <button onClick={() => handleViewPdf(unsignedContract.url, unsignedContract.name)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><Eye size={14} /> View</button>
-                      <a href={unsignedContract.url} download="Employment_Contract_Unsigned.pdf" className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"><FileDown size={14} /> Download</a>
-                    </div>
-                  </div>
-                  {/* Signed Contract */}
-                  {selectedEmployee.signed_contract_url ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
-                      <span className="flex items-center gap-2.5 font-medium text-green-800">
-                        <CheckCircle size={16} className="text-green-600" />
-                        <span className="truncate" title={selectedEmployee.signed_contract_name || 'Signed Contract'}>{selectedEmployee.signed_contract_name || 'Signed Contract'}</span>
-                      </span>
-                      <div className="flex gap-2 sm:flex-shrink-0">
-                        <button onClick={() => handleViewPdf(selectedEmployee.signed_contract_url!, selectedEmployee.signed_contract_name!)} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><Eye size={14} /> View</button>
-                        <a href={selectedEmployee.signed_contract_url} download={selectedEmployee.signed_contract_name || 'Signed_Contract.pdf'} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-800 hover:bg-green-100"><FileDown size={14} /> Download</a>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-4 text-center rounded-lg border-2 border-dashed border-gray-300">
-                      <p className="text-sm text-gray-500">Employee has not uploaded their signed contract.</p>
-                    </div>
-                  )}
-                </div>
-              </Card>
+            <h4 className="font-semibold text-gray-800 border-b pb-2 pt-4">Financial Details</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Salary (GHS)" name="salary" value={formData.salary} onChange={handleChange} type="number" placeholder="e.g., 3000.00" />
+              <InputField label="Payday" name="payday" value={formData.payday} onChange={handleChange} placeholder="e.g., 28th of month" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <InputField label="Bank Name" name="bank_name" value={formData.bank_name} onChange={handleChange} placeholder="e.g., GCB Bank" />
+              <InputField label="Bank Account" name="bank_account" value={formData.bank_account} onChange={handleChange} placeholder="Account Number" />
+            </div>
+          </form>
 
-              <Card title="Assign Task">
-                <form onSubmit={handleAssignTask} className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Task Title</label>
-                    <input
-                      type="text"
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      placeholder="e.g., 'Prepare Q4 marketing report'"
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Description (Optional)</label>
-                    <textarea
-                      value={newTaskDesc}
-                      onChange={(e) => setNewTaskDesc(e.target.value)}
-                      placeholder="Add more details..."
-                      rows={3}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                    />
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 justify-between">
-                    <div>
-                      <label className="text-sm font-medium text-gray-700">Priority</label>
-                      <select
-                        value={newTaskPriority}
-                        onChange={(e) => setNewTaskPriority(e.target.value as any)}
-                        className="mt-1 w-full sm:w-auto px-3 py-2 rounded-lg border border-gray-300"
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingTask}
-                      className="inline-flex items-center justify-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50 sm:self-end"
-                    >
-                      {isSubmittingTask ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                      {isSubmittingTask ? 'Assigning...' : 'Assign Task'}
-                    </button>
-                  </div>
-                </form>
-              </Card>
-
-              <Card title="Task List">
-                {employeeTasks.length === 0 ? (
-                  <p className="text-gray-500 text-center py-4">No tasks assigned to this employee.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {employeeTasks.map(task => (
-                      <div key={task.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200">
-                        <div>
-                          <p className="font-medium text-gray-800">{task.title}</p>
-                          <p className="text-sm text-gray-500">{task.description}</p>
-                        </div>
-                        <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${
-                          task.status === 'completed' ? 'bg-green-100 text-green-700' : 
-                          task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {task.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            </motion.div>
-          </AnimatePresence>
-        )}
+          {/* Footer */}
+          <div className="flex-shrink-0 p-6 border-t flex justify-end gap-3 bg-gray-50">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="px-6 py-2 text-sm font-semibold text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              onClick={handleSubmit}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  {isCreating ? "Create Employee" : "Save Changes"}
+                </>
+              )}
+            </button>
+          </div>
+        </motion.div>
       </div>
-
-      {/* PDF Viewer Modal */}
-      <AnimatePresence>
-        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
-      </AnimatePresence>
-      
-      {/* --- The Edit Modal --- */}
-      <EmployeeEditModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingEmployee(null);
-        }}
-        employee={editingEmployee}
-        onSave={handleSaveProfile}
-        isSaving={isSavingProfile}
-      />
-    </div>
+    </AnimatePresence>
   );
 };
 
-export default EmployeesTab;
+export default EmployeeEditModal;
