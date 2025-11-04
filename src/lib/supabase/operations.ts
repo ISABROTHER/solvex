@@ -251,14 +251,12 @@ export const getRentalEquipment = async () => {
 };
 
 export const getAllTeams = async () => {
-  // --- THIS IS THE FIX ---
   // Only select teams that are NOT soft-deleted.
   return supabase
     .from('teams')
     .select('*')
-    .neq('is_deleted', true) // <-- ADDED THIS LINE
+    .neq('is_deleted', true) // Keep this filter
     .order('name');
-  // --- END OF FIX ---
 };
 
 export const getMembers = async (teamId?: string) => {
@@ -318,3 +316,22 @@ export const updateJobPosition = async (id: string, updates: Partial<JobPosition
 export const deleteJobPosition = async (id: string) => {
   return supabase.from('job_positions').update({ deleted_at: new Date().toISOString(), is_deleted: true }).eq('id', id).select().single();
 };
+
+// --- START: NEW FUNCTIONS FOR DELETED TEAMS ---
+export const getDeletedTeams = async () => {
+  return supabase
+    .from('teams')
+    .select('*')
+    .eq('is_deleted', true) // Only get deleted ones
+    .order('deleted_at', { ascending: false });
+};
+
+export const restoreTeam = async (id: string) => {
+  return supabase
+    .from('teams')
+    .update({ is_deleted: false, deleted_at: null })
+    .eq('id', id)
+    .select()
+    .single();
+};
+// --- END: NEW FUNCTIONS ---
