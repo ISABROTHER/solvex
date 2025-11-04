@@ -1,7 +1,6 @@
 // @ts-nocheck
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import useSWR from 'swr';
 import { supabase } from '../../lib/supabase/client';
 import type { AuthSession, User } from '@supabase/supabase-js';
 import type { Profile } from '../../lib/supabase/operations'; // Import Profile type
@@ -45,7 +44,8 @@ const ensureProfileExists = async (user: User): Promise<Profile> => {
       // 'role' will be set to 'employee' by default from SQL
     }, {
       onConflict: 'id',
-      ignoreDuplicates: true, // Don't update if profile exists
+      // Do not overwrite existing profile data, just create if missing
+      ignoreDuplicates: true, 
     })
     .select()
     .single();
@@ -59,6 +59,8 @@ const ensureProfileExists = async (user: User): Promise<Profile> => {
   if (!data) {
      const existing = await getProfile();
      if (existing) return existing;
+     // This case should be rare, but handles a race condition
+     throw new Error("Failed to retrieve profile after upsert.");
   }
   
   return data as Profile;
@@ -73,63 +75,91 @@ interface AuthContextType {
   isAdmin: boolean;
   isClient: boolean;
   loading: boolean;
-  logout: ()_ => Promise<void>;
+  logout: () => Promise<void>;
+  refreshProfile: () => void; // Add a refresh function
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loadingUser, setLoadingUser] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // --- SWR for Profile Fetching ---
-  // Re-fetches profile when 'user' changes
-  const { 
-    data: profile, 
-    error: profileError, 
-    isLoading: loadingProfile,
-    mutate: mutateProfile // Allows us to manually trigger re-fetch
-  } = useSWR(user ? 'profile' : null, getProfile, {
-    shouldRetryOnError: false, // Don't retry if profile doesn't exist yet
-  });
-  
+  // --- Profile Fetching Function ---
+  const fetchProfile = useCallback(async () => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+    
+    setLoadingProfile(true);
+    try {
+      const existingProfile = await getProfile();
+      if (existingProfile) {
+        setProfile(existingProfile);
+      } else {
+        // If no profile, create one
+        const newProfile = await ensureProfileExists(user);
+        setProfile(newProfile);
+      }
+    } catch (error) {
+      console.error("Failed to fetch or create profile:", error);
+      setProfile(null);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [user]);
+
   // --- Auth State Change Listener ---
   useEffect(() => {
     setLoadingUser(true);
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setUser(session?.user ?? null);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
         setLoadingUser(false);
         
-        // --- START: NEW PROFILE CREATION LOGIC ---
-        if (_event === 'SIGNED_IN' && session?.user) {
-            try {
-                // Check if profile exists
-                const existingProfile = await getProfile();
-                if (!existingProfile) {
-                    // Create profile if it doesn't exist
-                    await ensureProfileExists(session.user);
-                    // Manually trigger a re-fetch of the profile data
-                    mutateProfile();
-                }
-            } catch (err) {
-                console.error("Failed to create profile on sign-in:", err);
+        // When user logs in, fetch profile
+        if (_event === 'SIGNED_IN' && currentUser) {
+          setLoadingProfile(true);
+          try {
+            const existingProfile = await getProfile();
+            if (!existingProfile) {
+              const newProfile = await ensureProfileExists(currentUser);
+              setProfile(newProfile);
+            } else {
+              setProfile(existingProfile);
             }
+          } catch (err) {
+            console.error("Failed to create profile on sign-in:", err);
+            setProfile(null);
+          } finally {
+            setLoadingProfile(false);
+          }
+        } else if (!currentUser) {
+          // User signed out
+          setProfile(null);
         }
-        // --- END: NEW PROFILE CREATION LOGIC ---
       }
     );
     return () => subscription.unsubscribe();
-  }, [mutateProfile]);
+  }, []);
 
+  // --- Effect to fetch profile when user is loaded but profile isn't ---
+  useEffect(() => {
+    if (user && !profile && !loadingProfile && !loadingUser) {
+      fetchProfile();
+    }
+  }, [user, profile, loadingProfile, loadingUser, fetchProfile]);
 
   // --- Logout Function ---
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    mutateProfile(null); // Clear profile cache
+    setProfile(null);
     navigate('/');
   };
   
@@ -144,6 +174,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isClient,
     loading,
     logout,
+    refreshProfile: fetchProfile, // Expose the refresh function
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
