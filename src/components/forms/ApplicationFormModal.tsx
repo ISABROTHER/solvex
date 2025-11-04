@@ -177,9 +177,8 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
     } catch (err: any) { 
       console.error('Application submission error:', err);
       
-      // --- THIS IS THE ROBUST FIX ---
-      // It will try to find a message, and if it can't, it will
-      // stringify the error to prevent [object Object].
+      // --- START OF ROBUST FIX ---
+      // This will force any error into a readable string
       let errorMessage = 'An unknown error occurred. Please try again.';
       if (typeof err === 'string') {
         errorMessage = err;
@@ -195,7 +194,7 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
         }
       }
       setError(errorMessage);
-      // --- END OF FIX ---
+      // --- END OF ROBUST FIX ---
       
     } finally {
       setIsSubmitting(false);
