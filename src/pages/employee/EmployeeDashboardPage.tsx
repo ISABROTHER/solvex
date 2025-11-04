@@ -33,16 +33,51 @@ import {
   Trash2,
   Home,
   Users,
-  List, // <-- 1. IMPORT
+  List,
+  AlertTriangle, // <-- 1. IMPORT
+  ShieldCheck, // <-- 1. IMPORT
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../contexts/ToastContext'; 
-// 2. IMPORT THE NEW PANEL AND TYPES
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
-import { Assignment, Milestone } from '../admin/DashboardPage/tabs/AssignmentsTab';
-import { Profile } from '../admin/DashboardPage/tabs/EmployeesTab';
+// 2. We'll need to move these types to a shared file eventually
+import { Assignment, Milestone } from '../admin/DashboardPage/tabs/AssignmentsTab'; 
 
-// --- 3. REMOVED OLD 'Task' AND 'Assignment' INTERFACES ---
+// --- TYPE DEFINITIONS ---
+interface Profile {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  avatar_url: string | null;
+  employee_number: string | null;
+  birth_date: string | null;
+  national_id: string | null;
+  position: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  home_address: string | null;
+  salary: number | null;
+  payday: string | null;
+  bank_account: string | null;
+  bank_name: string | null;
+  // This is now replaced by the new documents table
+  // signed_contract_url: string | null;
+  // signed_contract_name: string | null;
+}
+
+// 3. NEW DOCUMENT TYPE
+type EmployeeDocument = {
+  id: string;
+  profile_id: string;
+  document_name: string;
+  storage_url: string; // URL of the *unsigned* doc from admin
+  requires_signing: boolean;
+  signed_storage_url: string | null; // URL of the *signed* version from employee
+  signed_storage_path: string | null;
+  signed_at: string | null;
+};
 
 // --- MOCK DATA (FRONTEND-FIRST) ---
 const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
@@ -51,7 +86,7 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     id: 'assign_1',
     title: 'Client Brand Strategy Deck',
     category: 'Design',
-    description: 'Create a full brand strategy deck for the new client. Include tone, format, and target audience analysis.',
+    description: 'Create a full brand strategy deck...',
     attachments: [{ id: 'att_1', file_name: 'Client_Brief.pdf', file_url: '#', uploaded_at: '2025-11-03' }],
     priority: 'high',
     type: 'team',
@@ -60,7 +95,6 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     milestones: [
       { id: 'm_1', title: 'Initial Research', due_date: '2025-11-07', completed: true },
       { id: 'm_2', title: 'Draft v1', due_date: '2025-11-10', completed: false },
-      { id: 'm_3', title: 'Final Deck', due_date: '2025-11-15', completed: false },
     ],
     assignees: [MOCK_USER_1],
     supervisor: null,
@@ -86,8 +120,12 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     deliverables: [{ id: 'd_1', file_name: 'Social_Plan_v1.pdf', file_url: '#', uploaded_at: '2025-11-04' }],
   },
 ];
+const MOCK_DOCUMENTS: EmployeeDocument[] = [
+  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
+  { id: 'doc_2', document_name: 'Employee Handbook v2', storage_url: '/mock-handbook.pdf', requires_signing: true, signed_storage_url: 'https://example.com/signed-handbook.pdf', signed_at: new Date().toISOString(), profile_id: '1', signed_storage_path: 'mock/path' },
+  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
+];
 // --- END MOCK DATA ---
-
 
 // --- HELPERS ---
 const formatDate = (dateString: string | null) => {
@@ -97,11 +135,7 @@ const formatDate = (dateString: string | null) => {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-// --- 4. REMOVED badgeForPriority and statusMeta ---
-
 // --- REUSABLE UI ---
-
-// ... (PdfViewerModal and InfoRow components remain unchanged) ...
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
@@ -149,29 +183,24 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
     </div>
   </div>
 );
-// --- 5. REMOVED TaskItem component ---
 
 // --- MAIN ---
 const EmployeeDashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
   const { addToast } = useToast();
   const [profile, setProfile] = useState<Profile | null>(null);
-  // const [tasks, setTasks] = useState<Task[]>([]); // 6. REMOVED
   const [loading, setLoading] = useState(true);
-  // const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null); // 6. REMOVED
   const [error, setError] = useState<string | null>(null);
 
-  // --- 7. NEW ASSIGNMENT STATE ---
+  // --- New Assignment State ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   
   // UI: filters & search
-  const [statusFilter, setStatusFilter] = useState<'all' | string>('all'); // 8. Updated
+  const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
   const [query, setQuery] = useState('');
-  const [showTaskSummary, setShowTaskSummary] = useState(false);
-
+  
   // Profile edit mode
-  // ... (editMode and profile states remain unchanged) ...
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [editPhone, setEditPhone] = useState<string>('');
@@ -180,28 +209,26 @@ const EmployeeDashboardPage: React.FC = () => {
   const [editBankAccount, setEditBankAccount] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // --- 9. We'll update the 'My Documents' section next ---
-  const [signedDocument, setSignedDocument] = useState<{ name: string; url: string } | null>(null);
-  const [documentUploading, setDocumentUploading] = useState(false);
-  const [isRemovingDocument, setIsRemovingDocument] = useState(false);
+  // --- 4. NEW DOCUMENTS STATE ---
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  
+  // PDF Viewer
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
-  const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; 
 
   useEffect(() => {
     if (user?.id) {
       fetchDashboardData();
-
-      // 10. We'll add real-time listeners for assignments later
+      // ... (real-time listeners to be added) ...
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const fetchDashboardData = async () => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
-
     try {
       // Fetch Profile
       const { data: profileData, error: profileError } = await (supabase as any)
@@ -209,30 +236,20 @@ const EmployeeDashboardPage: React.FC = () => {
         .select('*') 
         .eq('id', user.id)
         .maybeSingle();
-
       if (profileError) throw profileError;
       setProfile(profileData);
       setEditPhone(profileData?.phone || '');
       setEditAddress(profileData?.home_address || '');
       setEditBankName(profileData?.bank_name || '');
       setEditBankAccount(profileData?.bank_account || '');
-      if (profileData?.signed_contract_url && profileData?.signed_contract_name) {
-        setSignedDocument({ name: profileData.signed_contract_name, url: profileData.signed_contract_url });
-      } else {
-        setSignedDocument(null);
-      }
 
-      // 11. FETCH NEW ASSIGNMENTS (MOCKED)
-      // Real query:
-      // const { data: assignmentsData, error: assignmentsError } = await supabase
-      //   .from('assignments')
-      //   .select('*, assignees:assignment_assignees(profile_id)')
-      //   .eq('assignees.profile_id', user.id)
-      //   .order('created_at', { ascending: false });
-      // if (assignmentsError) throw assignmentsError;
-      
+      // --- 5. FETCH NEW ASSIGNMENTS (MOCKED) ---
       await new Promise(res => setTimeout(res, 500)); // Simulate load
       setAssignments(MOCK_ASSIGNMENTS);
+      
+      // --- 6. FETCH NEW DOCUMENTS (MOCKED) ---
+      await new Promise(res => setTimeout(res, 500)); // Simulate load
+      setDocuments(MOCK_DOCUMENTS);
 
     } catch (err) {
       console.error('Unexpected error:', err);
@@ -241,8 +258,6 @@ const EmployeeDashboardPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  // --- 12. REMOVED updateTaskStatus ---
 
   const filteredAssignments = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -255,17 +270,58 @@ const EmployeeDashboardPage: React.FC = () => {
       return matchesStatus && matchesQuery;
     });
   }, [assignments, statusFilter, query]);
+  
+  // --- Profile & Avatar Handlers (unchanged) ---
+  const onSaveProfile = async () => { /* ... (mocked) ... */ };
+  const onUploadAvatar = async (file: File) => { /* ... (mocked) ... */ };
 
-  // 13. REMOVED old 'stats' useMemo
+  // --- 7. NEW DOCUMENT UPLOAD HANDLER (Mocked) ---
+  const onUploadSignedDoc = async (file: File, doc: EmployeeDocument) => {
+    if (!user?.id || !file) return;
+    setUploadingDocId(doc.id);
+    try {
+      // --- MOCKED ---
+      // 1. Upload file to Storage
+      // const storagePath = `${user.id}/signed_${doc.id}_${file.name}`;
+      // const { error: upErr } = await supabase.storage.from('documents').upload(storagePath, file);
+      // if (upErr) throw upErr;
+      
+      // 2. Get public URL
+      // const { data: pub } = supabase.storage.from('documents').getPublicUrl(storagePath);
+      // if (!publicUrl) throw new Error('Could not get public URL.');
+      
+      // 3. Update 'documents' table
+      // const { error: dbErr } = await supabase.from('documents')
+      //   .update({
+      //     signed_storage_url: publicUrl,
+      //     signed_storage_path: storagePath,
+      //     signed_at: new Date().toISOString()
+      //   })
+      //   .eq('id', doc.id);
+      // if (dbErr) throw dbErr;
+      
+      await new Promise(res => setTimeout(res, 1000));
+      setDocuments(prev => prev.map(d => 
+        d.id === doc.id ? { ...d, signed_storage_url: 'https://mock.url/signed.pdf', signed_at: new Date().toISOString() } : d
+      ));
+      // --- END MOCKED ---
+      
+      addToast({ type: 'success', title: 'Document Uploaded!', message: `${doc.document_name} is saved.` });
+    
+    } catch (e: any) {
+      console.error('Error uploading signed document:', e);
+      addToast({ type: 'error', title: 'Upload Failed', message: e.message });
+    } finally {
+      setUploadingDocId(null);
+    }
+  };
+
+  const handleViewPdf = (url: string, title: string) => {
+    setViewingPdf(url);
+    setViewingPdfTitle(title);
+  };
   
-  // ... (onSaveProfile, onUploadAvatar, onUploadSignedContract, onRemoveSignedContract, handleViewPdf remain unchanged) ...
-  const onSaveProfile = async () => { /* ... */ };
-  const onUploadAvatar = async (file: File) => { /* ... */ };
-  const onUploadSignedContract = async (file: File) => { /* ... */ };
-  const onRemoveSignedContract = async () => { /* ... */ };
-  const handleViewPdf = (url: string, title: string) => { /* ... */ };
-  
-  // --- 14. NEW MOCKED HANDLERS ---
+  // --- New Assignment Handlers (Mocked) ---
   const handlePostComment = (comment: string) => {
     addToast({ type: 'info', title: 'Comment Posted (Mock)' });
   };
@@ -289,19 +345,51 @@ const EmployeeDashboardPage: React.FC = () => {
     <div className="min-h-screen bg-gray-50">
       {/* Header (unchanged) */}
       <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
-        {/* ... */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <img src="https://i.imgur.com/eioVNZq.png" alt="Logo" className="h-8" />
+            <h1 className="text-xl font-bold text-gray-900">Employee Dashboard</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
+              title="Main Site"
+            >
+              <Home size={16} />
+              <span className="hidden sm:inline">Main Site</span>
+            </a>
+            <button
+              onClick={fetchDashboardData}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
+              title="Refresh"
+            >
+              <RefreshCw size={16} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
+        </div>
       </header>
 
       {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome (unchanged) */}
         <div className="mb-8">
-          {/* ... */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-3xl font-bold text-gray-900">
+              Welcome back, {profile?.first_name || 'Employee'}!
+            </h2>
+          </div>
         </div>
 
-        {/* Optional Task Summary (REMOVED) */}
-        
-        {/* Grid */}
+        {/* Grid: Main content (Assignments) on left, Sidebar (Profile) on right */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
           {/* --- MAIN CONTENT (ASSIGNMENTS) --- */}
@@ -326,7 +414,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 w-full sm:w-56"
                     />
                   </div>
-                  {/* 15. UPDATED FILTERS */}
                   <div className="flex-1 sm:flex-none grid grid-cols-4 gap-1 bg-gray-100 p-1 rounded-lg">
                     {(['all', 'Assigned', 'In Progress', 'Pending Review'] as const).map((key) => (
                       <button
@@ -355,7 +442,6 @@ const EmployeeDashboardPage: React.FC = () => {
                 <div className="text-center py-12">
                   <List className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                   <p className="text-gray-600 font-medium">No assignments... yet.</p>
-                  <p className="text-sm text-gray-400">Your queue is clear.</p>
                 </div>
               ) : filteredAssignments.length === 0 ? (
                 <div className="text-center py-12">
@@ -363,7 +449,6 @@ const EmployeeDashboardPage: React.FC = () => {
                   <p className="text-gray-600 font-medium">No assignments match your filters.</p>
                 </div>
               ) : (
-                // 16. NEW ASSIGNMENT LIST
                 <div className="space-y-4">
                   {filteredAssignments.map((assignment) => (
                     <AssignmentCard 
@@ -375,20 +460,168 @@ const EmployeeDashboardPage: React.FC = () => {
                 </div>
               )}
             </motion.div>
-            
-            {/* 17. REMOVED OLD TEAM ASSIGNMENTS CARD */}
-            
           </div>
 
-          {/* --- SIDEBAR (PROFILE) --- */}
+          {/* --- 8. RESTORED SIDEBAR --- */}
           <div className="lg:col-span-2 space-y-6">
-            {/* ... (All profile, documents, and details cards remain unchanged) ... */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
             >
-              {/* Profile Avatar & Edit Button */}
+              <div className="flex flex-col items-center text-center">
+                <div className="relative">
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt="Profile"
+                      className="w-24 h-24 rounded-full object-cover border-4 border-gray-100"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center border-4 border-gray-200">
+                      <User className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+                  <label className="absolute -bottom-2 -right-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={avatarUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onUploadAvatar(file);
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-white border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-50">
+                      {avatarUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      {avatarUploading ? '...' : 'Change'}
+                    </span>
+                  </label>
+                </div>
+
+                <h3 className="text-xl font-bold text-gray-900 mt-4">
+                  {(profile?.first_name || '') + ' ' + (profile?.last_name || '')}
+                </h3>
+                <p className="text-base text-[#FF5722] font-medium">
+                  {profile?.position || 'N/A'}
+                </p>
+              </div>
+
+              <div className="border-t border-gray-100 my-6" />
+
+              {/* View or Edit */}
+              {!editMode ? (
+                <>
+                  <div className="space-y-4">
+                    <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                    <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                    <InfoRow icon={MapPin} label="Home Address" value={profile?.home_address} />
+                  </div>
+                  <button
+                    onClick={() => setEditMode(true)}
+                    className="mt-5 inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+                  >
+                    <Edit3 size={16} />
+                    Edit Profile
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  {/* Edit Form Inputs (unchanged) */}
+                  {/* ... */}
+                </div>
+              )}
+            </motion.div>
+
+            {/* --- 9. NEW "MY DOCUMENTS" CARD --- */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-[#FF5722]" />
+                My Documents
+              </h4>
+              <div className="space-y-3">
+                {loadingDocs ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                ) : documents.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-2">No documents found.</p>
+                ) : (
+                  documents.map(doc => (
+                    <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                        {/* Left Side: Name and Status */}
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                          {!doc.requires_signing && (
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                              <ShieldCheck size={14} /> View Only
+                            </span>
+                          )}
+                          {doc.requires_signing && !doc.signed_storage_url && (
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
+                              <AlertTriangle size={14} /> Action Required
+                            </span>
+                          )}
+                          {doc.requires_signing && doc.signed_storage_url && (
+                            <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                              <CheckCircle size={14} /> Signed
+                            </span>
+                          )}
+                        </div>
+                        {/* Right Side: Buttons */}
+                        <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
+                          <button
+                            onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                          >
+                            <Eye size={14} /> View
+                          </button>
+                          {doc.signed_storage_url && (
+                             <button
+                                onClick={() => handleViewPdf(doc.signed_storage_url, `(SIGNED) ${doc.document_name}`)}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                              >
+                                <Eye size={14} /> View Signed
+                              </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Upload Box for Pending Documents */}
+                      {doc.requires_signing && !doc.signed_storage_url && (
+                        <label className="relative flex flex-col items-center justify-center p-4 mt-3 rounded-lg border-2 border-dashed border-gray-300 hover:border-[#FF5722] hover:bg-orange-50 transition-colors cursor-pointer">
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            disabled={uploadingDocId === doc.id}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) onUploadSignedDoc(file, doc);
+                            }}
+                          />
+                          {uploadingDocId === doc.id ? (
+                            <>
+                              <Loader2 size={24} className="text-gray-500 animate-spin" />
+                              <span className="mt-2 text-sm font-medium text-gray-600">Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileUp size={24} className="text-gray-400" />
+                              <span className="mt-2 text-sm font-semibold text-[#FF5722]">Upload Signed Version</span>
+                              <span className="mt-1 text-xs text-gray-500">PDF only</span>
+                            </>
+                          )}
+                        </label>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </motion.div>
             
             <motion.div
@@ -396,15 +629,18 @@ const EmployeeDashboardPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
             >
-              {/* My Documents Card */}
-            </motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
-            >
-              {/* Employment Details Card */}
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5 text-[#FF5722]" />
+                Employment Details
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                <InfoRow icon={Hash} label="Employee Number" value={profile?.employee_number} />
+                <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
+                <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile?.start_date)} />
+                <InfoRow icon={Calendar} label="End Date" value={formatDate(profile?.end_date)} />
+                <InfoRow icon={FileText} label="National ID" value={profile?.national_id} />
+                <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile?.birth_date)} />
+              </div>
             </motion.div>
 
             <motion.div
@@ -412,7 +648,20 @@ const EmployeeDashboardPage: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
             >
-              {/* Financial Details Card */}
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-[#FF5722]" />
+                Financial Details
+              </h4>
+              <div className="space-y-4">
+                <InfoRow
+                  icon={DollarSign}
+                  label="Salary"
+                  value={profile?.salary ? `GHS ${Number(profile.salary).toLocaleString()}` : 'N/A'}
+                />
+                <InfoRow icon={Calendar} label="Payday" value={profile?.payday} />
+                <InfoRow icon={Building} label="Bank" value={profile?.bank_name} />
+                <InfoRow icon={CreditCard} label="Account" value={profile?.bank_account} />
+              </div>
             </motion.div>
           </div>
         </div>
@@ -429,7 +678,7 @@ const EmployeeDashboardPage: React.FC = () => {
         )}
       </AnimatePresence>
       
-      {/* 18. NEW ASSIGNMENT PANEL */}
+      {/* New Assignment Panel */}
       <EmployeeAssignmentPanel
         assignment={selectedAssignment}
         onClose={() => setSelectedAssignment(null)}
@@ -440,7 +689,7 @@ const EmployeeDashboardPage: React.FC = () => {
   );
 };
 
-// --- 19. NEW ASSIGNMENT CARD COMPONENT ---
+// --- New Assignment Card Component ---
 const AssignmentCard: React.FC<{ assignment: Assignment, onClick: () => void }> = ({ assignment, onClick }) => {
   const progress = useMemo(() => {
     if (assignment.milestones.length === 0) return 0;
