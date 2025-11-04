@@ -16,56 +16,13 @@ import {
   Users
 } from 'lucide-react';
 import { useToast } from '../../../../contexts/ToastContext';
-import { Profile } from './EmployeesTab'; // Assuming type is exported from EmployeesTab
+// --- 1. IMPORT FROM NEW SHARED TYPES FILE ---
+import { Profile, Assignment, AssignmentComment, Status } from '../shared/types';
 import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
 
-// --- TYPE DEFINITIONS (MOCKED) ---
-// We define these here temporarily, as requested (frontend-first)
+// --- 2. REMOVED OLD TYPE DEFINITIONS ---
 
-type Category = 'Design' | 'Content' | 'Public Relations' | 'Innovation Lab' | 'Production' | 'Client Project';
-type Priority = 'low' | 'medium' | 'high';
-type Status = 'Assigned' | 'In Progress' | 'Pending Review' | 'Completed' | 'Overdue';
-type AssignmentType = 'individual' | 'team';
-
-export type Milestone = { 
-  id: string, 
-  title: string, 
-  due_date: string | null, 
-  completed: boolean 
-};
-
-type AssignmentAttachment = { 
-  id: string, 
-  file_name: string, 
-  file_url: string, 
-  uploaded_at: string 
-};
-
-type AssignmentComment = { 
-  id: string, 
-  profile: Pick<Profile, 'first_name' | 'last_name' | 'avatar_url'>, 
-  content: string, 
-  created_at: string 
-};
-
-export type Assignment = {
-  id: string;
-  title: string;
-  category: Category;
-  description: string;
-  attachments: AssignmentAttachment[];
-  priority: Priority;
-  type: AssignmentType;
-  start_date: string | null;
-  due_date: string | null;
-  milestones: Milestone[];
-  assignees: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'>[];
-  supervisor: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> | null;
-  status: Status;
-  comments: AssignmentComment[];
-  deliverables: AssignmentAttachment[]; // Files uploaded by employees
-};
 
 // --- MOCK DATA (FRONTEND-FIRST) ---
 const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
