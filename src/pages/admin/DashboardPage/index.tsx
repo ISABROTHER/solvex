@@ -13,6 +13,7 @@ import SettingsTab from "./tabs/SettingsTab";
 import ApplicationsTab from "./tabs/ApplicationsTab";
 import JobsTab from "./tabs/JobsTab";
 import ServicesTab from "./tabs/ServicesTab";
+import EmployeesTab from "./tabs/EmployeesTab"; // <-- 1. IMPORT NEW TAB
 
 export type TabKey =
   | "home"
@@ -21,6 +22,7 @@ export type TabKey =
   | "access_requests"
   | "partners"
   | "applications"
+  | "employees" // <-- 2. ADD TAB KEY
   | "settings";
 
 const DashboardPage: React.FC = () => {
@@ -77,6 +79,7 @@ const DashboardPage: React.FC = () => {
           {tab === "projects" && <ProjectsTab />}
           {tab === "partners" && <PartnersTab />}
           {tab === "applications" && <ApplicationsTab />}
+          {tab === "employees" && <EmployeesTab />} {/* <-- 3. RENDER NEW TAB */}
           {tab === "settings" && (
             <SettingsTab 
               jobsTab={<JobsTab />}
