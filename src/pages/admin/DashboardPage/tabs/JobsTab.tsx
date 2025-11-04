@@ -177,6 +177,7 @@ const JobsTab: React.FC = () => {
                 <thead className="bg-gray-50">
                     <tr className="text-left text-gray-600 border-b">
                         <th className="px-4 py-2 font-semibold">Position Title</th>
+                        {/* --- MODIFICATION: Already hidden, which is good --- */}
                         <th className="px-4 py-2 font-semibold hidden md:table-cell">Date Posted</th>
                         <th className="px-4 py-2 font-semibold w-20 text-center">Status</th>
                         <th className="px-4 py-2 font-semibold w-32 text-right">Actions</th>
@@ -187,8 +188,10 @@ const JobsTab: React.FC = () => {
                         <tr key={position.id} className="hover:bg-gray-50 transition-colors">
                             <td className="px-4 py-3 font-medium text-gray-800">
                                 {position.title}
-                                <span className="block text-xs text-gray-500 line-clamp-1">{position.description}</span>
+                                {/* --- MODIFICATION: Hide description on small/medium screens --- */}
+                                <span className="block text-xs text-gray-500 line-clamp-1 hidden lg:block">{position.description}</span>
                             </td>
+                            {/* --- MODIFICATION: Already hidden, which is good --- */}
                             <td className="px-4 py-3 text-gray-600 hidden md:table-cell">
                                 {new Date(position.created_at).toLocaleDateString()}
                             </td>
