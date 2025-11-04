@@ -56,7 +56,6 @@ const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
       {/* Logo or Brand */}
       <div className="px-4 mb-6">
         <NavLink to="/admin" className="flex items-center justify-center">
-          {/* --- MODIFICATION: Replaced text with your logo --- */}
           <img
             src="https://i.imgur.com/MhcvKs3.png"
             alt="SolveX Studios Logo"
@@ -77,8 +76,8 @@ const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
               className={({ isActive }) =>
                 `flex items-center space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-gray-700 text-white shadow-inner'
-                    : 'hover:bg-gray-700 hover:text-white'
+                    ? 'bg-[#FF5722] text-white shadow-inner' // <-- UPDATED ACTIVE COLOR
+                    : 'hover:bg-[#FF5722]/20 hover:text-[#FF5722]' // <-- UPDATED HOVER COLOR
                 }`
               }
             >
@@ -93,10 +92,10 @@ const SideBar: React.FC<SideBarProps> = ({ isOpen }) => {
       <div className="absolute bottom-0 left-0 w-full px-4 pb-4">
         <button
           onClick={handleLogout}
-          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-700 hover:text-white transition-colors text-red-400"
+          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-[#FF5722]/20 hover:text-[#FF5722] transition-colors text-gray-400" // <-- UPDATED LOGOUT COLORS
         >
           <LogOut size={18} />
-          <span>{isUpdatingStatus === r.id ? 'Saving...' : (r.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()))}</span>
+          <span>Logout</span>
         </button>
       </div>
     </div>
