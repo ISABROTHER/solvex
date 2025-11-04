@@ -1,7 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../features/auth';
 import { supabase } from '../../lib/supabase/client';
-import { Loader2, Calendar, MapPin, Phone, CreditCard, Briefcase, User, Hash, FileText, DollarSign } from 'lucide-react';
+import { 
+  Loader2, 
+  Calendar, 
+  MapPin, 
+  Phone, 
+  CreditCard, 
+  Briefcase, 
+  User, 
+  Hash, 
+  FileText, 
+  DollarSign,
+  Mail,
+  LogOut,
+  Building,
+  CheckCircle,
+  Clock,
+  AlertOctagon,
+  Award,
+  ListTodo,
+  TrendingUp,
+  Target
+} from 'lucide-react';
+import { motion } from 'framer-motion';
+
+// --- TYPE DEFINITIONS ---
 
 interface Profile {
   id: string;
@@ -34,6 +58,126 @@ interface Task {
   assigned_by: string | null;
 }
 
+// --- HELPER FUNCTIONS ---
+
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+// --- REUSABLE UI COMPONENTS ---
+
+// A small card for key stats
+const StatCard: React.FC<{ title: string; value: string | number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
+  <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4">
+    <div className={`p-3 rounded-full ${color}`}>
+      <Icon size={20} className="text-white" />
+    </div>
+    <div>
+      <p className="text-sm font-medium text-gray-500">{title}</p>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  </div>
+);
+
+// A single item in the task list
+const TaskItem: React.FC<{ task: Task; onStatusChange: (taskId: string, newStatus: Task['status']) => void; isUpdating: boolean }> = ({ task, onStatusChange, isUpdating }) => {
+  const getStatusInfo = (status: Task['status']) => {
+    switch (status) {
+      case 'pending':
+        return { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50' };
+      case 'in_progress':
+        return { icon: Loader2, color: 'text-blue-500', bg: 'bg-blue-50' };
+      case 'completed':
+        return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50' };
+      default:
+        return { icon: Clock, color: 'text-gray-500', bg: 'bg-gray-50' };
+    }
+  };
+
+  const getPriorityInfo = (priority: Task['priority']) => {
+    switch (priority) {
+      case 'low':
+        return { label: 'Low', color: 'bg-green-100 text-green-700' };
+      case 'medium':
+        return { label: 'Medium', color: 'bg-yellow-100 text-yellow-700' };
+      case 'high':
+        return { label: 'High', color: 'bg-red-100 text-red-700' };
+      default:
+        return { label: 'N/A', color: 'bg-gray-100 text-gray-700' };
+    }
+  };
+
+  const StatusIcon = getStatusInfo(task.status).icon;
+  const statusColor = getStatusInfo(task.status).color;
+  const statusBg = getStatusInfo(task.status).bg;
+  const priorityInfo = getPriorityInfo(task.priority);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 transition-shadow hover:shadow-md"
+    >
+      <div className="flex items-start justify-between">
+        <div>
+          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${priorityInfo.color}`}>
+            {priorityInfo.label}
+          </span>
+          <h3 className="text-lg font-semibold text-gray-900 mt-2">{task.title}</h3>
+          {task.description && (
+            <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+          )}
+        </div>
+        <div className={`p-2 rounded-full ${statusBg} ${statusColor}`}>
+          <StatusIcon size={20} className={task.status === 'in_progress' ? 'animate-spin' : ''} />
+        </div>
+      </div>
+      <div className="border-t border-gray-100 mt-4 pt-4 flex items-center justify-between">
+        <div className="text-sm text-gray-500">
+          {task.deadline ? (
+            <span className="flex items-center gap-1.5">
+              <Calendar size={14} />
+              Due: {formatDate(task.deadline)}
+            </span>
+          ) : (
+            <span>No deadline</span>
+          )}
+        </div>
+        <select
+          value={task.status}
+          onChange={(e) => onStatusChange(task.id, e.target.value as Task['status'])}
+          disabled={isUpdating}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF5722] disabled:opacity-70"
+        >
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+    </motion.div>
+  );
+};
+
+// A reusable info row for the profile card
+const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({ icon: Icon, label, value }) => (
+  <div className="flex items-start gap-3">
+    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-medium text-gray-900">{value || 'N/A'}</p>
+    </div>
+  </div>
+);
+
+// --- MAIN COMPONENT ---
+
 const EmployeeDashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -49,7 +193,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
   const fetchProfileAndTasks = async () => {
     if (!user?.id) return;
-
+    setLoading(true);
     try {
       const { data: profileData, error: profileError } = await (supabase as any)
         .from('profiles')
@@ -57,11 +201,8 @@ const EmployeeDashboardPage: React.FC = () => {
         .eq('id', user.id)
         .maybeSingle();
 
-      if (profileError) {
-        console.error('Error fetching profile:', profileError);
-      } else {
-        setProfile(profileData);
-      }
+      if (profileError) console.error('Error fetching profile:', profileError);
+      else setProfile(profileData);
 
       const { data: tasksData, error: tasksError } = await (supabase as any)
         .from('tasks')
@@ -69,11 +210,9 @@ const EmployeeDashboardPage: React.FC = () => {
         .eq('assigned_to', user.id)
         .order('created_at', { ascending: false });
 
-      if (tasksError) {
-        console.error('Error fetching tasks:', tasksError);
-      } else {
-        setTasks(tasksData || []);
-      }
+      if (tasksError) console.error('Error fetching tasks:', tasksError);
+      else setTasks(tasksData || []);
+
     } catch (error) {
       console.error('Unexpected error:', error);
     } finally {
@@ -81,7 +220,7 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  const updateTaskStatus = async (taskId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
+  const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     setUpdatingTaskId(taskId);
     try {
       const { error } = await (supabase as any)
@@ -104,233 +243,141 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'low': return 'text-green-600';
-      case 'medium': return 'text-yellow-600';
-      case 'high': return 'text-red-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-  };
-
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gray-50">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-600" />
+      <div className="flex justify-center items-center min-h-screen bg-gray-100">
+        <Loader2 className="h-12 w-12 animate-spin text-[#FF5722]" />
       </div>
     );
   }
 
+  const pendingTasks = tasks.filter(t => t.status === 'pending').length;
+  const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
+  const highPriorityTasks = tasks.filter(t => t.priority === 'high' && t.status !== 'completed').length;
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow">
+    <div className="min-h-screen bg-gray-100">
+      
+      {/* --- Header --- */}
+      <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">Employee Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <img src="https://i.imgur.com/eioVNZq.png" alt="Logo" className="h-8" />
+            <h1 className="text-xl font-bold text-gray-900">
+              Employee Dashboard
+            </h1>
+          </div>
           <button
             onClick={logout}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+            className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
           >
+            <LogOut size={16} />
             Logout
           </button>
         </div>
       </header>
 
+      {/* --- Main Content --- */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <div className="flex items-start space-x-6">
-            <div className="flex-shrink-0">
-              {profile?.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt="Profile"
-                  className="w-32 h-32 rounded-full object-cover border-4 border-blue-100"
-                />
-              ) : (
-                <div className="w-32 h-32 rounded-full bg-blue-100 flex items-center justify-center border-4 border-blue-200">
-                  <User className="w-16 h-16 text-blue-600" />
-                </div>
-              )}
+        
+        {/* --- Welcome Message --- */}
+        <div className="mb-6">
+          <h2 className="text-3xl font-bold text-gray-900">
+            Welcome back, {profile?.first_name || 'Employee'}!
+          </h2>
+          <p className="text-lg text-gray-600">Here's what's happening today.</p>
+        </div>
+
+        {/* --- Stat Cards --- */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          <StatCard title="Total Tasks" value={tasks.length} icon={ListTodo} color="bg-blue-500" />
+          <StatCard title="Pending" value={pendingTasks} icon={Clock} color="bg-yellow-500" />
+          <StatCard title="In Progress" value={inProgressTasks} icon={TrendingUp} color="bg-indigo-500" />
+          <StatCard title="High Priority" value={highPriorityTasks} icon={AlertOctagon} color="bg-red-500" />
+        </div>
+
+        {/* --- Main Layout Grid --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+          {/* --- Column 1: Profile & Contact --- */}
+          <div className="lg:col-span-1 space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex flex-col items-center">
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt="Profile"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-gray-100"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center border-4 border-gray-200">
+                    <User className="w-12 h-12 text-gray-400" />
+                  </div>
+                )}
+                <h3 className="text-xl font-bold text-gray-900 mt-4">
+                  {profile?.first_name} {profile?.last_name}
+                </h3>
+                <p className="text-base text-[#FF5722] font-medium">{profile?.position || 'N/A'}</p>
+              </div>
+              
+              <div className="border-t border-gray-100 my-6" />
+
+              <div className="space-y-4">
+                <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                <InfoRow icon={MapPin} label="Home Address" value={profile?.home_address} />
+              </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-center space-x-3">
-                <User className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Name</p>
-                  <p className="font-semibold text-gray-900">
-                    {profile?.first_name} {profile?.last_name}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Hash className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Employee Number</p>
-                  <p className="font-semibold text-gray-900">{profile?.employee_number || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Calendar className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Birth Date</p>
-                  <p className="font-semibold text-gray-900">{formatDate(profile?.birth_date)}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <FileText className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">National ID</p>
-                  <p className="font-semibold text-gray-900">{profile?.national_id || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Briefcase className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Position</p>
-                  <p className="font-semibold text-gray-900">{profile?.position || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Calendar className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Employment Period</p>
-                  <p className="font-semibold text-gray-900">
-                    {formatDate(profile?.start_date)} - {formatDate(profile?.end_date)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <MapPin className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Home Address</p>
-                  <p className="font-semibold text-gray-900">{profile?.home_address || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Phone className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Phone Number</p>
-                  <p className="font-semibold text-gray-900">{profile?.phone || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <DollarSign className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Salary</p>
-                  <p className="font-semibold text-gray-900">
-                    {profile?.salary ? `$${Number(profile.salary).toLocaleString()}` : 'N/A'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Calendar className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Payday</p>
-                  <p className="font-semibold text-gray-900">{profile?.payday || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <CreditCard className="w-5 h-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Bank Account</p>
-                  <p className="font-semibold text-gray-900">
-                    {profile?.bank_account || 'N/A'}
-                    {profile?.bank_name && ` (${profile.bank_name})`}
-                  </p>
-                </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Financial Details</h4>
+              <div className="space-y-4">
+                <InfoRow icon={DollarSign} label="Salary" value={profile?.salary ? `GHS ${Number(profile.salary).toLocaleString()}` : 'N/A'} />
+                <InfoRow icon={Calendar} label="Payday" value={profile?.payday} />
+                <InfoRow icon={Building} label="Bank" value={profile?.bank_name} />
+                <InfoRow icon={CreditCard} label="Account" value={profile?.bank_account} />
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">My Assignments</h2>
-
-          {tasks.length === 0 ? (
-            <div className="text-center py-12">
-              <Briefcase className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No tasks assigned yet</p>
+          {/* --- Column 2: Employment & Tasks --- */}
+          <div className="lg:col-span-2 space-y-6">
+            
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">Employment Details</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                <InfoRow icon={Hash} label="Employee Number" value={profile?.employee_number} />
+                <InfoRow icon={Award} label="Position" value={profile?.position} />
+                <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile?.start_date)} />
+                <InfoRow icon={Calendar} label="End Date" value={formatDate(profile?.end_date)} />
+                <InfoRow icon={FileText} label="National ID" value={profile?.national_id} />
+                <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile?.birth_date)} />
+              </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900 text-lg">{task.title}</h3>
-                      {task.description && (
-                        <p className="text-gray-600 mt-1">{task.description}</p>
-                      )}
-                    </div>
-                    <span className={`ml-4 text-sm font-medium ${getPriorityColor(task.priority)}`}>
-                      {task.priority.toUpperCase()}
-                    </span>
-                  </div>
 
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center space-x-4 text-sm text-gray-500">
-                      {task.deadline && (
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="w-4 h-4" />
-                          <span>Due: {formatDate(task.deadline)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
-                        {task.status.replace('_', ' ').toUpperCase()}
-                      </span>
-                      <select
-                        value={task.status}
-                        onChange={(e) => updateTaskStatus(task.id, e.target.value as any)}
-                        disabled={updatingTaskId === task.id}
-                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                      {updatingTaskId === task.id && (
-                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
-                      )}
-                    </div>
-                  </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+              <h4 className="text-lg font-semibold text-gray-900 mb-4">My Assignments</h4>
+              {tasks.length === 0 ? (
+                <div className="text-center py-12">
+                  <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 font-medium">No tasks assigned yet.</p>
+                  <p className="text-sm text-gray-400">Enjoy the quiet... for now.</p>
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-4">
+                  {tasks.map((task) => (
+                    <TaskItem 
+                      key={task.id} 
+                      task={task} 
+                      onStatusChange={updateTaskStatus} 
+                      isUpdating={updatingTaskId === task.id} 
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+            
+          </div>
         </div>
       </main>
     </div>
