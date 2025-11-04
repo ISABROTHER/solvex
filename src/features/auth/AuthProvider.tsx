@@ -10,7 +10,7 @@ import type { Profile } from '../../lib/supabase/operations'; // Import Profile 
 /**
  * Fetches the user's profile from the database.
  */
-const getProfile = async (): Promise<Profile | null> {
+const getProfile = async (): Promise<Profile | null> => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     throw new Error('User not authenticated.');
@@ -75,7 +75,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isClient: boolean;
   loading: boolean;
-  logout: () => Promise<void>;
+  logout: () => Promise<void>; // <-- THIS IS THE FIX (removed the underscore)
   refreshProfile: () => void; // Add a refresh function
 }
 
