@@ -70,15 +70,9 @@ const SideBar: React.FC<SideBarProps> = ({
   // --- REUSABLE SIDEBAR CONTENT ---
   const sidebarContent = (
     <>
-      {/* Logo */}
-      <div className="px-4 mb-6">
-        <NavLink to="/admin" className="flex items-center justify-center">
-          <img
-            src="https://i.imgur.com/MhcvKs3.png" // Your logo
-            alt="SolveX Studios Logo"
-            className="h-10"
-          />
-        </NavLink>
+      {/* Logo (Removed) */}
+      <div className="h-16 flex items-center justify-center px-4 mb-2">
+        {/* Logo space left blank as requested */}
       </div>
 
       {/* Navigation Links */}
@@ -96,8 +90,8 @@ const SideBar: React.FC<SideBarProps> = ({
               onClick={() => handleSelect(itemKey as TabKey)}
               className={`flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 isActive
-                  ? 'bg-[#FF5722] text-white shadow-inner' // <-- BRANDED ACTIVE COLOR
-                  : 'text-gray-300 hover:bg-[#FF5722]/20 hover:text-[#FF5722]' // <-- BRANDED HOVER COLOR
+                  ? 'bg-[#FF5722]/10 text-[#FF5722] font-semibold' // <-- NEW Active
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900' // <-- NEW Hover
               }`}
             >
               <IconComponent size={18} />
@@ -111,7 +105,7 @@ const SideBar: React.FC<SideBarProps> = ({
       <div className="px-4 pb-4">
         <button
           onClick={handleLogout}
-          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-[#FF5722]/20 hover:text-[#FF5722] transition-colors text-gray-400" // <-- BRANDED HOVER
+          className="flex items-center w-full space-x-3 px-3 py-2.5 rounded-md text-sm font-medium hover:bg-red-50 hover:text-red-600 transition-colors text-gray-600" // <-- NEW Logout
         >
           <LogOut size={18} />
           <span>Logout</span>
@@ -127,7 +121,7 @@ const SideBar: React.FC<SideBarProps> = ({
         {/* Backdrop */}
         <div className="absolute inset-0 bg-black/60" onClick={onCloseMobile} />
         {/* Panel */}
-        <div className="relative bg-gray-900 text-gray-300 w-72 h-full space-y-6 py-7 px-2 flex flex-col">
+        <div className="relative bg-white text-gray-600 w-72 h-full space-y-6 py-7 px-2 flex flex-col">
           {sidebarContent}
         </div>
       </div>
@@ -136,7 +130,7 @@ const SideBar: React.FC<SideBarProps> = ({
 
   // --- DESKTOP SIDEBAR RENDER ---
   return (
-    <div className="bg-gray-900 text-gray-300 w-72 space-y-6 py-7 px-2 flex flex-col h-full">
+    <div className="bg-white text-gray-600 w-72 space-y-6 py-7 px-2 flex flex-col h-full border-r border-gray-200">
       {sidebarContent}
     </div>
   );
