@@ -3,6 +3,7 @@ import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ApplicationFormModal from '../components/forms/ApplicationFormModal';
 import { getOpenJobPositions, getActiveTeams, type JobPosition } from '../lib/supabase/operations';
+import { supabase } from '../lib/supabase/client';
 
 interface CareerTeam {
   title: string;
@@ -93,6 +94,24 @@ const CareersPage: React.FC = () => {
     };
 
     fetchJobs();
+
+    // Setup Real-time listeners for live updates from admin dashboard
+    const jobChannel = supabase.channel('public:job_positions_careers')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'job_positions' }, () => {
+        fetchJobs();
+      })
+      .subscribe();
+
+    const teamChannel = supabase.channel('public:teams_careers')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => {
+        fetchJobs();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(jobChannel);
+      supabase.removeChannel(teamChannel);
+    };
   }, []);
 
   const handleApplyClick = (team: CareerTeam) => {

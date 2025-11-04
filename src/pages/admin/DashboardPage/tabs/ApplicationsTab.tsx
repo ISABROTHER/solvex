@@ -38,7 +38,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({ isOpen,
     const statusInfo = STATUS_OPTIONS[statusKey];
     const positionTitle = application.job_position?.title || application.position_title || 'N/A';
     const teamName = application.job_position?.team_name || 'N/A';
-    const fullName = `${application.first_name || ''} ${application.last_name || ''}`.trim(); // <-- UPDATED
+    const fullName = application.full_name || 'N/A';
 
     return (
         <motion.div
@@ -210,7 +210,7 @@ const ApplicationsTab: React.FC = () => {
         if (!searchTerm.trim()) return applications;
         const term = searchTerm.toLowerCase();
         return applications.filter(app =>
-            (`${app.first_name || ''} ${app.last_name || ''}`.toLowerCase().includes(term)) || // <-- UPDATED
+            (app.full_name || '').toLowerCase().includes(term) ||
             app.email.toLowerCase().includes(term) ||
             (app.job_position?.title || app.position_title || '').toLowerCase().includes(term)
         );
@@ -262,7 +262,7 @@ const ApplicationsTab: React.FC = () => {
                                     const statusInfo = STATUS_OPTIONS[statusKey];
                                     const positionTitle = app.job_position?.title || app.position_title || 'N/A';
                                     const teamName = app.job_position?.team_name || 'N/A';
-                                    const fullName = `${app.first_name || ''} ${app.last_name || ''}`.trim(); // <-- UPDATED
+                                    const fullName = app.full_name || 'N/A';
 
                                     return (
                                         <tr key={app.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedApplication(app)}>

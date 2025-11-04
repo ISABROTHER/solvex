@@ -58,24 +58,20 @@ export const submitContactInquiry = async (data: any) => {
 export const submitCareerApplication = async (data: CareerApplicationData) => {
   // We need to insert one row for EACH role the user applied for.
   const applications = data.appliedRoles.map(roleId => ({
-    first_name: data.firstName, // <-- UPDATED
-    last_name: data.lastName, // <-- UPDATED
+    full_name: `${data.firstName} ${data.lastName}`.trim(),
     email: data.email,
     phone: data.phone,
     country_code: data.countryCode,
     cover_letter: data.coverLetter,
     portfolio_url: data.portfolioUrl,
-    job_position_id: roleId, // Link to the job_positions table
-    status: 'pending' as 'pending', // Default status
+    job_position_id: roleId,
+    status: 'pending' as 'pending',
   }));
 
-  // Use type from generated types for type safety
-  type JobApplicationInsert = Database['public']['Tables']['submitted_applications']['Insert'];
-
   // Insert the array of application objects
-  const { error } = await supabase
-    .from('submitted_applications') // <-- USES YOUR TABLE
-    .insert(applications as JobApplicationInsert[]); 
+  const { error } = await (supabase
+    .from('job_applications') as any)
+    .insert(applications); 
 
   if (error) {
     console.error('Supabase career application error:', error);
