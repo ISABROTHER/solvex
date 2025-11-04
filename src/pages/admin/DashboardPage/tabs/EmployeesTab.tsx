@@ -27,25 +27,27 @@ import {
   Plus,
   Send,
   X,
-  FileUp, // Added missing icon
-  Trash2, // Added missing icon
+  FileUp,
+  Trash2,
+  Edit2, // <-- 1. IMPORT Edit2 ICON
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../../../../contexts/ToastContext'; // Import useToast
+import { useToast } from '../../../../contexts/ToastContext';
+import EmployeeEditModal from '../components/EmployeeEditModal'; // <-- 2. IMPORT THE NEW MODAL
 
 // --- TYPE DEFINITIONS ---
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
+// 3. EXPORT THE PROFILE TYPE
+export type Profile = Database['public']['Tables']['profiles']['Row'];
 type Task = Database['public']['Tables']['tasks']['Row'];
 
-// --- 1. ADD THIS HELPER FUNCTION ---
+// --- HELPERS ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
-// --- END OF FUNCTION ---
 
 // --- Reusable InfoRow (from EmployeeDashboard) ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
@@ -101,13 +103,17 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
 
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
-  const { addToast } = useToast(); // Initialize toast
+  const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(null);
+  const [editingEmployee, setEditingEmployee] = useState<Profile | null>(null); // <-- 4. State for modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
 
   // New Task Form State
@@ -122,10 +128,9 @@ const EmployeesTab: React.FC = () => {
   const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; // Mock URL
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    // We don't set loading(true) here to avoid UI flicker on background refresh
     setError(null);
     try {
-      // 1. Fetch all employee profiles
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
@@ -135,7 +140,6 @@ const EmployeesTab: React.FC = () => {
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
 
-      // 2. Fetch all tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from('tasks')
         .select('*')
@@ -151,9 +155,29 @@ const EmployeesTab: React.FC = () => {
       setLoading(false);
     }
   }, []);
-
+  
+  // Real-time listener setup
   useEffect(() => {
-    fetchData();
+    fetchData(); // Initial fetch
+    
+    const profileChannel = supabase
+      .channel('public:profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        fetchData(); // Refetch all data on profile change
+      })
+      .subscribe();
+      
+    const taskChannel = supabase
+      .channel('public:tasks')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => {
+        fetchData(); // Refetch all data on task change
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profileChannel);
+      supabase.removeChannel(taskChannel);
+    };
   }, [fetchData]);
 
   // Filter employees based on search
@@ -173,6 +197,36 @@ const EmployeesTab: React.FC = () => {
     if (!selectedEmployee) return [];
     return tasks.filter(t => t.assigned_to === selectedEmployee.id);
   }, [tasks, selectedEmployee]);
+  
+  // --- 5. HANDLER TO OPEN EDIT MODAL ---
+  const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
+    e.stopPropagation(); // Stop click from selecting the employee in the main view
+    setEditingEmployee(employee);
+    setIsModalOpen(true);
+  };
+  
+  // --- 6. HANDLER TO SAVE PROFILE CHANGES ---
+  const handleSaveProfile = async (updatedProfile: Profile) => {
+    setIsSavingProfile(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updatedProfile)
+        .eq('id', updatedProfile.id);
+        
+      if (error) throw error;
+      
+      addToast({ type: 'success', title: 'Profile Updated!', message: `${updatedProfile.first_name}'s details saved.` });
+      // Data will refresh automatically via Supabase listener
+      
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Save Failed', message: err.message });
+    } finally {
+      setIsSavingProfile(false);
+      setIsModalOpen(false);
+      setEditingEmployee(null);
+    }
+  };
 
   // Handle creating a new task
   const handleAssignTask = async (e: React.FormEvent) => {
@@ -196,8 +250,8 @@ const EmployeesTab: React.FC = () => {
       
       if (error) throw error;
       
-      // Add new task to the list instantly
-      setTasks(prev => [newTask, ...prev]);
+      // We can rely on the real-time listener, but this gives instant UI feedback
+      setTasks(prev => [newTask, ...prev]); 
       setNewTaskTitle('');
       setNewTaskDesc('');
       setNewTaskPriority('medium');
@@ -217,7 +271,7 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
 
-  if (loading) {
+  if (loading && employees.length === 0) { // Only show full-page loader on first load
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
   }
   
@@ -245,21 +299,31 @@ const EmployeesTab: React.FC = () => {
               <button
                 key={employee.id}
                 onClick={() => setSelectedEmployee(employee)}
-                className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg text-left transition-colors ${
                   selectedEmployee?.id === employee.id ? 'bg-[#FF5722]/10' : 'hover:bg-gray-50'
                 }`}
               >
-                {employee.avatar_url ? (
-                  <img src={employee.avatar_url} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
-                ) : (
-                  <span className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                    <User size={20} className="text-gray-500" />
-                  </span>
-                )}
-                <div className="min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
-                  <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
+                <div className="flex items-center gap-3 min-w-0">
+                  {employee.avatar_url ? (
+                    <img src={employee.avatar_url} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <span className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                      <User size={20} className="text-gray-500" />
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
+                    <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
+                  </div>
                 </div>
+                 {/* --- 7. ADD EDIT BUTTON --- */}
+                <button
+                  onClick={(e) => handleEditEmployee(e, employee)}
+                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                  title={`Edit ${employee.first_name}`}
+                >
+                  <Edit2 size={16} />
+                </button>
               </button>
             ))}
           </div>
@@ -291,7 +355,6 @@ const EmployeesTab: React.FC = () => {
 
               <Card title="Employment Details">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* <InfoRow icon={Award} label="Position" value={selectedEmployee.position} /> */} {/* 'Award' is not defined, replaced with Briefcase */}
                   <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
                   <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
@@ -352,7 +415,7 @@ const EmployeesTab: React.FC = () => {
                     <label className="text-sm font-medium text-gray-700">Description (Optional)</label>
                     <textarea
                       value={newTaskDesc}
-                      onChange={(e) => setNewTaskDesc(e.targe.value)}
+                      onChange={(e) => setNewTaskDesc(e.target.value)}
                       placeholder="Add more details..."
                       rows={3}
                       className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
@@ -414,6 +477,18 @@ const EmployeesTab: React.FC = () => {
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
+      
+      {/* --- 8. ADD THE EDIT MODAL --- */}
+      <EmployeeEditModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingEmployee(null);
+        }}
+        employee={editingEmployee}
+        onSave={handleSaveProfile}
+        isSaving={isSavingProfile}
+      />
     </div>
   );
 };
