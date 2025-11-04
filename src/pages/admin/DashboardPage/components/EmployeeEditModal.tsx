@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, 'react';
+import React from 'react'; // <-- FIXED: Was "import React, 'react';"
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Loader2, AlertCircle } from 'lucide-react';
 import { Profile } from '../tabs/EmployeesTab'; // Assuming type is exported from EmployeesTab
