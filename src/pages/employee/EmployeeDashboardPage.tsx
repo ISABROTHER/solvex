@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../features/auth';
 import { supabase } from '../../lib/supabase/client';
-import { 
-  Loader2, 
-  Calendar, 
-  MapPin, 
-  Phone, 
-  CreditCard, 
-  Briefcase, 
-  User, 
-  Hash, 
-  FileText, 
+import {
+  Loader2,
+  Calendar,
+  MapPin,
+  Phone,
+  CreditCard,
+  Briefcase,
+  User,
+  Hash,
+  FileText,
   DollarSign,
   Mail,
   LogOut,
@@ -18,9 +18,15 @@ import {
   CheckCircle,
   Clock,
   Award,
-  Target
+  Target,
+  RefreshCw,
+  Search,
+  Edit3,
+  Save,
+  X,
+  Upload
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // --- TYPE DEFINITIONS ---
 
@@ -55,75 +61,96 @@ interface Task {
   assigned_by: string | null;
 }
 
-// --- HELPER FUNCTIONS ---
+// --- HELPERS ---
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  });
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
-// --- REUSABLE UI COMPONENTS ---
+const badgeForPriority = (priority: Task['priority']) => {
+  switch (priority) {
+    case 'low':
+      return 'bg-green-100 text-green-700';
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-700';
+    case 'high':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+};
 
-// A single item in the task list
-const TaskItem: React.FC<{ task: Task; onStatusChange: (taskId: string, newStatus: Task['status']) => void; isUpdating: boolean }> = ({ task, onStatusChange, isUpdating }) => {
-  const getStatusInfo = (status: Task['status']) => {
-    switch (status) {
-      case 'pending':
-        return { icon: Clock, color: 'text-yellow-500', bg: 'bg-yellow-50' };
-      case 'in_progress':
-        return { icon: Loader2, color: 'text-blue-500', bg: 'bg-blue-50' };
-      case 'completed':
-        return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50' };
-      default:
-        return { icon: Clock, color: 'text-gray-500', bg: 'bg-gray-50' };
-    }
-  };
+const statusMeta = (status: Task['status']) => {
+  switch (status) {
+    case 'pending':
+      return { icon: Clock, ring: 'ring-yellow-200', tint: 'bg-yellow-50 text-yellow-600' };
+    case 'in_progress':
+      return { icon: Loader2, ring: 'ring-blue-200', tint: 'bg-blue-50 text-blue-600' };
+    case 'completed':
+      return { icon: CheckCircle, ring: 'ring-green-200', tint: 'bg-green-50 text-green-600' };
+    default:
+      return { icon: Clock, ring: 'ring-gray-200', tint: 'bg-gray-50 text-gray-600' };
+  }
+};
 
-  const getPriorityInfo = (priority: Task['priority']) => {
-    switch (priority) {
-      case 'low':
-        return { label: 'Low', color: 'bg-green-100 text-green-700' };
-      case 'medium':
-        return { label: 'Medium', color: 'bg-yellow-100 text-yellow-700' };
-      case 'high':
-        return { label: 'High', color: 'bg-red-100 text-red-700' };
-      default:
-        return { label: 'N/A', color: 'bg-gray-100 text-gray-700' };
-    }
-  };
+// --- REUSABLE UI ---
 
-  const StatusIcon = getStatusInfo(task.status).icon;
-  const statusColor = getStatusInfo(task.status).color;
-  const statusBg = getStatusInfo(task.status).bg;
-  const priorityInfo = getPriorityInfo(task.priority);
+const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
+  icon: Icon,
+  label,
+  value
+}) => (
+  <div className="flex items-start gap-3">
+    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-medium text-gray-900 break-words">{value || 'N/A'}</p>
+    </div>
+  </div>
+);
+
+const TaskItem: React.FC<{
+  task: Task;
+  onStatusChange: (taskId: string, newStatus: Task['status']) => void;
+  isUpdating: boolean;
+}> = ({ task, onStatusChange, isUpdating }) => {
+  const meta = statusMeta(task.status);
+  const StatusIcon = meta.icon;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 transition-shadow hover:shadow-md"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
     >
-      <div className="flex items-start justify-between">
-        <div>
-          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${priorityInfo.color}`}>
-            {priorityInfo.label}
-          </span>
-          <h3 className="text-lg font-semibold text-gray-900 mt-2">{task.title}</h3>
-          {task.description && (
-            <p className="text-sm text-gray-600 mt-1">{task.description}</p>
-          )}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeForPriority(task.priority)}`}>
+              {task.priority === 'low' ? 'Low' : task.priority === 'medium' ? 'Medium' : 'High'}
+            </span>
+            {task.deadline && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                <Calendar size={12} />
+                {formatDate(task.deadline)}
+              </span>
+            )}
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mt-2 truncate">{task.title}</h3>
+          {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
         </div>
-        <div className={`p-2 rounded-full ${statusBg} ${statusColor}`}>
+
+        <div className={`p-2 rounded-full ${meta.tint} ring-2 ${meta.ring}`}>
           <StatusIcon size={20} className={task.status === 'in_progress' ? 'animate-spin' : ''} />
         </div>
       </div>
-      <div className="border-t border-gray-100 mt-4 pt-4 flex items-center justify-between">
+
+      <div className="border-t border-gray-100 mt-4 pt-4 flex items-center justify-between gap-3">
         <div className="text-sm text-gray-500">
           {task.deadline ? (
             <span className="flex items-center gap-1.5">
@@ -131,9 +158,10 @@ const TaskItem: React.FC<{ task: Task; onStatusChange: (taskId: string, newStatu
               Due: {formatDate(task.deadline)}
             </span>
           ) : (
-            <span>No deadline</span>
+            <span className="text-gray-400">No deadline</span>
           )}
         </div>
+
         <select
           value={task.status}
           onChange={(e) => onStatusChange(task.id, e.target.value as Task['status'])}
@@ -149,18 +177,7 @@ const TaskItem: React.FC<{ task: Task; onStatusChange: (taskId: string, newStatu
   );
 };
 
-// A reusable info row for the profile card
-const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({ icon: Icon, label, value }) => (
-  <div className="flex items-start gap-3">
-    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
-    <div>
-      <p className="text-xs text-gray-500">{label}</p>
-      <p className="font-medium text-gray-900">{value || 'N/A'}</p>
-    </div>
-  </div>
-);
-
-// --- MAIN COMPONENT ---
+// --- MAIN ---
 
 const EmployeeDashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
@@ -168,16 +185,34 @@ const EmployeeDashboardPage: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // UI: filters & search
+  const [statusFilter, setStatusFilter] = useState<'all' | Task['status']>('all');
+  const [query, setQuery] = useState('');
+  const [showTaskSummary, setShowTaskSummary] = useState(false);
+
+  // Profile edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [editPhone, setEditPhone] = useState<string>('');
+  const [editAddress, setEditAddress] = useState<string>('');
+  const [editBankName, setEditBankName] = useState<string>('');
+  const [editBankAccount, setEditBankAccount] = useState<string>('');
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       fetchProfileAndTasks();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const fetchProfileAndTasks = async () => {
     if (!user?.id) return;
     setLoading(true);
+    setError(null);
+
     try {
       const { data: profileData, error: profileError } = await (supabase as any)
         .from('profiles')
@@ -185,8 +220,17 @@ const EmployeeDashboardPage: React.FC = () => {
         .eq('id', user.id)
         .maybeSingle();
 
-      if (profileError) console.error('Error fetching profile:', profileError);
-      else setProfile(profileData);
+      if (profileError) {
+        console.error('Error fetching profile:', profileError);
+        setError('Could not load profile.');
+      } else {
+        setProfile(profileData);
+        // initialize edit fields
+        setEditPhone(profileData?.phone || '');
+        setEditAddress(profileData?.home_address || '');
+        setEditBankName(profileData?.bank_name || '');
+        setEditBankAccount(profileData?.bank_account || '');
+      }
 
       const { data: tasksData, error: tasksError } = await (supabase as any)
         .from('tasks')
@@ -194,11 +238,15 @@ const EmployeeDashboardPage: React.FC = () => {
         .eq('assigned_to', user.id)
         .order('created_at', { ascending: false });
 
-      if (tasksError) console.error('Error fetching tasks:', tasksError);
-      else setTasks(tasksData || []);
-
-    } catch (error) {
-      console.error('Unexpected error:', error);
+      if (tasksError) {
+        console.error('Error fetching tasks:', tasksError);
+        setError((prev) => prev || 'Could not load tasks.');
+      } else {
+        setTasks(tasksData || []);
+      }
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -207,147 +255,499 @@ const EmployeeDashboardPage: React.FC = () => {
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     setUpdatingTaskId(taskId);
     try {
-      const { error } = await (supabase as any)
+      const { error: updateError } = await (supabase as any)
         .from('tasks')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
         .eq('id', taskId);
 
-      if (error) {
-        console.error('Error updating task:', error);
+      if (updateError) {
+        console.error('Error updating task:', updateError);
         alert('Failed to update task status');
       } else {
-        setTasks(tasks.map(task =>
-          task.id === taskId ? { ...task, status: newStatus } : task
-        ));
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
       }
-    } catch (error) {
-      console.error('Unexpected error updating task:', error);
+    } catch (err) {
+      console.error('Unexpected error updating task:', err);
+      alert('Unexpected error updating task status');
     } finally {
       setUpdatingTaskId(null);
     }
   };
 
+  const filteredTasks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      const matchesStatus = statusFilter === 'all' ? true : t.status === statusFilter;
+      const matchesQuery =
+        q.length === 0 ||
+        t.title.toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q);
+      return matchesStatus && matchesQuery;
+    });
+  }, [tasks, statusFilter, query]);
+
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    const pending = tasks.filter((t) => t.status === 'pending').length;
+    const pct = total ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, inProgress, pending, pct };
+  }, [tasks]);
+
+  const onSaveProfile = async () => {
+    if (!user?.id) return;
+    setSavingProfile(true);
+    setError(null);
+    try {
+      const updates: Partial<Profile> = {
+        phone: editPhone || null,
+        home_address: editAddress || null,
+        bank_name: editBankName || null,
+        bank_account: editBankAccount || null
+      };
+
+      const { error: upErr } = await (supabase as any)
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id);
+
+      if (upErr) {
+        console.error('Error saving profile:', upErr);
+        setError('Could not save changes.');
+      } else {
+        setProfile((prev) => (prev ? { ...prev, ...updates } as Profile : prev));
+        setEditMode(false);
+      }
+    } catch (e) {
+      console.error(e);
+      setError('Something went wrong while saving.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const onUploadAvatar = async (file: File) => {
+    if (!user?.id || !file) return;
+    // Change bucket name if yours differs:
+    const BUCKET = 'avatars';
+    const MAX_MB = 5;
+
+    if (file.size > MAX_MB * 1024 * 1024) {
+      alert(`Image too large. Max ${MAX_MB}MB.`);
+      return;
+    }
+
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+    if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      alert('Please upload a JPG, PNG, or WEBP image.');
+      return;
+    }
+
+    setAvatarUploading(true);
+    try {
+      const path = `${user.id}/${Date.now()}_${file.name}`;
+      const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+      if (upErr) {
+        console.error('Upload error:', upErr);
+        alert('Failed to upload image.');
+        return;
+      }
+
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
+      const publicUrl = pub?.publicUrl;
+      if (!publicUrl) {
+        alert('Could not get image URL.');
+        return;
+      }
+
+      const { error: profErr } = await (supabase as any)
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id);
+
+      if (profErr) {
+        console.error('Profile update error:', profErr);
+        alert('Failed to update profile picture.');
+        return;
+      }
+
+      setProfile((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
+    } catch (e) {
+      console.error(e);
+      alert('Unexpected error during upload.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex justify-center items-center min-h-screen bg-gray-100">
-        <Loader2 className="h-12 w-12 animate-spin text-[#FF5722]" />
+      <div className="flex justify-center items-center min-h-screen bg-gray-50">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-10 w-10 animate-spin text-[#FF5722]" />
+          <p className="text-sm text-gray-500">Loading your dashboard…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      
-      {/* --- Header --- */}
-      <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-gray-200">
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="sticky top-0 z-30 border-b border-gray-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <img src="https://i.imgur.com/eioVNZq.png" alt="Logo" className="h-8" />
-            <h1 className="text-xl font-bold text-gray-900">
-              Employee Dashboard
-            </h1>
+            <h1 className="text-xl font-bold text-gray-900">Employee Dashboard</h1>
           </div>
-          <button
-            onClick={logout}
-            className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
-          >
-            <LogOut size={16} />
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchProfileAndTasks}
+              className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+              title="Refresh"
+            >
+              <RefreshCw size={16} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* --- Main Content --- */}
+      {/* Main */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* --- Welcome Message --- */}
+        {/* Welcome */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">
-            Welcome back, {profile?.first_name || 'Employee'}!
-          </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <h2 className="text-3xl font-bold text-gray-900">
+              Welcome back, {profile?.first_name || 'Employee'}!
+            </h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowTaskSummary((s) => !s)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+              >
+                {showTaskSummary ? <X size={16} /> : <Target size={16} />}
+                {showTaskSummary ? 'Hide Summary' : 'Show Summary'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* --- Main Layout Grid --- */}
+        {/* Optional Task Summary (hidden by default) */}
+        <AnimatePresence initial={false}>
+          {showTaskSummary && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              className="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            >
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Total Tasks</span>
+                  <Briefcase className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">In Progress</span>
+                  <Loader2 className="w-4 h-4 text-blue-500" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Pending</span>
+                  <Clock className="w-4 h-4 text-yellow-500" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.pending}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Completed</span>
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.completed}</p>
+                <div className="mt-3 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500"
+                    style={{ width: `${stats.pct}%` }}
+                    aria-label={`Completed ${stats.pct}%`}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Grid: Main content (Tasks) on left, Sidebar (Profile) on right for desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
-          {/* --- Main Content (Tasks) --- */}
+          {/* --- MAIN CONTENT (TASKS) --- */}
+          {/* On mobile, this appears first. On desktop, it takes 3/5 width. */}
           <div className="lg:col-span-3 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">My Assignments</h4>
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-[#FF5722]" />
+                  My Assignments
+                </h4>
+
+                <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                  <div className="relative flex-1 sm:flex-none">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search tasks…"
+                      className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] w-full sm:w-56"
+                    />
+                  </div>
+                  <div className="flex-1 sm:flex-none grid grid-cols-4 gap-1 bg-gray-100 p-1 rounded-lg">
+                    {(['all', 'pending', 'in_progress', 'completed'] as const).map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => setStatusFilter(key as any)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition text-center ${
+                          statusFilter === key
+                            ? 'bg-white shadow-sm border border-gray-200 text-gray-900'
+                            : 'text-gray-600 hover:bg-white/70'
+                        }`}
+                      >
+                        {key === 'all'
+                          ? 'All'
+                          : key === 'in_progress'
+                          ? 'WIP'
+                          : key[0].toUpperCase() + key.slice(1,4)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
               {tasks.length === 0 ? (
                 <div className="text-center py-12">
                   <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500 font-medium">No tasks assigned yet.</p>
+                  <p className="text-gray-600 font-medium">No tasks assigned yet.</p>
                   <p className="text-sm text-gray-400">Enjoy the quiet... for now.</p>
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="text-center py-12">
+                  <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 font-medium">No tasks match your filters.</p>
+                  <p className="text-sm text-gray-400">Try a different status or search term.</p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {tasks.map((task) => (
-                    <TaskItem 
-                      key={task.id} 
-                      task={task} 
-                      onStatusChange={updateTaskStatus} 
-                      isUpdating={updatingTaskId === task.id} 
-                    />
-                  ))}
+                  <AnimatePresence initial={false}>
+                    {filteredTasks.map((task) => (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        onStatusChange={updateTaskStatus}
+                        isUpdating={updatingTaskId === task.id}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </div>
               )}
-            </div>
+            </motion.div>
           </div>
-          
-          {/* --- Sidebar (Profile) --- */}
+
+          {/* --- SIDEBAR (PROFILE) --- */}
+          {/* On mobile, this appears second. On desktop, it takes 2/5 width. */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <div className="flex flex-col items-center">
-                {profile?.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt="Profile"
-                    className="w-24 h-24 rounded-full object-cover border-4 border-gray-100"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center border-4 border-gray-200">
-                    <User className="w-12 h-12 text-gray-400" />
-                  </div>
-                )}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="relative">
+                  {profile?.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt="Profile"
+                      className="w-24 h-24 rounded-full object-cover border-4 border-gray-100"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center border-4 border-gray-200">
+                      <User className="w-12 h-12 text-gray-400" />
+                    </div>
+                  )}
+                  <label className="absolute -bottom-2 -right-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={avatarUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) onUploadAvatar(file);
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-white border border-gray-200 shadow-sm cursor-pointer hover:bg-gray-50">
+                      {avatarUploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                      {avatarUploading ? '...' : 'Change'}
+                    </span>
+                  </label>
+                </div>
+
                 <h3 className="text-xl font-bold text-gray-900 mt-4">
-                  {profile?.first_name} {profile?.last_name}
+                  {(profile?.first_name || '') + ' ' + (profile?.last_name || '')}
                 </h3>
-                <p className="text-base text-[#FF5722] font-medium">{profile?.position || 'N/A'}</p>
+                <p className="text-base text-[#FF5722] font-medium">
+                  {profile?.position || 'N/A'}
+                </p>
               </div>
-              
+
               <div className="border-t border-gray-100 my-6" />
 
-              <div className="space-y-4">
-                <InfoRow icon={Mail} label="Email" value={profile?.email} />
-                <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
-                <InfoRow icon={MapPin} label="Home Address" value={profile?.home_address} />
-              </div>
-            </div>
+              {/* View or Edit */}
+              {!editMode ? (
+                <>
+                  <div className="space-y-4">
+                    <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                    <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                    <InfoRow icon={MapPin} label="Home Address" value={profile?.home_address} />
+                  </div>
+                  <button
+                    onClick={() => setEditMode(true)}
+                    className="mt-5 inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+                  >
+                    <Edit3 size={16} />
+                    Edit Profile
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Phone</label>
+                    <input
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="+233 ..."
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Home Address</label>
+                    <input
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="Street, City"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Bank Name</label>
+                    <input
+                      value={editBankName}
+                      onChange={(e) => setEditBankName(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5T22] text-sm"
+                      placeholder="e.g., GCB Bank"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Bank Account</label>
+                    <input
+                      value={editBankAccount}
+                      onChange={(e) => setEditBankAccount(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="Account Number"
+                    />
+                  </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Employment Details</h4>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={onSaveProfile}
+                      disabled={savingProfile}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] disabled:opacity-70"
+                    >
+                      {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      {savingProfile ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditMode(false);
+                        // reset edits to current profile
+                        setEditPhone(profile?.phone || '');
+                        setEditAddress(profile?.home_address || '');
+                        setEditBankName(profile?.bank_name || '');
+                        setEditBankAccount(profile?.bank_account || '');
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+                    >
+                      <X size={16} />
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5 text-[#FF5722]" />
+                Employment Details
+              </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
                 <InfoRow icon={Hash} label="Employee Number" value={profile?.employee_number} />
-                <InfoRow icon={Award} label="Position" value={profile?.position} />
+                <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
                 <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile?.start_date)} />
                 <InfoRow icon={Calendar} label="End Date" value={formatDate(profile?.end_date)} />
                 <InfoRow icon={FileText} label="National ID" value={profile?.national_id} />
                 <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile?.birth_date)} />
               </div>
-            </div>
+            </motion.div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-              <h4 className="text-lg font-semibold text-gray-900 mb-4">Financial Details</h4>
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-[#FF5722]" />
+                Financial Details
+              </h4>
               <div className="space-y-4">
-                <InfoRow icon={DollarSign} label="Salary" value={profile?.salary ? `GHS ${Number(profile.salary).toLocaleString()}` : 'N/A'} />
+                <InfoRow
+                  icon={DollarSign}
+                  label="Salary"
+                  value={profile?.salary ? `GHS ${Number(profile.salary).toLocaleString()}` : 'N/A'}
+                />
                 <InfoRow icon={Calendar} label="Payday" value={profile?.payday} />
                 <InfoRow icon={Building} label="Bank" value={profile?.bank_name} />
                 <InfoRow icon={CreditCard} label="Account" value={profile?.bank_account} />
               </div>
-            </div>
+            </motion.div>
           </div>
-
         </div>
       </main>
     </div>
