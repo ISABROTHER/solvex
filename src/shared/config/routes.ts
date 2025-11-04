@@ -18,4 +18,6 @@ export const ROUTES = {
   CLIENT_REQUESTS: '/client/requests',
   CLIENT_REQUESTS_NEW: '/client/requests/new',
   CLIENT_REQUEST_DETAIL: (id: string | number) => `/client/requests/${id}`,
+
+  EMPLOYEE_DASHBOARD: '/employee/dashboard',
 } as const;

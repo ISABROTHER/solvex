@@ -8,9 +8,9 @@ const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   // Get functions and state from AuthProvider via useAuth
-  const { clientLogin, adminLogin, isLoading, error: authError, setError: setAuthError } = useAuth();
-  // State for the active tab (client or admin)
-  const [activeTab, setActiveTab] = useState<'client' | 'admin'>(location.state?.defaultTab || 'client');
+  const { clientLogin, adminLogin, login, isLoading, error: authError, setError: setAuthError } = useAuth();
+  // State for the active tab (client, admin, or employee)
+  const [activeTab, setActiveTab] = useState<'client' | 'admin' | 'employee'>(location.state?.defaultTab || 'client');
   // State for form inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,7 +24,7 @@ const MyPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
     setAuthError(null); // Clear previous errors before attempting login
-    let targetRole: 'client' | 'admin' = activeTab; // Role user is trying to log in as
+    let targetRole: 'client' | 'admin' | 'employee' = activeTab; // Role user is trying to log in as
 
     console.log(`Attempting login for ${targetRole} with email: ${email}`);
 
@@ -35,8 +35,10 @@ const MyPage: React.FC = () => {
 
       if (targetRole === 'client') {
         result = await clientLogin(email, password);
-      } else { // targetRole === 'admin'
+      } else if (targetRole === 'admin') {
         result = await adminLogin(email, password);
+      } else { // targetRole === 'employee'
+        result = await login(email, password);
       }
 
       console.log("Login result:", result);
@@ -45,7 +47,8 @@ const MyPage: React.FC = () => {
       if (result.success && result.role === targetRole) {
         // SUCCESS: Login successful AND role matches the portal tab
         console.log(`Login successful as ${targetRole}. Navigating...`);
-        navigate(targetRole === 'admin' ? '/admin' : '/client'); // Navigate to dashboard
+        const dashboardPath = targetRole === 'admin' ? '/admin' : targetRole === 'employee' ? '/employee/dashboard' : '/client';
+        navigate(dashboardPath); // Navigate to dashboard
       } else if (result.success && result.role !== targetRole) {
         // SUCCESS, BUT WRONG ROLE: Login credentials were valid, but the fetched role doesn't match
         console.warn(`Login successful but role mismatch. Expected ${targetRole}, got ${result.role}`);
@@ -76,8 +79,8 @@ const MyPage: React.FC = () => {
     // isLoading state is managed by AuthProvider and reflected in UI via useAuth()
   };
 
-  // Switch between client/admin tabs
-  const handleTabClick = (tab: 'client' | 'admin') => {
+  // Switch between client/admin/employee tabs
+  const handleTabClick = (tab: 'client' | 'admin' | 'employee') => {
       setActiveTab(tab);
       setAuthError(null); // Clear errors on tab switch
   };
@@ -135,6 +138,29 @@ const MyPage: React.FC = () => {
       </button>
     </>
   );
+
+  const renderEmployeeForm = () => (
+    <>
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Employee Login</h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">Staff access portal.</p>
+      {/* Display Auth Error if present using Alert component */}
+      {authError && <Alert type="error" message={authError} className="mb-4" />}
+       {/* Email Input */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="employee-email">Email</label>
+        <input type="email" id="employee-email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-600" required autoComplete="email" disabled={isLoading} />
+      </div>
+       {/* Password Input */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="employee-password">Password</label>
+        <input type="password" id="employee-password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-600" required autoComplete="current-password" disabled={isLoading} />
+      </div>
+      {/* Login Button */}
+      <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center gap-2 bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-wait">
+        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Login'}
+      </button>
+    </>
+  );
   // --- End Render Functions ---
 
   // --- Main Page Structure ---
@@ -150,6 +176,7 @@ const MyPage: React.FC = () => {
         {/* Tab Buttons */}
         <div className="flex border-b border-gray-200 mb-6">
           <button onClick={() => handleTabClick('client')} disabled={isLoading} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'client' ? 'text-[#FF5722] border-b-2 border-[#FF5722]' : 'text-gray-500 hover:text-gray-700'}`}>CLIENT</button>
+          <button onClick={() => handleTabClick('employee')} disabled={isLoading} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'employee' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>EMPLOYEE</button>
           <button onClick={() => handleTabClick('admin')} disabled={isLoading} className={`flex-1 py-3 text-sm font-semibold transition-colors ${activeTab === 'admin' ? 'text-gray-800 border-b-2 border-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>ADMIN</button>
         </div>
         {/* Form Container */}
@@ -157,7 +184,7 @@ const MyPage: React.FC = () => {
           {/* Form element with submit handler */}
           <form onSubmit={handleSubmit} noValidate>
             {/* Render the correct form based on the active tab */}
-            {activeTab === 'admin' ? renderAdminForm() : renderClientForm()}
+            {activeTab === 'admin' ? renderAdminForm() : activeTab === 'employee' ? renderEmployeeForm() : renderClientForm()}
           </form>
         </div>
       </div>
