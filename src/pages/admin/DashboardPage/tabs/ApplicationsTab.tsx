@@ -38,6 +38,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({ isOpen,
     const statusInfo = STATUS_OPTIONS[statusKey];
     const positionTitle = application.job_position?.title || application.position_title || 'N/A';
     const teamName = application.job_position?.team_name || 'N/A';
+    const fullName = `${application.first_name || ''} ${application.last_name || ''}`.trim(); // <-- UPDATED
 
     return (
         <motion.div
@@ -66,7 +67,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({ isOpen,
                         <div>
                             <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                                 <User size={24} />
-                                {application.full_name}
+                                {fullName} {/* <-- UPDATED */}
                             </h3>
                             <div className="mt-2 space-y-1">
                                 <p className="text-gray-600 flex items-center gap-2">
@@ -209,7 +210,7 @@ const ApplicationsTab: React.FC = () => {
         if (!searchTerm.trim()) return applications;
         const term = searchTerm.toLowerCase();
         return applications.filter(app =>
-            app.full_name.toLowerCase().includes(term) ||
+            (`${app.first_name || ''} ${app.last_name || ''}`.toLowerCase().includes(term)) || // <-- UPDATED
             app.email.toLowerCase().includes(term) ||
             (app.job_position?.title || app.position_title || '').toLowerCase().includes(term)
         );
@@ -261,11 +262,12 @@ const ApplicationsTab: React.FC = () => {
                                     const statusInfo = STATUS_OPTIONS[statusKey];
                                     const positionTitle = app.job_position?.title || app.position_title || 'N/A';
                                     const teamName = app.job_position?.team_name || 'N/A';
+                                    const fullName = `${app.first_name || ''} ${app.last_name || ''}`.trim(); // <-- UPDATED
 
                                     return (
                                         <tr key={app.id} className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => setSelectedApplication(app)}>
                                             <td className="px-4 py-3 font-medium text-gray-800">
-                                                <p>{app.full_name}</p>
+                                                <p>{fullName}</p> {/* <-- UPDATED */}
                                                 <p className="text-xs text-gray-500">{app.email}</p>
                                             </td>
                                             <td className="px-4 py-3 text-gray-600">{positionTitle}</td>
