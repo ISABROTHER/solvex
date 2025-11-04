@@ -58,7 +58,8 @@ export const submitContactInquiry = async (data: any) => {
 export const submitCareerApplication = async (data: CareerApplicationData) => {
   // We need to insert one row for EACH role the user applied for.
   const applications = data.appliedRoles.map(roleId => ({
-    full_name: `${data.firstName} ${data.lastName}`.trim(),
+    first_name: data.firstName,
+    last_name: data.lastName,
     email: data.email,
     phone: data.phone,
     country_code: data.countryCode,
@@ -70,8 +71,8 @@ export const submitCareerApplication = async (data: CareerApplicationData) => {
 
   // Insert the array of application objects
   const { error } = await (supabase
-    .from('job_applications') as any)
-    .insert(applications); 
+    .from('submitted_applications') as any)
+    .insert(applications);
 
   if (error) {
     console.error('Supabase career application error:', error);
