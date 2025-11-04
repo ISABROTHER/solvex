@@ -176,14 +176,12 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
       
     } catch (err: any) {
       console.error('Application submission error:', err);
-      //
+      
       // --- THIS IS THE FIX ---
       // We must set the error *message* (a string), not the whole error object.
-      //
       setError(err.message || 'An unknown error occurred. Please try again.');
-      //
       // --- END OF FIX ---
-      //
+      
     } finally {
       setIsSubmitting(false);
     }
