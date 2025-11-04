@@ -29,6 +29,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../../../../contexts/ToastContext'; // <-- 1. IMPORT useToast
 
 // --- TYPES (from your EmployeeDashboard & DB Schema) ---
 
@@ -85,10 +86,19 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
+// --- 2. ADD HELPER FUNCTION ---
+const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 // --- MAIN TAB COMPONENT ---
 
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
+  const { addToast } = useToast(); // <-- 3. INITIALIZE useToast
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,10 +198,11 @@ const EmployeesTab: React.FC = () => {
       setNewTaskTitle('');
       setNewTaskDesc('');
       setNewTaskPriority('medium');
+      addToast({ type: 'success', title: 'Task Assigned!', message: `${newTaskTitle} assigned to ${selectedEmployee.first_name}.` }); // <-- 4. USE TOAST
       
     } catch (err: any) {
       console.error('Error creating task:', err);
-      alert(`Failed to create task: ${err.message}`);
+      addToast({ type: 'error', title: 'Error', message: `Failed to create task: ${err.message}` }); // <-- 4. USE TOAST
     } finally {
       setIsSubmittingTask(false);
     }
