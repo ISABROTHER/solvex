@@ -947,7 +947,7 @@ const EmployeeDashboardPage: React.FC = () => {
             title={viewingPdfTitle} 
             onClose={() => setViewingPdf(null)} 
           />
-        )}
+        )} 
       </AnimatePresence>
     </div>
   );
