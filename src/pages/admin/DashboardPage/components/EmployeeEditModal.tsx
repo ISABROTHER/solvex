@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react'; // <-- FIXED: Was "import React, 'react';"
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Loader2, AlertCircle } from 'lucide-react';
 import { Profile } from '../tabs/EmployeesTab'; // Assuming type is exported from EmployeesTab
@@ -7,8 +7,8 @@ import { Profile } from '../tabs/EmployeesTab'; // Assuming type is exported fro
 interface EmployeeEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  employee: Profile | null;
-  onSave: (updatedProfile: Profile) => Promise<void>;
+  employee: Partial<Profile> | null; // Can be partial for creation
+  onSave: (updatedProfile: Partial<Profile>, password?: string) => Promise<void>; // Add password for creation
   isSaving: boolean;
 }
 
@@ -37,14 +37,23 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
   onSave,
   isSaving,
 }) => {
-  const [formData, setFormData] = React.useState<Profile | null>(null);
+  const [formData, setFormData] = React.useState<Partial<Profile> | null>(null);
+  const [password, setPassword] = React.useState<string>(''); // State for new employee password
   const [error, setError] = React.useState<string | null>(null);
+  
+  // Determine if this is "Create" or "Edit" mode
+  const isCreating = !employee?.id;
 
   React.useEffect(() => {
     if (employee) {
       setFormData(employee);
+    } else {
+      // It's a new employee, start with an empty form
+      setFormData({}); 
     }
-  }, [employee]);
+    setPassword('');
+    setError(null);
+  }, [employee, isOpen]); // Reset form when modal opens or employee changes
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
@@ -56,7 +65,7 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
         processedValue = value === '' ? null : value;
     }
 
-    setFormData(prev => (prev ? { ...prev, [name]: processedValue } : null));
+    setFormData(prev => (prev ? { ...prev, [name]: processedValue } : { [name]: processedValue }));
     setError(null);
   };
 
@@ -64,13 +73,20 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
     e.preventDefault();
     if (!formData) return;
 
+    if (isCreating) {
+      if (!formData.email || !password) {
+        setError('Email and password are required to create a new employee.');
+        return;
+      }
+    }
+
     if (!formData.first_name || !formData.last_name || !formData.position) {
       setError('First name, last name, and position are required.');
       return;
     }
 
-    await onSave(formData);
-    onClose();
+    await onSave(formData, isCreating ? password : undefined);
+    // Don't close here, let onSave (in parent) handle it on success
   };
 
   if (!isOpen || !formData) return null;
@@ -94,7 +110,7 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
           {/* Header */}
           <div className="flex-shrink-0 p-6 flex justify-between items-center border-b">
             <h3 className="text-xl font-bold text-gray-900">
-              Edit {formData.first_name} {formData.last_name}
+              {isCreating ? "Add New Employee" : `Edit ${formData.first_name || ''} ${formData.last_name || ''}`}
             </h3>
             <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200">
               <X size={20} />
@@ -109,12 +125,27 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
               </div>
             )}
             
+            {/* --- Authentication Fields (Create Mode Only) --- */}
+            {isCreating && (
+              <>
+                <h4 className="font-semibold text-gray-800 border-b pb-2">Authentication</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <InputField label="Email *" name="email" value={formData.email} onChange={handleChange} type="email" placeholder="employee@solvex.com" />
+                    <InputField label="Password *" name="password" value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder="Min. 6 characters" />
+                </div>
+              </>
+            )}
+            
             <h4 className="font-semibold text-gray-800 border-b pb-2">Personal Details</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <InputField label="First Name *" name="first_name" value={formData.first_name} onChange={handleChange} />
               <InputField label="Last Name *" name="last_name" value={formData.last_name} onChange={handleChange} />
             </div>
-            <InputField label="Email (Read-only)" name="email" value={formData.email} onChange={() => {}} />
+            
+            {!isCreating && (
+                 <InputField label="Email (Read-only)" name="email" value={formData.email} onChange={() => {}} />
+            )}
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <InputField label="Phone" name="phone" value={formData.phone} onChange={handleChange} placeholder="+233..." />
               <InputField label="Birth Date" name="birth_date" value={formData.birth_date} onChange={handleChange} type="date" />
@@ -167,7 +198,7 @@ const EmployeeEditModal: React.FC<EmployeeEditModalProps> = ({
               ) : (
                 <>
                   <Save size={16} />
-                  Save Changes
+                  {isCreating ? "Create Employee" : "Save Changes"}
                 </>
               )}
             </button>
