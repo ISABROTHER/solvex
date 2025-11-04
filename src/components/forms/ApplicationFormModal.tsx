@@ -174,12 +174,27 @@ const ApplicationFormModal: React.FC<ApplicationFormModalProps> = ({
       reset(); // Reset form fields
       onSuccess();
       
-    } catch (err: any) { // <-- Make sure 'err' is typed as 'any'
+    } catch (err: any) { 
       console.error('Application submission error:', err);
       
-      // --- THIS IS THE FIX ---
-      // We must set the error *message* (a string), not the whole error object.
-      setError(err.message || 'An unknown error occurred. Please try again.');
+      // --- THIS IS THE ROBUST FIX ---
+      // It will try to find a message, and if it can't, it will
+      // stringify the error to prevent [object Object].
+      let errorMessage = 'An unknown error occurred. Please try again.';
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err === 'object' && err.message) {
+        // This handles standard Error objects and Supabase errors
+        errorMessage = err.message;
+      } else if (err) {
+        // Fallback for weird objects
+        try {
+          errorMessage = JSON.stringify(err);
+        } catch {
+          errorMessage = 'An un-stringifiable error object was thrown.';
+        }
+      }
+      setError(errorMessage);
       // --- END OF FIX ---
       
     } finally {
