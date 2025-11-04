@@ -24,7 +24,9 @@ import {
   Edit3,
   Save,
   X,
-  Upload
+  Upload,
+  ClipboardList, // <-- ADDED ICON
+  FileDown       // <-- ADDED ICON
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -200,6 +202,13 @@ const EmployeeDashboardPage: React.FC = () => {
   const [editBankName, setEditBankName] = useState<string>('');
   const [editBankAccount, setEditBankAccount] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
+
+  // --- MOCK DATA FOR DOCUMENTS (REPLACE THIS LATER) ---
+  const mockDocuments = [
+    { name: 'Employment Contract.pdf', url: '#' },
+    { name: 'NDA Agreement.pdf', url: '#' },
+    { name: 'Employee Handbook.pdf', url: '#' },
+  ];
 
   useEffect(() => {
     if (user?.id) {
@@ -666,7 +675,7 @@ const EmployeeDashboardPage: React.FC = () => {
                     <input
                       value={editBankName}
                       onChange={(e) => setEditBankName(e.target.value)}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5T22] text-sm"
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
                       placeholder="e.g., GCB Bank"
                     />
                   </div>
@@ -706,6 +715,38 @@ const EmployeeDashboardPage: React.FC = () => {
                   </div>
                 </div>
               )}
+            </motion.div>
+
+            {/* --- NEW: My Documents Card --- */}
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-[#FF5722]" />
+                My Documents
+              </h4>
+              <div className="space-y-3">
+                {mockDocuments.map((doc) => (
+                  <a
+                    key={doc.name}
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 transition-colors group"
+                  >
+                    <span className="flex items-center gap-2.5 font-medium text-gray-700">
+                      <FileText size={16} className="text-red-500 flex-shrink-0" />
+                      <span className="truncate group-hover:underline">{doc.name}</span>
+                    </span>
+                    <FileDown size={16} className="text-gray-400 group-hover:text-gray-700 transition-colors flex-shrink-0" />
+                  </a>
+                ))}
+                {mockDocuments.length === 0 && (
+                   <p className="text-sm text-gray-500 text-center py-4">No documents uploaded.</p>
+                )}
+              </div>
             </motion.div>
 
             <motion.div
