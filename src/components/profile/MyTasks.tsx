@@ -4,7 +4,7 @@ import type { Task } from '../../lib/supabase/operations';
 import { updateTaskStatus } from '../../lib/supabase/operations';
 import Card from '../../pages/admin/DashboardPage/components/Card';
 import { useToast } from '../../contexts/ToastContext';
-import { format } from 'date-fns';
+// import { format } from 'date-fns'; // <-- REMOVED THIS IMPORT
 import { Loader2 } from 'lucide-react';
 
 interface MyTasksProps {
@@ -37,6 +37,21 @@ const MyTasks: React.FC<MyTasksProps> = ({ tasks, onUpdate }) => {
     done: 'bg-green-100 text-green-800',
   };
 
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return null;
+    try {
+      // --- FIX: Use built-in date formatting ---
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric'
+      }); // Formats as "Nov 04, 2025"
+      // --- END FIX ---
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   return (
     <Card title={`My Assignments (${tasks.length})`}>
       <div className="space-y-4">
@@ -50,7 +65,7 @@ const MyTasks: React.FC<MyTasksProps> = ({ tasks, onUpdate }) => {
                 <p className="text-sm text-gray-600 mt-1">{task.description}</p>
                 {task.deadline && (
                   <p className="text-xs text-gray-500 mt-2">
-                    Due: {format(new Date(task.deadline), 'MMM dd, yyyy')}
+                    Due: {formatDate(task.deadline)}
                   </p>
                 )}
               </div>
