@@ -34,50 +34,16 @@ import {
   Home,
   Users,
   List,
-  AlertTriangle, // <-- 1. IMPORT
-  ShieldCheck, // <-- 1. IMPORT
+  AlertTriangle,
+  ShieldCheck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../contexts/ToastContext'; 
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
-// 2. We'll need to move these types to a shared file eventually
-import { Assignment, Milestone } from '../admin/DashboardPage/tabs/AssignmentsTab'; 
+// --- 1. IMPORT FROM NEW SHARED TYPES FILE ---
+import { Profile, Assignment, EmployeeDocument } from '../admin/DashboardPage/shared/types';
 
-// --- TYPE DEFINITIONS ---
-interface Profile {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string | null;
-  phone: string | null;
-  avatar_url: string | null;
-  employee_number: string | null;
-  birth_date: string | null;
-  national_id: string | null;
-  position: string | null;
-  start_date: string | null;
-  end_date: string | null;
-  home_address: string | null;
-  salary: number | null;
-  payday: string | null;
-  bank_account: string | null;
-  bank_name: string | null;
-  // This is now replaced by the new documents table
-  // signed_contract_url: string | null;
-  // signed_contract_name: string | null;
-}
-
-// 3. NEW DOCUMENT TYPE
-type EmployeeDocument = {
-  id: string;
-  profile_id: string;
-  document_name: string;
-  storage_url: string; // URL of the *unsigned* doc from admin
-  requires_signing: boolean;
-  signed_storage_url: string | null; // URL of the *signed* version from employee
-  signed_storage_path: string | null;
-  signed_at: string | null;
-};
+// --- 2. REMOVED OLD TYPE DEFINITIONS ---
 
 // --- MOCK DATA (FRONTEND-FIRST) ---
 const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
@@ -209,7 +175,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const [editBankAccount, setEditBankAccount] = useState<string>('');
   const [avatarUploading, setAvatarUploading] = useState(false);
 
-  // --- 4. NEW DOCUMENTS STATE ---
+  // --- Documents State ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
@@ -243,11 +209,11 @@ const EmployeeDashboardPage: React.FC = () => {
       setEditBankName(profileData?.bank_name || '');
       setEditBankAccount(profileData?.bank_account || '');
 
-      // --- 5. FETCH NEW ASSIGNMENTS (MOCKED) ---
+      // --- FETCH NEW ASSIGNMENTS (MOCKED) ---
       await new Promise(res => setTimeout(res, 500)); // Simulate load
       setAssignments(MOCK_ASSIGNMENTS);
       
-      // --- 6. FETCH NEW DOCUMENTS (MOCKED) ---
+      // --- FETCH NEW DOCUMENTS (MOCKED) ---
       await new Promise(res => setTimeout(res, 500)); // Simulate load
       setDocuments(MOCK_DOCUMENTS);
 
@@ -275,31 +241,12 @@ const EmployeeDashboardPage: React.FC = () => {
   const onSaveProfile = async () => { /* ... (mocked) ... */ };
   const onUploadAvatar = async (file: File) => { /* ... (mocked) ... */ };
 
-  // --- 7. NEW DOCUMENT UPLOAD HANDLER (Mocked) ---
+  // --- NEW DOCUMENT UPLOAD HANDLER (Mocked) ---
   const onUploadSignedDoc = async (file: File, doc: EmployeeDocument) => {
     if (!user?.id || !file) return;
     setUploadingDocId(doc.id);
     try {
       // --- MOCKED ---
-      // 1. Upload file to Storage
-      // const storagePath = `${user.id}/signed_${doc.id}_${file.name}`;
-      // const { error: upErr } = await supabase.storage.from('documents').upload(storagePath, file);
-      // if (upErr) throw upErr;
-      
-      // 2. Get public URL
-      // const { data: pub } = supabase.storage.from('documents').getPublicUrl(storagePath);
-      // if (!publicUrl) throw new Error('Could not get public URL.');
-      
-      // 3. Update 'documents' table
-      // const { error: dbErr } = await supabase.from('documents')
-      //   .update({
-      //     signed_storage_url: publicUrl,
-      //     signed_storage_path: storagePath,
-      //     signed_at: new Date().toISOString()
-      //   })
-      //   .eq('id', doc.id);
-      // if (dbErr) throw dbErr;
-      
       await new Promise(res => setTimeout(res, 1000));
       setDocuments(prev => prev.map(d => 
         d.id === doc.id ? { ...d, signed_storage_url: 'https://mock.url/signed.pdf', signed_at: new Date().toISOString() } : d
@@ -462,7 +409,7 @@ const EmployeeDashboardPage: React.FC = () => {
             </motion.div>
           </div>
 
-          {/* --- 8. RESTORED SIDEBAR --- */}
+          {/* --- 3. RESTORED SIDEBAR --- */}
           <div className="lg:col-span-2 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -528,13 +475,71 @@ const EmployeeDashboardPage: React.FC = () => {
                 </>
               ) : (
                 <div className="space-y-4">
-                  {/* Edit Form Inputs (unchanged) */}
-                  {/* ... */}
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Phone</label>
+                    <input
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="+233 ..."
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Home Address</label>
+                    <input
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="Street, City"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Bank Name</label>
+                    <input
+                      value={editBankName}
+                      onChange={(e) => setEditBankName(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="e.g., GCB Bank"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <label className="text-xs text-gray-500">Bank Account</label>
+                    <input
+                      value={editBankAccount}
+                      onChange={(e) => setEditBankAccount(e.target.value)}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] text-sm"
+                      placeholder="Account Number"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={onSaveProfile}
+                      disabled={savingProfile}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] disabled:opacity-70"
+                    >
+                      {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      {savingProfile ? 'Saving…' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditMode(false);
+                        setEditPhone(profile?.phone || '');
+                        setEditAddress(profile?.home_address || '');
+                        setEditBankName(profile?.bank_name || '');
+                        setEditBankAccount(profile?.bank_account || '');
+                      }}
+                      className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+                    >
+                      <X size={16} />
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </motion.div>
 
-            {/* --- 9. NEW "MY DOCUMENTS" CARD --- */}
+            {/* --- NEW "MY DOCUMENTS" CARD --- */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -692,7 +697,7 @@ const EmployeeDashboardPage: React.FC = () => {
 // --- New Assignment Card Component ---
 const AssignmentCard: React.FC<{ assignment: Assignment, onClick: () => void }> = ({ assignment, onClick }) => {
   const progress = useMemo(() => {
-    if (assignment.milestones.length === 0) return 0;
+    if (!assignment.milestones || assignment.milestones.length === 0) return 0;
     const completed = assignment.milestones.filter(m => m.completed).length;
     return Math.round((completed / assignment.milestones.length) * 100);
   }, [assignment]);
@@ -725,7 +730,7 @@ const AssignmentCard: React.FC<{ assignment: Assignment, onClick: () => void }> 
       <p className="text-sm text-gray-600 mt-1 line-clamp-2">{assignment.description}</p>
       
       <div className="border-t border-gray-100 mt-4 pt-4">
-        {assignment.milestones.length > 0 && (
+        {assignment.milestones && assignment.milestones.length > 0 && (
           <div className="mb-3">
             <div className="flex justify-between text-xs font-medium mb-1">
               <span>Progress</span>
