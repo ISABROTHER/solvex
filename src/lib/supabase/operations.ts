@@ -251,7 +251,14 @@ export const getRentalEquipment = async () => {
 };
 
 export const getAllTeams = async () => {
-  return supabase.from('teams').select('*').order('name');
+  // --- THIS IS THE FIX ---
+  // Only select teams that are NOT soft-deleted.
+  return supabase
+    .from('teams')
+    .select('*')
+    .neq('is_deleted', true) // <-- ADDED THIS LINE
+    .order('name');
+  // --- END OF FIX ---
 };
 
 export const getMembers = async (teamId?: string) => {
