@@ -20,6 +20,7 @@ import {
   Award,
   Target,
   RefreshCw,
+  Search,
   Edit3,
   Save,
   X,
@@ -29,11 +30,10 @@ import {
   FileUp,
   Eye,
   Trash2,
-  Home
+  Home // <-- ADDED ICON
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useToast } from '../../contexts/ToastContext';
-import AssignmentsSection from './components/AssignmentsSection'; // <-- 1. IMPORT THE NEW SECTION
+import { useToast } from '../../contexts/ToastContext'; 
 
 // --- TYPE DEFINITIONS ---
 
@@ -59,8 +59,16 @@ interface Profile {
   signed_contract_name: string | null;
 }
 
-// --- TASK INTERFACE (REMOVED) ---
-// --- TASKITEM COMPONENT (REMOVED) ---
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'low' | 'medium' | 'high';
+  deadline: string | null;
+  created_at: string;
+  assigned_by: string | null;
+}
 
 // --- HELPERS ---
 
@@ -70,6 +78,34 @@ const formatDate = (dateString: string | null) => {
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
+
+const badgeForPriority = (priority: Task['priority']) => {
+  switch (priority) {
+    case 'low':
+      return 'bg-green-100 text-green-700';
+    case 'medium':
+      return 'bg-yellow-100 text-yellow-700';
+    case 'high':
+      return 'bg-red-100 text-red-700';
+    default:
+      return 'bg-gray-100 text-gray-700';
+  }
+};
+
+const statusMeta = (status: Task['status']) => {
+  switch (status) {
+    case 'pending':
+      return { icon: Clock, ring: 'ring-yellow-200', tint: 'bg-yellow-50 text-yellow-600' };
+    case 'in_progress':
+      return { icon: Loader2, ring: 'ring-blue-200', tint: 'bg-blue-50 text-blue-600' };
+    case 'completed':
+      return { icon: CheckCircle, ring: 'ring-green-200', tint: 'bg-green-50 text-green-600' };
+    default:
+      return { icon: Clock, ring: 'ring-gray-200', tint: 'bg-gray-50 text-gray-600' };
+  }
+};
+
+// --- REUSABLE UI ---
 
 // --- PDF VIEWER MODAL ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
@@ -120,17 +156,86 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
+const TaskItem: React.FC<{
+  task: Task;
+  onStatusChange: (taskId: string, newStatus: Task['status']) => void;
+  isUpdating: boolean;
+}> = ({ task, onStatusChange, isUpdating }) => {
+  const meta = statusMeta(task.status);
+  const StatusIcon = meta.icon;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${badgeForPriority(task.priority)}`}>
+              {task.priority === 'low' ? 'Low' : task.priority === 'medium' ? 'Medium' : 'High'}
+            </span>
+            {task.deadline && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                <Calendar size={12} />
+                {formatDate(task.deadline)}
+              </span>
+            )}
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mt-2 truncate">{task.title}</h3>
+          {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
+        </div>
+
+        <div className={`p-2 rounded-full ${meta.tint} ring-2 ${meta.ring}`}>
+          <StatusIcon size={20} className={task.status === 'in_progress' ? 'animate-spin' : ''} />
+        </div>
+      </div>
+
+      <div className="border-t border-gray-100 mt-4 pt-4 flex items-center justify-between gap-3">
+        <div className="text-sm text-gray-500">
+          {task.deadline ? (
+            <span className="flex items-center gap-1.5">
+              <Calendar size={14} />
+              Due: {formatDate(task.deadline)}
+            </span>
+          ) : (
+            <span className="text-gray-400">No deadline</span>
+          )}
+        </div>
+
+        <select
+          value={task.status}
+          onChange={(e) => onStatusChange(task.id, e.target.value as Task['status'])}
+          disabled={isUpdating}
+          className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FF5722] disabled:opacity-70"
+        >
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+      </div>
+    </motion.div>
+  );
+};
+
 // --- MAIN ---
 
 const EmployeeDashboardPage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { addToast } = useToast();
+  const { addToast } = useToast(); // <-- Initialize toast
   const [profile, setProfile] = useState<Profile | null>(null);
-  // --- TASKS STATE (REMOVED) ---
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
-  // --- TASK UI STATES (REMOVED) ---
+
+  // UI: filters & search
+  const [statusFilter, setStatusFilter] = useState<'all' | Task['status']>('all');
+  const [query, setQuery] = useState('');
+  const [showTaskSummary, setShowTaskSummary] = useState(false);
 
   // Profile edit mode
   const [editMode, setEditMode] = useState(false);
@@ -144,7 +249,7 @@ const EmployeeDashboardPage: React.FC = () => {
   // --- STATE FOR DOCUMENTS ---
   const [signedDocument, setSignedDocument] = useState<{ name: string; url: string } | null>(null);
   const [documentUploading, setDocumentUploading] = useState(false);
-  const [isRemovingDocument, setIsRemovingDocument] = useState(false);
+  const [isRemovingDocument, setIsRemovingDocument] = useState(false); // <-- New state
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   const unsignedContract = { name: 'Employment Contract (Unsigned)', url: '/mock-contract.pdf' }; 
@@ -185,8 +290,18 @@ const EmployeeDashboardPage: React.FC = () => {
         }
       }
 
-      // --- TASK FETCHING (REMOVED) ---
+      const { data: tasksData, error: tasksError } = await (supabase as any)
+        .from('tasks')
+        .select('*')
+        .eq('assigned_to', user.id)
+        .order('created_at', { ascending: false });
 
+      if (tasksError) {
+        console.error('Error fetching tasks:', tasksError);
+        setError((prev) => prev || 'Could not load tasks.');
+      } else {
+        setTasks(tasksData || []);
+      }
     } catch (err) {
       console.error('Unexpected error:', err);
       setError('Something went wrong.');
@@ -195,9 +310,48 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // --- updateTaskStatus (REMOVED) ---
-  // --- filteredTasks (REMOVED) ---
-  // --- stats (REMOVED) ---
+  const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
+    setUpdatingTaskId(taskId);
+    try {
+      const { error: updateError } = await (supabase as any)
+        .from('tasks')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', taskId);
+
+      if (updateError) {
+        console.error('Error updating task:', updateError);
+        addToast({ type: 'error', title: 'Task Update Failed' });
+      } else {
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t)));
+      }
+    } catch (err) {
+      console.error('Unexpected error updating task:', err);
+      addToast({ type: 'error', title: 'Error', message: 'An unexpected error occurred.' });
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
+  const filteredTasks = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return tasks.filter((t) => {
+      const matchesStatus = statusFilter === 'all' ? true : t.status === statusFilter;
+      const matchesQuery =
+        q.length === 0 ||
+        t.title.toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q);
+      return matchesStatus && matchesQuery;
+    });
+  }, [tasks, statusFilter, query]);
+
+  const stats = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter((t) => t.status === 'completed').length;
+    const inProgress = tasks.filter((t) => t.status === 'in_progress').length;
+    const pending = tasks.filter((t) => t.status === 'pending').length;
+    const pct = total ? Math.round((completed / total) * 100) : 0;
+    return { total, completed, inProgress, pending, pct };
+  }, [tasks]);
 
   const onSaveProfile = async () => {
     if (!user?.id) return;
@@ -387,6 +541,7 @@ const EmployeeDashboardPage: React.FC = () => {
             <h1 className="text-xl font-bold text-gray-900">Employee Dashboard</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* --- NEW BUTTON HERE --- */}
             <a
               href="/"
               className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-100"
@@ -422,22 +577,152 @@ const EmployeeDashboardPage: React.FC = () => {
             <h2 className="text-3xl font-bold text-gray-900">
               Welcome back, {profile?.first_name || 'Employee'}!
             </h2>
-            {/* --- TASK SUMMARY BUTTON (REMOVED) --- */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowTaskSummary((s) => !s)}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-200 hover:bg-gray-100"
+              >
+                {showTaskSummary ? <X size={16} /> : <Target size={16} />}
+                {showTaskSummary ? 'Hide Summary' : 'Show Summary'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* --- TASK SUMMARY (REMOVED) --- */}
-     
+        {/* Optional Task Summary (hidden by default) */}
+        <AnimatePresence initial={false}>
+          {showTaskSummary && (
+            <motion.div
+              initial={{ opacity: 0, y: -10, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -10, height: 0 }}
+              className="mb-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            >
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Total Tasks</span>
+                  <Briefcase className="w-4 h-4 text-gray-400" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.total}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">In Progress</span>
+                  <Loader2 className="w-4 h-4 text-blue-500" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.inProgress}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Pending</span>
+                  <Clock className="w-4 h-4 text-yellow-500" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.pending}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Completed</span>
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                </div>
+                <p className="mt-2 text-2xl font-bold text-gray-900">{stats.completed}</p>
+                <div className="mt-3 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-green-500"
+                    style={{ width: `${stats.pct}%` }}
+                    aria-label={`Completed ${stats.pct}%`}
+                  />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Grid: Main content (Tasks) on left, Sidebar (Profile) on right for desktop */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
 
-          {/* --- MAIN CONTENT (ASSIGNMENTS) --- */}
-          {/* This is the new section that replaces the old tasks */}
+          {/* --- MAIN CONTENT (TASKS) --- */}
+          {/* On mobile, this appears first. On desktop, it takes 3/5 width. */}
           <div className="lg:col-span-3 space-y-6">
-            <AssignmentsSection />
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-gray-200"
+            >
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Target className="w-5 h-5 text-[#FF5722]" />
+                  My Assignments
+                </h4>
+
+                <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                  <div className="relative flex-1 sm:flex-none">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search tasks…"
+                      className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722] w-full sm:w-56"
+                    />
+                  </div>
+                  <div className="flex-1 sm:flex-none grid grid-cols-4 gap-1 bg-gray-100 p-1 rounded-lg">
+                    {(['all', 'pending', 'in_progress', 'completed'] as const).map((key) => (
+                      <button
+                        key={key}
+                        onClick={() => setStatusFilter(key as any)}
+                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition text-center ${
+                          statusFilter === key
+                            ? 'bg-white shadow-sm border border-gray-200 text-gray-900'
+                            : 'text-gray-600 hover:bg-white/70'
+                        }`}
+                      >
+                        {key === 'all'
+                          ? 'All'
+                          : key === 'in_progress'
+                          ? 'WIP'
+                          : key[0].toUpperCase() + key.slice(1,4)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              {tasks.length === 0 ? (
+                <div className="text-center py-12">
+                  <Target className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-600 font-medium">No tasks assigned yet.</p>
+                  <p className="text-sm text-gray-400">Enjoy the quiet... for now.</p>
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="text-center py-12">
+                  <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-600 font-medium">No tasks match your filters.</p>
+                  <p className="text-sm text-gray-400">Try a different status or search term.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <AnimatePresence initial={false}>
+                    {filteredTasks.map((task) => (
+                      <TaskItem
+                        key={task.id}
+                        task={task}
+                        onStatusChange={updateTaskStatus}
+                        isUpdating={updatingTaskId === task.id}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </motion.div>
           </div>
 
           {/* --- SIDEBAR (PROFILE) --- */}
+          {/* On mobile, this appears second. On desktop, it takes 2/5 width. */}
           <div className="lg:col-span-2 space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 6 }}
@@ -552,6 +837,7 @@ const EmployeeDashboardPage: React.FC = () => {
                     <button
                       onClick={() => {
                         setEditMode(false);
+                        // reset edits to current profile
                         setEditPhone(profile?.phone || '');
                         setEditAddress(profile?.home_address || '');
                         setEditBankName(profile?.bank_name || '');
@@ -567,7 +853,7 @@ const EmployeeDashboardPage: React.FC = () => {
               )}
             </motion.div>
 
-            {/* My Documents Card */}
+            {/* --- MODIFIED: My Documents Card --- */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -662,7 +948,7 @@ const EmployeeDashboardPage: React.FC = () => {
               </div>
             </motion.div>
             
-            {/* Employment Details Card */}
+            {/* Employment Details Card (moved down) */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -682,7 +968,7 @@ const EmployeeDashboardPage: React.FC = () => {
               </div>
             </motion.div>
 
-            {/* Financial Details Card */}
+            {/* Financial Details Card (moved down) */}
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -712,7 +998,7 @@ const EmployeeDashboardPage: React.FC = () => {
         {viewingPdf && (
           <PdfViewerModal 
             pdfUrl={viewingPdf} 
-            title={viewingPdfTitle} 
+            title={viewingPdfTitle}  
             onClose={() => setViewingPdf(null)} 
           />
         )}
