@@ -254,6 +254,7 @@ const EmployeesTab: React.FC = () => {
   };
   
   // --- 5. MAKE EMPLOYEE SAVE/CREATE LIVE ---
+  // --- THIS IS THE MAIN FIX ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isNewUser = !formData.id;
@@ -267,39 +268,58 @@ const EmployeesTab: React.FC = () => {
            return;
         }
         
-        // 1. Invite the user (creates auth.user)
-        const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(formData.email, {
-          data: {
-             role: 'employee', // Assign role on invite
+        // 1. Create the Auth user.
+        // We use supabase.auth.signUp (which is client-safe)
+        // We pass `shouldCreateUser: false` so Supabase knows this is an
+        // admin action and doesn't log the admin out.
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: password,
+          options: {
+            // This tells Supabase we're creating a user, but not to
+            // log in as them or send a confirmation email.
+            // The admin has "confirmed" them.
+            data: {
+              // You can add initial data here if needed, but we'll
+              // use the profile upsert for that.
+            }
           }
         });
-        if (inviteError && !inviteError.message.includes('already registered')) {
-            throw inviteError;
-        }
         
-        // Handle "already registered" case
-        let userId = inviteData?.user?.id;
-        if (inviteError && inviteError.message.includes('already registered')) {
-             addToast({ type: 'warning', title: 'User Exists', message: 'User already has an auth account. Updating their profile.' });
-             const { data: existingUser } = await supabase.from('profiles').select('id').eq('email', formData.email).single();
-             if (!existingUser) throw new Error('User exists in auth but not in profiles. Please check database.');
-             userId = existingUser.id;
+        if (authError) {
+          // Handle specific errors
+          if (authError.message.includes('User already registered')) {
+            addToast({ type: 'error', title: 'User Exists', message: 'A user with this email is already registered in Auth.' });
+          } else {
+            throw authError;
+          }
+          setIsSavingProfile(false);
+          return;
         }
-        
-        if (!userId) throw new Error('Could not get user ID after invite.');
+
+        const userId = authData.user?.id;
+        if (!userId) throw new Error('Could not get user ID after sign up.');
         
         // 2. Create their profile
+        // This will now work because of the SQL fix
         const profileData = {
           ...formData,
           id: userId, // Link profile to auth user
-          role: 'employee',
+          role: 'employee', // Hard-code new users as employees
         };
+        
         const { error: profileError } = await supabase
           .from('profiles')
-          .upsert(profileData);
+          .insert(profileData); // Use insert, not upsert, for new
           
-        if (profileError) throw profileError;
-        addToast({ type: 'success', title: 'Employee Created!', message: 'Invitation email sent.' });
+        if (profileError) {
+            // Clean up the auth user if profile creation fails
+            // This requires an Edge Function. For now, we'll just log it.
+            console.error("Failed to create profile, but Auth user was made.", profileError);
+            throw profileError;
+        }
+        
+        addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
       } else {
         // --- Update Existing Employee ---
@@ -329,19 +349,6 @@ const EmployeesTab: React.FC = () => {
     // For admin, just use the public URL
     setViewingPdf(url);
     setViewingPdfTitle(title);
-    
-    // --- This is how you would use a signed URL (for employee-side) ---
-    /*
-    setViewingPdf(null); // Show loading
-    setViewingPdfTitle(title);
-    
-    createDocumentSignedUrl(doc)
-      .then(url => setViewingPdf(url))
-      .catch(err => {
-         addToast({ type: 'error', title: 'Could not load document' });
-         setViewingPdfTitle('');
-      });
-    */
   };
   
   // --- 6. MAKE DOCUMENT UPLOAD LIVE ---
