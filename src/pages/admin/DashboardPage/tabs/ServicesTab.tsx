@@ -9,6 +9,7 @@ import {
   restoreService,
   getDeletedServices,
   onServicesChange,
+  permanentDeleteService, // <-- 1. IMPORT THE NEW FUNCTION
   Service
 } from '../../../../lib/supabase/operations';
 import { useToast } from '../../../../contexts/ToastContext';
@@ -99,6 +100,15 @@ const ServicesTab: React.FC = () => {
     if (error) addToast({ type: 'error', title: 'Restore Failed', message: error.message });
     else addToast({ type: 'success', title: 'Service Restored!' });
   }
+
+  // --- 2. ADD THIS NEW HANDLER ---
+  const handlePermanentDelete = async (service: Service) => {
+    if (!window.confirm(`PERMANENT DELETE: Are you sure you want to permanently delete "${service.title}"? This cannot be undone.`)) return;
+    const { error } = await permanentDeleteService(service.id);
+    if (error) addToast({ type: 'error', title: 'Permanent Delete Failed', message: error.message });
+    else addToast({ type: 'success', title: 'Service permanently deleted' });
+  }
+  // ---------------------------------
   
   const handlePublish = async (service: Service) => {
     const newStatus = service.status === 'published' ? 'draft' : 'published';
@@ -238,9 +248,16 @@ const ServicesTab: React.FC = () => {
                     <button onClick={() => handleDelete(service)} className="p-2 text-red-500 hover:bg-red-100 rounded-md" aria-label={`Delete ${service.title}`}><Trash2 size={16} /></button>
                   </>
                 ) : (
-                   <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-blue-600 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
-                    <RotateCcw size={16} /> Restore
-                  </button>
+                   // --- 3. ADD THIS BUTTON ---
+                   <div className="flex gap-2">
+                      <button onClick={() => handleRestore(service)} className="flex items-center gap-2 text-blue-600 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Restore ${service.title}`}>
+                        <RotateCcw size={16} /> Restore
+                      </button>
+                      <button onClick={() => handlePermanentDelete(service)} className="flex items-center gap-2 text-red-600 bg-red-100 hover:bg-red-200 px-3 py-1.5 rounded-md text-sm font-semibold" aria-label={`Delete ${service.title} permanently`}>
+                        <Trash size={16} /> Delete Permanently
+                      </button>
+                   </div>
+                   // ---------------------------
                 )}
               </div>
             </div>
