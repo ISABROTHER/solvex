@@ -187,7 +187,7 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
           
           {renderContent()}
           
-        </motion.div> 
+        </motion.div>
       )}
     </AnimatePresence>
   );
