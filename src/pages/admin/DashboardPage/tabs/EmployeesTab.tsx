@@ -239,6 +239,11 @@ const EmployeesTab: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleAddNewEmployee = () => {
+    setEditingEmployee({});
+    setIsModalOpen(true);
+  };
+
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     try {
@@ -353,10 +358,7 @@ const EmployeesTab: React.FC = () => {
           <p className="text-sm text-gray-500">Manage employee profiles, documents, and assignments</p>
         </div>
         <button
-          onClick={() => {
-            setEditingEmployee({}); // Set to empty object for "create" mode
-            setIsModalOpen(true);
-          }}
+          onClick={handleAddNewEmployee}
           className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
         >
           <PlusCircle size={20} />
