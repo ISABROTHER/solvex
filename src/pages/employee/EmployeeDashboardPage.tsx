@@ -46,8 +46,9 @@ import {
   Filter,
   ArrowDownWideNarrow,
   Eye,
-  // --- IMPORT NEW ICON ---
+  // --- IMPORT NEW ICONS ---
   Upload,
+  ShieldCheck, // For 'View Only' status
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -266,7 +267,6 @@ const EmployeeDashboardPage: React.FC = () => {
   // --- ADD NEW STATE FOR UPLOADING ---
   const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
   const [isUploadingSignedDoc, setIsUploadingSignedDoc] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   // ------------------------------------
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
@@ -489,6 +489,8 @@ const EmployeeDashboardPage: React.FC = () => {
   };
 
   // --- MODIFIED & NEW DOCUMENT HANDLERS ---
+  
+  // This function views the ORIGINAL (unsigned) document
   const handleViewDocument = async (doc: EmployeeDocument) => {
     setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
@@ -501,6 +503,7 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
+  // This NEW function views the SIGNED document
   const handleViewSignedDocument = async (doc: EmployeeDocument) => {
     setViewingPdf(null);
     setViewingPdfTitle(`(SIGNED) ${doc.document_name}`);
@@ -513,27 +516,33 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
+  // This NEW function triggers the hidden file input
   const handleUploadSignedClick = (doc: EmployeeDocument) => {
     setUploadingDocId(doc.id);
-    // Trigger the file input click
-    // We need to find the specific file input for this document
+    // Find the hidden file input for this specific document and click it
     document.getElementById(`file-input-${doc.id}`)?.click();
   };
 
+  // This NEW function handles the file upload
   const handleSignedFileChange = async (event: React.ChangeEvent<HTMLInputElement>, doc: EmployeeDocument) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
 
     setIsUploadingSignedDoc(true);
     try {
+      // Call the new database function
       await uploadSignedEmployeeDocument(doc, file, user.id);
       addToast({ type: 'success', title: 'Upload Successful!', message: `${file.name} was uploaded.` });
-      fetchDocuments(); // Refresh the documents list
+      fetchDocuments(); // Refresh the documents list to show the new "View Signed" button
     } catch (err: any) {
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
       setIsUploadingSignedDoc(false);
       setUploadingDocId(null);
+      // Clear the file input value
+      if (event.target) {
+        event.target.value = '';
+      }
     }
   };
   // --- END OF NEW HANDLERS ---
@@ -755,12 +764,12 @@ const EmployeeDashboardPage: React.FC = () => {
                 )}
               </section>
 
-              {/* Documents Section */}
+              {/* --- NEW: Documents Section --- */}
               <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
                   <FileText className="text-gray-500" /> Important Documents
                 </h2>
-                {loading ? (
+                {loadingDocs ? (
                   <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
                 ) : documents.length === 0 ? (
                   <div className="text-center p-10">
@@ -843,7 +852,7 @@ const EmployeeDashboardPage: React.FC = () => {
                                 type="file"
                                 id={`file-input-${doc.id}`}
                                 className="hidden"
-                                accept=".pdf,.doc,.docx,.png,.jpg"
+                                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
                                 onChange={(e) => handleSignedFileChange(e, doc)}
                               />
                             </div>
