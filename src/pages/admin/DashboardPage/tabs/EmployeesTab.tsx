@@ -43,15 +43,16 @@ import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
-// Assignment types (simplified for employee tab)
-type Assignment = {
-  id: string;
-  title: string;
-  category: string;
-  status: string;
-  due_date: string;
-  assignees: Array<{ id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }>;
-}; 
+
+// --- ADD REAL FUNCTIONS ---
+import {
+  getAssignmentsForEmployee,
+  getFullAssignmentDetails,
+  createAssignment,
+  updateAssignmentStatus,
+  postAssignmentComment
+} from '../../../../lib/supabase/operations';
+
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -65,26 +66,7 @@ type EmployeeDocument = {
   signed_at: string | null;
 };
 
-// --- MOCK DATA (FRONTEND-FIRST) ---
-const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  {
-    id: 'assign_1',
-    title: 'Client Brand Strategy Deck',
-    category: 'Design',
-    status: 'In Progress',
-    due_date: '2025-11-15',
-    assignees: [MOCK_USER_1],
-  },
-  {
-    id: 'assign_3',
-    title: 'Pitch Video Editing',
-    category: 'Production',
-    status: 'Overdue',
-    due_date: '2025-11-03',
-    assignees: [MOCK_USER_1],
-  },
-];
+// --- MOCK DATA (Only for docs, assignments will be live) ---
 const MOCK_DOCUMENTS: EmployeeDocument[] = [
   { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null },
   { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null },
@@ -215,8 +197,11 @@ const EmployeesTab: React.FC = () => {
   const fetchAssignments = async (profileId: string) => {
     setLoadingAssignments(true);
     try {
-      await new Promise(res => setTimeout(res, 500)); // Simulate load
-      setAssignments(MOCK_ASSIGNMENTS);
+      // --- REPLACE MOCK WITH REAL FUNCTION ---
+      const { data, error } = await getAssignmentsForEmployee(profileId);
+      if (error) throw error;
+      setAssignments(data || []);
+      // --- END REPLACEMENT ---
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
     } finally {
@@ -229,7 +214,7 @@ const EmployeesTab: React.FC = () => {
       setLoadingDocs(true);
       try {
           await new Promise(res => setTimeout(res, 500)); 
-          setDocuments(MOCK_DOCUMENTS);
+          setDocuments(MOCK_DOCUMENTS); // Still mocked for now
       } catch (err: any) {
           addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
       } finally {
@@ -278,6 +263,7 @@ const EmployeesTab: React.FC = () => {
     setIsSavingProfile(false);
     setIsModalOpen(false);
     setEditingEmployee(null);
+    fetchData(); // Refetch employee list
   };
   
   // --- Document Handlers ---
@@ -338,27 +324,73 @@ const EmployeesTab: React.FC = () => {
     setIsCreateAssignModalOpen(true);
   };
   
+  // --- MAKE THIS FUNCTION REAL ---
   const handleSaveAssignment = async (data: any) => {
+    if (!user) return;
     setIsSavingAssignment(true);
-    await new Promise(res => setTimeout(res, 1000));
-    addToast({ type: 'success', title: 'Assignment Created!' });
-    setIsSavingAssignment(false);
-    setIsCreateAssignModalOpen(false);
-    if(selectedEmployee) fetchAssignments(selectedEmployee.id);
+    try {
+      const { error } = await createAssignment(data, user.id);
+      if (error) throw error;
+      
+      addToast({ type: 'success', title: 'Assignment Created!' });
+      setIsCreateAssignModalOpen(false);
+      if(selectedEmployee) fetchAssignments(selectedEmployee.id);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Creation Failed', message: err.message });
+    } finally {
+      setIsSavingAssignment(false);
+    }
   };
   
-  // --- Assignment Panel Handlers (Mocked) ---
-  const handleUpdateStatus = (newStatus: string) => {
+  // --- MAKE THESE FUNCTIONS REAL ---
+  const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedAssignment) return;
+    
+    // Optimistic update
+    const oldAssignment = selectedAssignment;
+    const oldList = assignments;
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
     setAssignments(prev =>
       prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
     );
-    addToast({ type: 'info', title: 'Status Updated' });
+    
+    // Real update
+    const { error } = await updateAssignmentStatus(selectedAssignment.id, newStatus);
+    if (error) {
+      addToast({ type: 'error', title: 'Status Update Failed' });
+      setSelectedAssignment(oldAssignment); // Revert
+      setAssignments(oldList);
+    } else {
+      addToast({ type: 'info', title: 'Status Updated' });
+    }
   };
-  const handlePostComment = (comment: string) => {
-    addToast({ type: 'info', title: 'Comment Posted (Mock)' });
+  
+  const handlePostComment = async (comment: string) => {
+    if (!selectedAssignment || !user) return;
+    const { error } = await postAssignmentComment(selectedAssignment.id, user.id, comment);
+    if (error) {
+      addToast({ type: 'error', title: 'Comment Failed to Send' });
+    } else {
+      addToast({ type: 'success', title: 'Comment Posted!' });
+      // Real-time listener should handle the update
+    }
   };
+
+  // --- REFRESH FULL DETAILS ON CLICK ---
+  const handleAssignmentClick = async (assignment: Assignment) => {
+    setLoadingAssignments(true);
+    setSelectedAssignment(null); // Clear first
+    try {
+      const { data, error } = await getFullAssignmentDetails(assignment.id);
+      if (error) throw error;
+      setSelectedAssignment(data);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Failed to load details', message: err.message });
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+  
   const handleApprove = (id: string) => addToast({ type: 'success', title: 'Deliverable Approved (Mock)!' });
   const handleRequestEdits = (id: string, msg: string) => addToast({ type: 'info', title: 'Edits Requested (Mock)' });
   
@@ -631,7 +663,7 @@ const EmployeesTab: React.FC = () => {
                     {assignments.map(assignment => (
                       <button 
                         key={assignment.id} 
-                        onClick={() => setSelectedAssignment(assignment)}
+                        onClick={() => handleAssignmentClick(assignment)}
                         className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-left"
                       >
                         <div className="min-w-0">
@@ -639,9 +671,9 @@ const EmployeesTab: React.FC = () => {
                           <p className="text-sm text-gray-500">Due: {formatDate(assignment.due_date)}</p>
                         </div>
                         <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${
-                          assignment.status === 'Completed' ? 'bg-green-100 text-green-700' : 
-                          assignment.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
-                          assignment.status === 'Overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                          assignment.status === 'completed' ? 'bg-green-100 text-green-700' : 
+                          assignment.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 
+                          assignment.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
                         }`}>
                           {assignment.status}
                         </span>
@@ -676,6 +708,7 @@ const EmployeesTab: React.FC = () => {
         onClose={() => setIsCreateAssignModalOpen(false)}
         onSave={handleSaveAssignment}
         isSaving={isSavingAssignment}
+        employees={employees} 
       />
       
       <AssignmentDetailPanel
