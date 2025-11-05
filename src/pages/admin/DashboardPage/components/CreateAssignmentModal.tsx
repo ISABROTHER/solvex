@@ -1,21 +1,22 @@
 // @ts-nocheck
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Save, 
-  Loader2, 
-  AlertCircle, 
-  Users, 
-  User, 
-  Paperclip, 
-  Plus, 
+import {
+  X,
+  Save,
+  Loader2,
+  AlertCircle,
+  Users,
+  User,
+  Paperclip,
+  Plus,
   Calendar,
   Trash2,
   List,
   Tag,
   AlignLeft,
-  Flag
+  Flag,
+  CheckCircle
 } from 'lucide-react';
 import { Profile } from '../tabs/EmployeesTab'; // We'll get this from EmployeesTab
 

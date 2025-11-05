@@ -56,6 +56,25 @@ import {
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+type Assignment = {
+  id: string;
+  title: string;
+  description?: string;
+  instructions?: string;
+  status: string;
+  due_date: string | null;
+  created_at?: string;
+  updated_at?: string;
+  start_date?: string;
+  category?: string;
+  priority?: string;
+  milestones?: any[];
+  attachments?: any[];
+  deliverables?: any[];
+  supervisor?: any;
+  assignees?: any[];
+  comments?: any[];
+};
 type EmployeeDocument = {
   id: string;
   profile_id: string;
