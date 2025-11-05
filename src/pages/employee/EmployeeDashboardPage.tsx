@@ -1,6 +1,6 @@
 // src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
@@ -8,7 +8,6 @@ import {
   updateAssignmentStatus,
   postAssignmentComment,
   getAssignmentsForEmployee,
-  getEmployeeDocuments,
   getFullAssignmentDetails,
   EmployeeDocument
 } from '../../lib/supabase/operations';
@@ -18,9 +17,6 @@ import {
   FileText,
   CheckCircle,
   Clock,
-  Send,
-  Eye,
-  Download,
   AlertCircle,
   Inbox,
   User,
@@ -34,17 +30,18 @@ import {
   Building,
   CreditCard,
   Edit2,
-  Upload,
-  FileSignature,
+  UploadCloud,
   AlertTriangle,
   X,
-  LogOut, // <-- ADDED
-  Home // <-- ADDED
+  LogOut,
+  Home,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom'; // <-- ADDED
+import { Link, useNavigate } from 'react-router-dom';
 
 // --- Helper Functions ---
 const formatDate = (dateString: string | null) => {
@@ -75,7 +72,7 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
 );
 
 
-// --- NEW: Profile Edit Form Modal ---
+// --- Profile Edit Form Modal (Refactored) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
@@ -83,13 +80,29 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
     phone: profile?.phone || '',
     home_address: profile?.home_address || '',
   });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setFormData({
+        first_name: profile?.first_name || '',
+        last_name: profile?.last_name || '',
+        phone: profile?.phone || '',
+        home_address: profile?.home_address || '',
+    });
+    setAvatarFile(null);
+  }, [profile, isOpen]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
+  
+  const handleFileChange = (e) => {
+    setAvatarFile(e.target.files?.[0] || null);
+  };
 
   const handleSave = () => {
-    onSave(formData);
+    onSave(formData, avatarFile);
   };
 
   if (!isOpen) return null;
@@ -108,6 +121,31 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={20} /></button>
         </div>
         <div className="p-6 space-y-4">
+          
+          {/* Avatar Section */}
+          <div className="flex items-center gap-4 border-b pb-4">
+            <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {profile.avatar_url || avatarFile ? (
+                <img 
+                    src={avatarFile ? URL.createObjectURL(avatarFile) : profile.avatar_url} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                />
+              ) : (
+                <User size={32} className="text-gray-500" />
+              )}
+            </div>
+            <div>
+              <label htmlFor="avatar-upload" className="cursor-pointer inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <UploadCloud size={16} className="mr-2" />
+                {avatarFile ? 'Change File' : 'Upload Photo'}
+              </label>
+              {avatarFile && <p className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">{avatarFile.name}</p>}
+              <input ref={fileInputRef} type="file" id="avatar-upload" className="sr-only" accept="image/*" onChange={handleFileChange} />
+              
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
               <span className="text-sm font-medium text-gray-700">First Name</span>
@@ -137,6 +175,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   );
 };
 
+
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
@@ -153,24 +192,56 @@ const EmployeeDashboardPage: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   
-  const [isEditingProfile, setIsEditingProfile] = useState(false); // <-- NEW STATE
-  const [isSavingProfile, setIsSavingProfile] = useState(false); // <-- NEW STATE
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
+  const [assignmentPage, setAssignmentPage] = useState(0); // Pagination state
+  const ASSIGNMENTS_PER_PAGE = 7;
+  
 
-  // --- UPDATED LOGIC FOR handleSaveProfile ---
-  const handleSaveProfile = async (formData: any) => {
+  const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
     setIsSavingProfile(true);
+    
+    let avatarUrl = profile.avatar_url; // Default to existing URL
+    
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(formData)
-        .eq('id', user.id);
+        if (avatarFile) {
+            // --- 1. Upload Avatar to Storage (mocking client-side logic) ---
+            const fileExtension = avatarFile.name.split('.').pop();
+            const filePath = `${user.id}/avatar-${Date.now()}.${fileExtension}`;
+            
+            // NOTE: This relies on Supabase Storage being configured.
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('employee_avatars') // Assumed bucket name
+                .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
-      if (error) throw error;
-      addToast({ type: 'success', title: 'Profile Updated!', message: 'Changes will reflect on next reload.' });
-      setIsEditingProfile(false);
-      // Force a soft refresh of auth state or simply prompt for manual reload
-      setTimeout(() => window.location.reload(), 1500);
+            if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
+
+            const { data: urlData } = supabase.storage
+                .from('employee_avatars')
+                .getPublicUrl(uploadData.path);
+            
+            avatarUrl = urlData.publicUrl;
+        }
+        
+        const updateData = {
+            ...formData,
+            avatar_url: avatarUrl // Include new or old URL
+        };
+        
+        // --- 2. Update Profile Table ---
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update(updateData)
+            .eq('id', user.id);
+
+        if (dbError) throw dbError;
+        
+        addToast({ type: 'success', title: 'Profile Updated!', message: 'Changes will reflect on next reload.' });
+        setIsEditingProfile(false);
+        setTimeout(() => window.location.reload(), 1500);
+
     } catch (err: any) {
       addToast({ type: 'error', title: 'Update Failed', message: err.message });
     } finally {
@@ -178,7 +249,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // --- LOGIC FOR handleLogout ---
   const handleLogout = async () => {
     try {
       await logout();
@@ -187,8 +257,40 @@ const EmployeeDashboardPage: React.FC = () => {
       addToast({ type: 'error', title: 'Logout Failed', message: err.message });
     }
   };
-  // ------------------------------------
+  
+  // Memoized list of assignments, filtered to exclude 'completed' and sorted by due date
+  const filteredAssignments = useMemo(() => {
+    // 1. Filter out completed tasks
+    const activeAndPending = assignments.filter(a => a.status !== 'completed');
+    
+    // 2. Sort by status (pending first) and then by due date (closest due date first)
+    return activeAndPending.sort((a, b) => {
+      // Status priority: pending > in_progress > overdue
+      const statusOrder = { 'pending': 1, 'in_progress': 2, 'overdue': 0, 'pending_review': 3 };
+      const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 10;
+      const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 10;
 
+      if (statusA !== statusB) {
+          return statusA - statusB;
+      }
+      
+      // Secondary sort: Due date
+      const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+      const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+      return dateA - dateB;
+    });
+  }, [assignments]);
+  
+  // Calculated visible assignments for pagination
+  const visibleAssignments = useMemo(() => {
+    const start = assignmentPage * ASSIGNMENTS_PER_PAGE;
+    const end = start + ASSIGNMENTS_PER_PAGE;
+    return filteredAssignments.slice(start, end);
+  }, [filteredAssignments, assignmentPage, ASSIGNMENTS_PER_PAGE]);
+  
+  const totalPages = Math.ceil(filteredAssignments.length / ASSIGNMENTS_PER_PAGE);
+
+  // ... (rest of data fetching logic remains unchanged) ...
   useEffect(() => {
     if (!user) return;
 
@@ -217,7 +319,6 @@ const EmployeeDashboardPage: React.FC = () => {
 
     fetchData();
 
-    // ... (rest of useEffect remains unchanged)
     const channel = supabase
       .channel(`employee_dashboard:${user.id}`)
       .on('postgres_changes',
@@ -295,7 +396,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // Simplified version of handleSignDocument just to avoid breaking
   const handleSignDocument = async () => {
     addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
   };
@@ -341,7 +441,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
   return (
     <div className="flex h-screen w-full flex-col bg-gray-50">
-      {/* --- NEW: Fixed Top Bar (Navigation) --- */}
+      {/* --- Fixed Top Bar (Navigation) --- */}
       <div className="flex-shrink-0 bg-white shadow-sm px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b">
         <h1 className="text-xl font-bold text-gray-900">Employee Portal</h1>
         <div className="flex items-center space-x-4">
@@ -369,16 +469,24 @@ const EmployeeDashboardPage: React.FC = () => {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto p-6 md:p-10">
           
-          {/* --- NEW: Hero Section --- */}
-          <div className="relative p-8 md:p-10 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-xl shadow-lg text-white mb-8">
+          {/* --- Hero Section (Brand Color & Avatar) --- */}
+          <div className="relative p-8 md:p-10 bg-gradient-to-r from-[#FF5722] to-[#C10100] rounded-xl shadow-xl text-white mb-8">
             <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5 }}>
               <div className="flex items-center gap-6">
-                <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-white text-3xl font-bold border-2 border-white">
-                  {profile.first_name?.[0] || 'E'}
+                <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-white">
+                  {profile.avatar_url ? (
+                    <img 
+                      src={profile.avatar_url} 
+                      alt={`${profile.first_name} Avatar`} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <User size={36} className="text-white" />
+                  )}
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold">Welcome, {profile.first_name}!</h1>
-                  <p className="text-indigo-200">{profile.position || 'Employee'}</p>
+                  <h1 className="text-3xl font-bold">Welcome back, {profile.first_name}!</h1>
+                  <p className="text-orange-100">{profile.position || 'Employee'}</p>
                 </div>
               </div>
             </motion.div>
@@ -391,40 +499,79 @@ const EmployeeDashboardPage: React.FC = () => {
             {/* Left Column: Assignments & Documents (lg:col-span-2) */}
             <div className="lg:col-span-2 space-y-8">
               
-              {/* Assignments Section */}
+              {/* Assignments Section (Filtered and Paginated) */}
               <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
-                  <List className="text-gray-500" /> My Active Assignments
-                </h2>
-                {assignments.length === 0 ? (
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                    <List className="text-gray-500" /> Active Assignments ({filteredAssignments.length})
+                  </h2>
+                  <Link to="/employee/all-assignments" className="text-sm text-[#FF5722] hover:underline hidden md:block">
+                     View All
+                  </Link>
+                </div>
+
+                {filteredAssignments.length === 0 ? (
                   <div className="text-center p-10">
                       <Inbox size={48} className="mx-auto text-gray-300" />
                       <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
                       <p className="text-sm text-gray-500">You have no active assignments.</p>
                     </div>
                 ) : (
-                  <div className="space-y-3">
-                    {assignments.map(assignment => {
-                      const { icon: Icon, color, label } = getStatusProps(assignment.status);
-                      return (
+                  <>
+                    <div className="space-y-3">
+                      {/* Only render visible assignments */}
+                      {visibleAssignments.map(assignment => {
+                        const { icon: Icon, color, label } = getStatusProps(assignment.status);
+                        return (
+                          <button
+                            key={assignment.id}
+                            onClick={() => handleAssignmentClick(assignment.id)}
+                            className={`w-full p-4 bg-gray-50 rounded-lg text-left transition-all border ${
+                              selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722] border-[#FF5722]' : 'hover:bg-gray-100 border-gray-200'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold text-gray-800">{assignment.title}</span>
+                              <span className={`flex items-center text-xs font-medium gap-1.5 px-3 py-1 rounded-full ${color.replace('text-', 'bg-').replace('500', '100')} ${color}`}>
+                                <Icon size={14} /> {label.replace("_", " ")}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">Due: {formatSimpleDate(assignment.due_date)}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Pagination/Next Button */}
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 mt-6">
                         <button
-                          key={assignment.id}
-                          onClick={() => handleAssignmentClick(assignment.id)}
-                          className={`w-full p-4 bg-gray-50 rounded-lg text-left transition-all border ${
-                            selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722] border-[#FF5722]' : 'hover:bg-gray-100 border-gray-200'
-                          }`}
+                          onClick={() => setAssignmentPage(p => p - 1)}
+                          disabled={assignmentPage === 0}
+                          className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
                         >
-                          <div className="flex justify-between items-center">
-                            <span className="font-semibold text-gray-800">{assignment.title}</span>
-                            <span className={`flex items-center text-xs font-medium gap-1.5 px-3 py-1 rounded-full ${color.replace('text-', 'bg-').replace('500', '100')} ${color}`}>
-                              <Icon size={14} /> {label.replace("_", " ")}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-500 mt-1">Due: {formatSimpleDate(assignment.due_date)}</p>
+                          <ChevronLeft size={20} />
                         </button>
-                      );
-                    })}
-                  </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          Page {assignmentPage + 1} of {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setAssignmentPage(p => p + 1)}
+                          disabled={assignmentPage >= totalPages - 1}
+                          className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      </div>
+                    )}
+                    {filteredAssignments.length > ASSIGNMENTS_PER_PAGE && (
+                      <div className="text-center mt-4 md:hidden">
+                        <Link to="/employee/all-assignments" className="text-sm font-semibold text-[#FF5722] hover:underline">
+                          View All ({filteredAssignments.length})
+                        </Link>
+                      </div>
+                    )}
+                  </>
                 )}
               </section>
 
@@ -513,12 +660,12 @@ const EmployeeDashboardPage: React.FC = () => {
         onUpdateStatus={handleUpdateStatus}
       />
       
-      {/* PDF Viewer Modal (kept) */}
+      {/* PDF Viewer Modal (kept for completeness) */}
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
 
-      {/* --- NEW: Profile Edit Modal (Component added) --- */}
+      {/* Profile Edit Modal (New) */}
       <ProfileEditModal
         isOpen={isEditingProfile}
         onClose={() => setIsEditingProfile(false)}
@@ -529,5 +676,40 @@ const EmployeeDashboardPage: React.FC = () => {
     </div>
   );
 };
+
+// Re-using simplified PdfViewerModal
+const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
+  <AnimatePresence>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+      <motion.div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+      >
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+           <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg" 
+            title="PDF Viewer" 
+          />
+        </div>
+      </motion.div>
+    </div>
+  </AnimatePresence>
+);
 
 export default EmployeeDashboardPage;
