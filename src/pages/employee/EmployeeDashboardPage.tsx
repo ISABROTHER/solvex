@@ -8,6 +8,7 @@ import {
   updateAssignmentStatus,
   postAssignmentComment,
   getAssignmentsForEmployee,
+  getEmployeeDocuments,
   getFullAssignmentDetails,
   EmployeeDocument
 } from '../../lib/supabase/operations';
@@ -72,7 +73,7 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
 );
 
 
-// --- Profile Edit Form Modal (Refactored) ---
+// --- Profile Edit Form Modal (Final Refactored) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
@@ -84,6 +85,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
+    // Reset internal state when modal opens/profile changes
     setFormData({
         first_name: profile?.first_name || '',
         last_name: profile?.last_name || '',
@@ -102,6 +104,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   };
 
   const handleSave = () => {
+    // Pass both form data and the file to the parent handler
     onSave(formData, avatarFile);
   };
 
@@ -124,7 +127,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
           
           {/* Avatar Section */}
           <div className="flex items-center gap-4 border-b pb-4">
-            <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+            <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-gray-100">
               {profile.avatar_url || avatarFile ? (
                 <img 
                     src={avatarFile ? URL.createObjectURL(avatarFile) : profile.avatar_url} 
@@ -132,7 +135,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
                     className="w-full h-full object-cover" 
                 />
               ) : (
-                <User size={32} className="text-gray-500" />
+                <User size={36} className="text-gray-500" />
               )}
             </div>
             <div>
@@ -195,7 +198,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
-  const [assignmentPage, setAssignmentPage] = useState(0); // Pagination state
+  const [assignmentPage, setAssignmentPage] = useState(0); 
   const ASSIGNMENTS_PER_PAGE = 7;
   
 
@@ -203,17 +206,16 @@ const EmployeeDashboardPage: React.FC = () => {
     if (!user) return;
     setIsSavingProfile(true);
     
-    let avatarUrl = profile.avatar_url; // Default to existing URL
+    let avatarUrl = profile.avatar_url; 
     
     try {
         if (avatarFile) {
-            // --- 1. Upload Avatar to Storage (mocking client-side logic) ---
             const fileExtension = avatarFile.name.split('.').pop();
-            const filePath = `${user.id}/avatar-${Date.now()}.${fileExtension}`;
+            // Use a consistent name to allow upsert/overwrite
+            const filePath = `${user.id}/avatar.${fileExtension}`; 
             
-            // NOTE: This relies on Supabase Storage being configured.
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('employee_avatars') // Assumed bucket name
+                .from('employee_avatars') 
                 .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
             if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
@@ -227,10 +229,9 @@ const EmployeeDashboardPage: React.FC = () => {
         
         const updateData = {
             ...formData,
-            avatar_url: avatarUrl // Include new or old URL
+            avatar_url: avatarUrl 
         };
         
-        // --- 2. Update Profile Table ---
         const { error: dbError } = await supabase
             .from('profiles')
             .update(updateData)
@@ -240,6 +241,7 @@ const EmployeeDashboardPage: React.FC = () => {
         
         addToast({ type: 'success', title: 'Profile Updated!', message: 'Changes will reflect on next reload.' });
         setIsEditingProfile(false);
+        // Force a soft refresh to load the new profile image/data
         setTimeout(() => window.location.reload(), 1500);
 
     } catch (err: any) {
@@ -258,14 +260,13 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
   
-  // Memoized list of assignments, filtered to exclude 'completed' and sorted by due date
+  // Memoized list of assignments, filtered and sorted as requested
   const filteredAssignments = useMemo(() => {
     // 1. Filter out completed tasks
     const activeAndPending = assignments.filter(a => a.status !== 'completed');
     
-    // 2. Sort by status (pending first) and then by due date (closest due date first)
+    // 2. Sort by status (pending > in_progress > overdue) and then by due date (closest first)
     return activeAndPending.sort((a, b) => {
-      // Status priority: pending > in_progress > overdue
       const statusOrder = { 'pending': 1, 'in_progress': 2, 'overdue': 0, 'pending_review': 3 };
       const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 10;
       const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 10;
@@ -274,7 +275,6 @@ const EmployeeDashboardPage: React.FC = () => {
           return statusA - statusB;
       }
       
-      // Secondary sort: Due date
       const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
       const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
       return dateA - dateB;
@@ -406,6 +406,7 @@ const EmployeeDashboardPage: React.FC = () => {
       case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
       case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
       case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
+      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-500', label: 'Pending Review' }; // Added status
       default: return { icon: List, color: 'text-yellow-500', label: status };
     }
   };
@@ -549,6 +550,7 @@ const EmployeeDashboardPage: React.FC = () => {
                           onClick={() => setAssignmentPage(p => p - 1)}
                           disabled={assignmentPage === 0}
                           className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                          aria-label="Previous page"
                         >
                           <ChevronLeft size={20} />
                         </button>
@@ -559,6 +561,7 @@ const EmployeeDashboardPage: React.FC = () => {
                           onClick={() => setAssignmentPage(p => p + 1)}
                           disabled={assignmentPage >= totalPages - 1}
                           className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                          aria-label="Next page"
                         >
                           <ChevronRight size={20} />
                         </button>
