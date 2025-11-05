@@ -120,6 +120,161 @@ export const onAccessRequestsChange = (callback: (payload: any) => void) => {
   return channel;
 };
 
+// --- START: NEW ASSIGNMENT FUNCTIONS ---
+
+// Helper to get full profile data for assignees
+const getProfilesForAssignment = async (assignmentId: string) => {
+  const { data, error } = await supabase
+    .from('assignment_members')
+    .select('profile:profiles!inner(id, first_name, last_name, avatar_url)')
+    .eq('assignment_id', assignmentId);
+  if (error) return [];
+  return data.map(item => item.profile);
+};
+
+// Helper to get comments for an assignment
+const getCommentsForAssignment = async (assignmentId: string) => {
+   const { data, error } = await supabase
+    .from('assignment_messages')
+    .select(`
+      id, 
+      content, 
+      created_at,
+      profile:profiles!sender_id(first_name, last_name, avatar_url)
+    `)
+    .eq('assignment_id', assignmentId)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return data;
+}
+
+// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE
+export const getAssignmentsForEmployee = async (employeeId: string) => {
+  const { data, error } = await supabase
+    .from('assignment_members')
+    .select('assignment:assignments!inner(*)')
+    .eq('employee_id', employeeId);
+
+  if (error) throw error;
+  if (!data) return { data: [], error: null };
+
+  // This is the "polyfill" to fix the white screen.
+  // We fetch real data, then add the empty fields the component expects.
+  const fullAssignments = await Promise.all(
+    data.map(async (item) => {
+      const assignment = item.assignment;
+      // Fetch real assignees and comments
+      const [assignees, comments] = await Promise.all([
+        getProfilesForAssignment(assignment.id),
+        getCommentsForAssignment(assignment.id)
+      ]);
+      
+      return {
+        ...assignment,
+        description: assignment.instructions, // Map instructions to description
+        // Add all the missing fields that the UI component expects
+        milestones: [],
+        attachments: [],
+        deliverables: [],
+        supervisor: null,
+        category: 'Admin Task',
+        priority: 'medium',
+        // Add the real data we fetched
+        assignees: assignees,
+        comments: comments,
+      };
+    })
+  );
+  
+  return { data: fullAssignments, error: null };
+};
+
+// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (used when clicking)
+export const getFullAssignmentDetails = async (assignmentId: string) => {
+  const { data: assignment, error } = await supabase
+    .from('assignments')
+    .select('*')
+    .eq('id', assignmentId)
+    .single();
+    
+  if (error) throw error;
+
+  // Fetch real assignees and comments
+  const [assignees, comments] = await Promise.all([
+    getProfilesForAssignment(assignmentId),
+    getCommentsForAssignment(assignmentId)
+  ]);
+
+  // Polyfill missing fields to prevent white screen
+  const fullAssignment = {
+    ...assignment,
+    description: assignment.instructions,
+    milestones: [],
+    attachments: [],
+    deliverables: [],
+    supervisor: null,
+    category: 'Admin Task',
+    priority: 'medium',
+    assignees: assignees,
+    comments: comments,
+  };
+
+  return { data: fullAssignment, error: null };
+};
+
+// 3. CREATE A NEW ASSIGNMENT
+export const createAssignment = async (formData: any, adminId: string) => {
+  const { data: newAssignment, error } = await supabase
+    .from('assignments')
+    .insert({
+      title: formData.title,
+      instructions: formData.description, // Map description to instructions
+      due_date: formData.dueDate || null,
+      status: 'pending',
+      created_by: adminId,
+    })
+    .select()
+    .single();
+
+  if (error) return { error };
+
+  // Add members
+  const memberInserts = formData.assignees.map((employeeId: string) => ({
+    assignment_id: newAssignment.id,
+    employee_id: employeeId,
+  }));
+
+  const { error: memberError } = await supabase
+    .from('assignment_members')
+    .insert(memberInserts);
+
+  if (memberError) return { error: memberError };
+  
+  return { data: newAssignment, error: null };
+};
+
+// 4. UPDATE ASSIGNMENT STATUS
+export const updateAssignmentStatus = async (assignmentId: string, status: string) => {
+  return supabase
+    .from('assignments')
+    .update({ status: status })
+    .eq('id', assignmentId);
+};
+
+// 5. POST A COMMENT
+export const postAssignmentComment = async (assignmentId: string, senderId: string, content: string) => {
+  return supabase
+    .from('assignment_messages')
+    .insert({
+      assignment_id: assignmentId,
+      sender_id: senderId,
+      content: content,
+    });
+};
+
+// --- END: NEW ASSIGNMENT FUNCTIONS ---
+
+
 export type Service = Database['public']['Tables']['services']['Row'];
 
 export const getServices = async () => {
