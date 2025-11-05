@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, FileText, Settings, LogOut,
   Package, Wrench, Briefcase, FileCheck, UsersRound,
-  UserCheck
+  UserCheck,
+  ClipboardList // <-- 1. IMPORT NEW ICON
 } from 'lucide-react';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import { TabKey } from '..'; 
@@ -20,6 +21,7 @@ const icons = {
   jobs: Briefcase,
   applications: FileCheck,
   employees: Users,
+  assignments: ClipboardList, // <-- 2. ADD ICON
   settings: Settings,
 };
 
@@ -32,6 +34,7 @@ const navItems = [
   { name: 'Jobs', path: 'jobs', icon: 'jobs' },
   { name: 'Applications', path: 'applications', icon: 'applications' },
   { name: 'Employees', path: 'employees', icon: 'employees' },
+  { name: 'Assignments', path: 'assignments', icon: 'assignments' }, // <-- 3. ADD NAV ITEM
   { name: 'Settings', path: 'settings', icon: 'settings' },
 ];
 
