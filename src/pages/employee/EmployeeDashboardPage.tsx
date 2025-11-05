@@ -39,8 +39,8 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  Filter, // <-- ADDED
-  ArrowDownWideNarrow, // <-- ADDED
+  Filter, 
+  ArrowDownWideNarrow, 
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -81,7 +81,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
     last_name: profile?.last_name || '',
-    email: profile?.email || '', 
+    email: profile?.email || '',
     phone: profile?.phone || '',
     home_address: profile?.home_address || '',
   });
@@ -252,9 +252,9 @@ const EmployeeDashboardPage: React.FC = () => {
   
   const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
   
-  // --- NEW STATE FOR FILTERING AND SORTING ---
-  const [filterStatus, setFilterStatus] = useState('all_active'); // 'all_active', 'overdue', 'in_progress', 'pending_review'
-  const [sortType, setSortType] = useState('priority'); // 'due_date', 'title', 'priority' (default status sort)
+  // Update default sort to 'due_date' for best practice, keeping priority as the initial value for the dropdown
+  const [filterStatus, setFilterStatus] = useState('all_active'); 
+  const [sortType, setSortType] = useState('due_date'); // <-- CHANGED DEFAULT SORT TO DUE DATE
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -314,7 +314,7 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
   
-  // --- UPDATED Memoized list of assignments to handle filtering and sorting ---
+  // --- REFACTORED: Assignment Filtering and Sorting Logic ---
   const filteredAssignments = useMemo(() => {
     // 1. Initial Filtering: Exclude 'completed' tasks
     let result = assignments.filter(a => a.status !== 'completed');
@@ -326,20 +326,21 @@ const EmployeeDashboardPage: React.FC = () => {
 
     // 3. Sorting (based on dropdown)
     return result.sort((a, b) => {
-      // Priority sorting (used for 'priority' sortType and as secondary sort)
+      // Helper function for Priority sorting (Overdue first)
       const getPriority = (status) => {
           const order = { 'overdue': 0, 'pending': 1, 'in_progress': 2, 'pending_review': 3 };
           return order[status] !== undefined ? order[status] : 10;
       };
-
-      if (sortType === 'priority') {
-          return getPriority(a.status) - getPriority(b.status);
-      } 
       
+      const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+      const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+
+
       if (sortType === 'due_date') {
-          const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-          const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
-          return dateA - dateB; // ASC: Closer due date first
+          // Primary sort: Due Date (ASC: Closest due date first)
+          if (dateA !== dateB) {
+            return dateA - dateB; 
+          }
       } 
       
       if (sortType === 'title') {
@@ -347,10 +348,9 @@ const EmployeeDashboardPage: React.FC = () => {
           const titleB = b.title.toLowerCase();
           if (titleA < titleB) return -1;
           if (titleA > titleB) return 1;
-          return 0;
       }
       
-      // Fallback/Default Sort (if 'priority' is selected)
+      // Fallback/Default or Priority Sort: Overdue, then Pending/In-Progress
       return getPriority(a.status) - getPriority(b.status);
     });
   }, [assignments, filterStatus, sortType]);
@@ -588,7 +588,7 @@ const EmployeeDashboardPage: React.FC = () => {
                     <List className="text-gray-500" /> Active Assignments ({filteredAssignments.length})
                   </h2>
                   
-                  {/* --- NEW: Filter and Sort Controls --- */}
+                  {/* --- Filter and Sort Controls --- */}
                   <div className="flex space-x-3 items-center">
                       <div className="relative">
                           <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -613,8 +613,8 @@ const EmployeeDashboardPage: React.FC = () => {
                               onChange={(e) => setSortType(e.target.value)}
                               className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
                           >
-                              <option value="priority">Sort by Priority</option>
-                              <option value="due_date">Sort by Due Date</option>
+                              <option value="due_date">Sort by Due Date (Default)</option>
+                              <option value="priority">Sort by Status Priority</option>
                               <option value="title">Sort by Title</option>
                           </select>
                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
