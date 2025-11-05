@@ -109,22 +109,21 @@ const EmployeeDashboardPage: React.FC = () => {
 
     fetchData();
 
-    // Realtime listener
+    // Lightweight realtime listeners - only listen to relevant changes
     const channel = supabase
-      .channel(`employee_assignments:${user.id}`)
+      .channel(`employee_dashboard:${user.id}`)
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
+        { event: '*', schema: 'public', table: 'assignments' },
         async () => {
           const result = await getAssignmentsForEmployee(user.id);
           if (!result.error) setAssignments(result.data || []);
         }
       )
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'assignment_messages' },
-        (payload) => {
-          if (selectedAssignment && payload.new.assignment_id === selectedAssignment.id) {
-            handleAssignmentClick(selectedAssignment.id);
-          }
+        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
+        async () => {
+          const result = await getEmployeeDocuments(user.id);
+          if (!result.error) setDocuments(result.data || []);
         }
       )
       .subscribe();
@@ -133,7 +132,7 @@ const EmployeeDashboardPage: React.FC = () => {
       supabase.removeChannel(channel);
     };
 
-  }, [user, addToast]);
+  }, [user]);
 
   const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {

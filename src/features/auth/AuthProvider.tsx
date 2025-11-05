@@ -4,11 +4,28 @@ import type { Session, User } from '@supabase/supabase-js';
 
 type UserRole = 'client' | 'admin' | 'employee' | null;
 
+interface Profile {
+  id: string;
+  role: string;
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  phone?: string;
+  home_address?: string;
+  birth_date?: string;
+  position?: string;
+  employee_number?: string;
+  start_date?: string;
+  avatar_url?: string;
+  [key: string]: any;
+}
+
 interface AuthState {
   isAuthenticated: boolean;
   role: UserRole;
   user: User | null;
   session: Session | null;
+  profile: Profile | null;
   isLoading: boolean;
 }
 
@@ -40,6 +57,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     role: null,
     user: null,
     session: null,
+    profile: null,
     isLoading: true,
   });
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +77,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const updateUserState = async (session: Session | null): Promise<UserRole> => {
     console.log("[updateUserState] Start. Session available:", !!session);
     let userRole: UserRole = null;
+    let profileData: Profile | null = null;
 
     if (session?.user?.id) {
       const userId = session.user.id;
@@ -66,22 +85,22 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setError(null);
 
       try {
-        console.log(`[updateUserState] Attempting to fetch profile for ID: ${userId}`);
+        console.log(`[updateUserState] Attempting to fetch full profile for ID: ${userId}`);
         const { data: profile, error: profileError, status } = await supabase
           .from('profiles')
-          .select('id, role')
+          .select('*')
           .eq('id', userId)
           .maybeSingle();
 
-        console.log(`[updateUserState] Profile fetch response: Status=${status}`, { profile, profileError });
+        console.log(`[updateUserState] Profile fetch response: Status=${status}`);
 
         if (profileError) {
           console.error("[updateUserState] Database error during profile fetch:", profileError);
           setError(`Error fetching profile: ${profileError.message}`);
         } else if (profile) {
-          console.log(`[updateUserState] Profile data received:`, profile);
-          const fetchedRole = (profile as { id: string; role: string }).role;
-          console.log(`[updateUserState] Role value from profile: '${fetchedRole}'`);
+          profileData = profile as Profile;
+          console.log(`[updateUserState] Profile data received`);
+          const fetchedRole = profileData.role;
 
           if (fetchedRole === 'admin' || fetchedRole === 'client' || fetchedRole === 'employee') {
             userRole = fetchedRole;
@@ -106,6 +125,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         role: userRole,
         user: session.user,
         session: session,
+        profile: profileData,
         isLoading: false,
       });
       console.log("[updateUserState] Auth state updated:", { role: userRole, isAuthenticated: true });
@@ -116,6 +136,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         role: null,
         user: null,
         session: null,
+        profile: null,
         isLoading: false,
       });
     }
@@ -225,6 +246,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         role: null,
         user: null,
         session: null,
+        profile: null,
         isLoading: false,
       });
     } catch (err: any) {
