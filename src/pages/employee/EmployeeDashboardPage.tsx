@@ -38,7 +38,9 @@ import {
   Home,
   ChevronRight,
   ChevronLeft,
-  ChevronDown // <-- Ensure ChevronDown is imported
+  ChevronDown,
+  Filter, // <-- ADDED
+  ArrowDownWideNarrow, // <-- ADDED
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -74,12 +76,12 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
 );
 
 
-// --- Profile Edit Form Modal (Updated Editability) ---
+// --- Profile Edit Form Modal (Unchanged) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
     last_name: profile?.last_name || '',
-    email: profile?.email || '', // <-- Added Email
+    email: profile?.email || '', 
     phone: profile?.phone || '',
     home_address: profile?.home_address || '',
   });
@@ -87,7 +89,6 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    // Reset internal state when modal opens/profile changes
     setFormData({
         first_name: profile?.first_name || '',
         last_name: profile?.last_name || '',
@@ -160,7 +161,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
                 name="first_name" 
                 value={formData.first_name} 
                 className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
-                readOnly={true} // <-- READ-ONLY
+                readOnly={true} 
                 disabled={isSaving}
               />
             </label>
@@ -171,7 +172,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
                 name="last_name" 
                 value={formData.last_name} 
                 className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
-                readOnly={true} // <-- READ-ONLY
+                readOnly={true} 
                 disabled={isSaving}
               />
             </label>
@@ -249,9 +250,11 @@ const EmployeeDashboardPage: React.FC = () => {
   const [assignmentPage, setAssignmentPage] = useState(0); 
   const ASSIGNMENTS_PER_PAGE = 7;
   
-  // NEW STATE for collapsing the Employment Details card on mobile
   const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
   
+  // --- NEW STATE FOR FILTERING AND SORTING ---
+  const [filterStatus, setFilterStatus] = useState('all_active'); // 'all_active', 'overdue', 'in_progress', 'pending_review'
+  const [sortType, setSortType] = useState('priority'); // 'due_date', 'title', 'priority' (default status sort)
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -277,7 +280,6 @@ const EmployeeDashboardPage: React.FC = () => {
             avatarUrl = urlData.publicUrl;
         }
         
-        // --- UPDATED PAYLOAD to include editable fields (email, phone, home_address) ---
         const updateData = {
             email: formData.email, 
             phone: formData.phone,
@@ -312,26 +314,46 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
   
-  // Memoized list of assignments, filtered and sorted as requested
+  // --- UPDATED Memoized list of assignments to handle filtering and sorting ---
   const filteredAssignments = useMemo(() => {
-    // 1. Filter out completed tasks
-    const activeAndPending = assignments.filter(a => a.status !== 'completed');
+    // 1. Initial Filtering: Exclude 'completed' tasks
+    let result = assignments.filter(a => a.status !== 'completed');
     
-    // 2. Sort by status (pending > in_progress > overdue) and then by due date (closest first)
-    return activeAndPending.sort((a, b) => {
-      const statusOrder = { 'pending': 1, 'in_progress': 2, 'overdue': 0, 'pending_review': 3 };
-      const statusA = statusOrder[a.status] !== undefined ? statusOrder[a.status] : 10;
-      const statusB = statusOrder[b.status] !== undefined ? statusOrder[b.status] : 10;
+    // 2. Status Filtering (based on dropdown)
+    if (filterStatus !== 'all_active') {
+        result = result.filter(a => a.status === filterStatus);
+    }
 
-      if (statusA !== statusB) {
-          return statusA - statusB;
+    // 3. Sorting (based on dropdown)
+    return result.sort((a, b) => {
+      // Priority sorting (used for 'priority' sortType and as secondary sort)
+      const getPriority = (status) => {
+          const order = { 'overdue': 0, 'pending': 1, 'in_progress': 2, 'pending_review': 3 };
+          return order[status] !== undefined ? order[status] : 10;
+      };
+
+      if (sortType === 'priority') {
+          return getPriority(a.status) - getPriority(b.status);
+      } 
+      
+      if (sortType === 'due_date') {
+          const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+          const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+          return dateA - dateB; // ASC: Closer due date first
+      } 
+      
+      if (sortType === 'title') {
+          const titleA = a.title.toLowerCase();
+          const titleB = b.title.toLowerCase();
+          if (titleA < titleB) return -1;
+          if (titleA > titleB) return 1;
+          return 0;
       }
       
-      const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-      const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
-      return dateA - dateB;
+      // Fallback/Default Sort (if 'priority' is selected)
+      return getPriority(a.status) - getPriority(b.status);
     });
-  }, [assignments]);
+  }, [assignments, filterStatus, sortType]);
   
   // Calculated visible assignments for pagination
   const visibleAssignments = useMemo(() => {
@@ -341,6 +363,12 @@ const EmployeeDashboardPage: React.FC = () => {
   }, [filteredAssignments, assignmentPage, ASSIGNMENTS_PER_PAGE]);
   
   const totalPages = Math.ceil(filteredAssignments.length / ASSIGNMENTS_PER_PAGE);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setAssignmentPage(0);
+  }, [filterStatus, sortType]);
+
 
   // ... (rest of data fetching logic remains unchanged) ...
   useEffect(() => {
@@ -458,7 +486,8 @@ const EmployeeDashboardPage: React.FC = () => {
       case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
       case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
       case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
-      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-500', label: 'Pending Review' }; // Added status
+      case 'pending': return { icon: List, color: 'text-yellow-500', label: 'Pending' }; 
+      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-500', label: 'Pending Review' }; 
       default: return { icon: List, color: 'text-yellow-500', label: status };
     }
   };
@@ -554,10 +583,45 @@ const EmployeeDashboardPage: React.FC = () => {
               
               {/* Assignments Section (Filtered and Paginated) */}
               <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-4">
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-3 sm:mb-0">
                     <List className="text-gray-500" /> Active Assignments ({filteredAssignments.length})
                   </h2>
+                  
+                  {/* --- NEW: Filter and Sort Controls --- */}
+                  <div className="flex space-x-3 items-center">
+                      <div className="relative">
+                          <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <select 
+                              value={filterStatus} 
+                              onChange={(e) => setFilterStatus(e.target.value)}
+                              className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
+                          >
+                              <option value="all_active">All Active</option>
+                              <option value="overdue">Overdue</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="pending">Pending</option>
+                              <option value="pending_review">Pending Review</option>
+                          </select>
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      </div>
+
+                      <div className="relative">
+                          <ArrowDownWideNarrow size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <select 
+                              value={sortType} 
+                              onChange={(e) => setSortType(e.target.value)}
+                              className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
+                          >
+                              <option value="priority">Sort by Priority</option>
+                              <option value="due_date">Sort by Due Date</option>
+                              <option value="title">Sort by Title</option>
+                          </select>
+                           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      </div>
+                  </div>
+                  {/* --- END: Filter and Sort Controls --- */}
+                  
                   <Link to="/employee/all-assignments" className="text-sm text-[#FF5722] hover:underline hidden md:block">
                      View All
                   </Link>
@@ -567,7 +631,7 @@ const EmployeeDashboardPage: React.FC = () => {
                   <div className="text-center p-10">
                       <Inbox size={48} className="mx-auto text-gray-300" />
                       <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
-                      <p className="text-sm text-gray-500">You have no active assignments.</p>
+                      <p className="text-sm text-gray-500">You have no assignments matching the current criteria.</p>
                     </div>
                 ) : (
                   <>
