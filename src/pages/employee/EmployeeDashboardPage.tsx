@@ -60,7 +60,7 @@ const formatSimpleDate = (dateString: string | null) => {
   return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// --- Reusable InfoRow ---
+// --- Reusable InfoRow (Unchanged) ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null | undefined }> = ({
   icon: Icon,
   label,
@@ -252,9 +252,8 @@ const EmployeeDashboardPage: React.FC = () => {
   
   const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
   
-  // Update default sort to 'due_date' for best practice, keeping priority as the initial value for the dropdown
   const [filterStatus, setFilterStatus] = useState('all_active'); 
-  const [sortType, setSortType] = useState('due_date'); // <-- CHANGED DEFAULT SORT TO DUE DATE
+  const [sortType, setSortType] = useState('due_date'); // Default to due date
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -316,17 +315,13 @@ const EmployeeDashboardPage: React.FC = () => {
   
   // --- REFACTORED: Assignment Filtering and Sorting Logic ---
   const filteredAssignments = useMemo(() => {
-    // 1. Initial Filtering: Exclude 'completed' tasks
     let result = assignments.filter(a => a.status !== 'completed');
     
-    // 2. Status Filtering (based on dropdown)
     if (filterStatus !== 'all_active') {
         result = result.filter(a => a.status === filterStatus);
     }
 
-    // 3. Sorting (based on dropdown)
     return result.sort((a, b) => {
-      // Helper function for Priority sorting (Overdue first)
       const getPriority = (status) => {
           const order = { 'overdue': 0, 'pending': 1, 'in_progress': 2, 'pending_review': 3 };
           return order[status] !== undefined ? order[status] : 10;
@@ -334,13 +329,13 @@ const EmployeeDashboardPage: React.FC = () => {
       
       const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
       const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+      
+      let primarySort = 0;
 
-
-      if (sortType === 'due_date') {
-          // Primary sort: Due Date (ASC: Closest due date first)
-          if (dateA !== dateB) {
-            return dateA - dateB; 
-          }
+      if (sortType === 'due_date' || sortType === 'month_year') { // Group Month/Year with Due Date
+          // Primary sort: Due Date (ASC: Closest date first)
+          primarySort = dateA - dateB; 
+          if (primarySort !== 0) return primarySort;
       } 
       
       if (sortType === 'title') {
@@ -350,7 +345,7 @@ const EmployeeDashboardPage: React.FC = () => {
           if (titleA > titleB) return 1;
       }
       
-      // Fallback/Default or Priority Sort: Overdue, then Pending/In-Progress
+      // Secondary sort (or primary if sortType is priority): Status Priority
       return getPriority(a.status) - getPriority(b.status);
     });
   }, [assignments, filterStatus, sortType]);
@@ -363,6 +358,10 @@ const EmployeeDashboardPage: React.FC = () => {
   }, [filteredAssignments, assignmentPage, ASSIGNMENTS_PER_PAGE]);
   
   const totalPages = Math.ceil(filteredAssignments.length / ASSIGNMENTS_PER_PAGE);
+  const totalAssignments = filteredAssignments.length;
+  const startAssignment = assignmentPage * ASSIGNMENTS_PER_PAGE + 1;
+  const endAssignment = Math.min(startAssignment + ASSIGNMENTS_PER_PAGE - 1, totalAssignments);
+
 
   // Reset page when filters change
   useEffect(() => {
@@ -613,9 +612,10 @@ const EmployeeDashboardPage: React.FC = () => {
                               onChange={(e) => setSortType(e.target.value)}
                               className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
                           >
-                              <option value="due_date">Sort by Due Date (Default)</option>
-                              <option value="priority">Sort by Status Priority</option>
+                              <option value="due_date">Sort by Date (Default)</option>
+                              <option value="month_year">Sort by Month/Year</option> 
                               <option value="title">Sort by Title</option>
+                              <option value="priority">Sort by Status Priority</option>
                           </select>
                            <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                       </div>
@@ -659,28 +659,30 @@ const EmployeeDashboardPage: React.FC = () => {
                       })}
                     </div>
                     
-                    {/* Pagination/Next Button */}
-                    {totalPages > 1 && (
-                      <div className="flex justify-center items-center gap-4 mt-6">
-                        <button
-                          onClick={() => setAssignmentPage(p => p - 1)}
-                          disabled={assignmentPage === 0}
-                          className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
-                          aria-label="Previous page"
-                        >
-                          <ChevronLeft size={20} />
-                        </button>
-                        <span className="text-sm font-medium text-gray-700">
-                          Page {assignmentPage + 1} of {totalPages}
+                    {/* Pagination/Next Button: Enhanced Design */}
+                    {totalAssignments > ASSIGNMENTS_PER_PAGE && (
+                      <div className="flex justify-between items-center border-t pt-4 mt-6">
+                        <span className="text-sm font-medium text-gray-600">
+                          Showing {startAssignment}-{endAssignment} of {totalAssignments} assignments
                         </span>
-                        <button
-                          onClick={() => setAssignmentPage(p => p + 1)}
-                          disabled={assignmentPage >= totalPages - 1}
-                          className="p-2 rounded-full text-gray-600 hover:bg-gray-100 disabled:opacity-50"
-                          aria-label="Next page"
-                        >
-                          <ChevronRight size={20} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setAssignmentPage(p => p - 1)}
+                            disabled={assignmentPage === 0}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                            aria-label="Previous page"
+                          >
+                            <ChevronLeft size={16} /> Previous
+                          </button>
+                          <button
+                            onClick={() => setAssignmentPage(p => p + 1)}
+                            disabled={assignmentPage >= totalPages - 1}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-[#FF5722] hover:bg-[#E64A19] disabled:opacity-50 transition-colors"
+                            aria-label="Next page"
+                          >
+                            Next <ChevronRight size={16} />
+                          </button>
+                        </div>
                       </div>
                     )}
                     {filteredAssignments.length > ASSIGNMENTS_PER_PAGE && (
