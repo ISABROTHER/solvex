@@ -19,9 +19,6 @@ import {
 } from 'lucide-react';
 import { Profile } from '../tabs/EmployeesTab'; // We'll get this from EmployeesTab
 
-// --- Mock Data for Assignees ---
-// REMOVED MOCK_EMPLOYEES
-
 // --- Types (from your spec) ---
 const CATEGORIES = ['Design', 'Content', 'Public Relations', 'Innovation Lab', 'Production', 'Client Project'];
 const PRIORITIES = ['low', 'medium', 'high'];
@@ -132,7 +129,8 @@ const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
           </div>
 
           {/* Form Content */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* --- FIX: Added id="assignment-form" --- */}
+          <form id="assignment-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
             {error && (
               <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
                 <AlertCircle size={16} /> {error}
@@ -309,7 +307,7 @@ const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
             </button>
             <button
               type="submit"
-              onClick={handleSubmit}
+              form="assignment-form" // <-- FIX: Link button to form
               disabled={isSaving}
               className="flex items-center gap-2 px-6 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50"
             >
