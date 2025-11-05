@@ -11,11 +11,7 @@ import {
   postAssignmentComment,
   EmployeeDocument
 } from '../../lib/supabase/operations';
-import {
-  Loader2, List, FileText, CheckCircle, Clock, Eye, Download, AlertCircle, Inbox, User as UserIcon, Mail, Phone,
-  MapPin, Calendar, Briefcase, Hash, Edit2, FileSignature, AlertTriangle, Sparkles, LayoutDashboard, ClipboardList,
-  Building2, ChevronRight, Camera, ImagePlus
-} from 'lucide-react';
+import { Loader2, List, FileText, CheckCircle, Clock, Send, Eye, Download, AlertCircle, Inbox, User as UserIcon, Mail, Phone, MapPin, Calendar, Briefcase, Hash, DollarSign, Building, CreditCard, Edit2, Upload, FileSignature, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 
@@ -43,19 +39,19 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="relative w-full max-w-4xl h-[90vh] bg-gray-900 rounded-xl shadow-2xl flex flex-col ring-1 ring-white/10"
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
       >
-        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-white/10">
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
           <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-300 hover:bg-white/10 hover:text-white" aria-label="Close document viewer">
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
             <X size={20} />
           </button>
         </div>
         <div className="flex-1 p-2">
-          <iframe
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`}
-            className="w-full h-full border-0 rounded-b-xl"
-            title="PDF Viewer"
+           <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg" 
+            title="PDF Viewer" 
           />
         </div>
       </motion.div>
@@ -71,15 +67,14 @@ const EmployeeDashboardPage: React.FC = () => {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
-
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
+  
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -109,21 +104,24 @@ const EmployeeDashboardPage: React.FC = () => {
 
     fetchData();
 
-    // Lightweight realtime listeners - only listen to relevant changes
+    // Set up Realtime listener for assignments - only refresh list on assignment_members changes
     const channel = supabase
-      .channel(`employee_dashboard:${user.id}`)
+      .channel(`employee_assignments:${user.id}`)
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'assignments' },
+        { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
         async () => {
+          // Only refresh assignments list, not full refetch
           const result = await getAssignmentsForEmployee(user.id);
           if (!result.error) setAssignments(result.data || []);
         }
       )
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
-        async () => {
-          const result = await getEmployeeDocuments(user.id);
-          if (!result.error) setDocuments(result.data || []);
+        { event: '*', schema: 'public', table: 'assignment_messages' },
+        (payload) => {
+          // If a message comes in for the currently selected assignment, refresh it silently
+          if (selectedAssignment && payload.new.assignment_id === selectedAssignment.id) {
+            handleAssignmentClick(selectedAssignment.id);
+          }
         }
       )
       .subscribe();
@@ -132,14 +130,16 @@ const EmployeeDashboardPage: React.FC = () => {
       supabase.removeChannel(channel);
     };
 
-  }, [user]);
+  }, [user, addToast]);
 
   const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(null);
+      setSelectedAssignment(null); // Toggle off
       return;
     }
-    setSelectedAssignment({ id: assignmentId, loading: true });
+    
+    // Show loading skeleton in panel
+    setSelectedAssignment({ id: assignmentId, loading: true }); 
     try {
       const { data, error } = await getFullAssignmentDetails(assignmentId);
       if (error) throw error;
@@ -151,16 +151,18 @@ const EmployeeDashboardPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
-    setAssignments(prev =>
-      prev.map(a => a.id === assignmentId ? { ...a, status } : a)
+    // Optimistic update
+    setAssignments(prev => 
+      prev.map(a => a.id === assignmentId ? { ...a, status: status } : a)
     );
     if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(prev => prev ? { ...prev, status } : null);
+      setSelectedAssignment(prev => prev ? { ...prev, status: status } : null);
     }
-
+    
     const { error } = await updateAssignmentStatus(assignmentId, status);
     if (error) {
       addToast({ type: 'error', title: 'Update Failed', message: error.message });
+      // Revert (or just wait for realtime to refetch)
     } else {
       addToast({ type: 'success', title: 'Status Updated!' });
     }
@@ -169,7 +171,10 @@ const EmployeeDashboardPage: React.FC = () => {
   const handlePostComment = async (assignmentId: string, content: string) => {
     if (!user) return;
     const { error } = await postAssignmentComment(assignmentId, user.id, content);
-    if (error) addToast({ type: 'error', title: 'Comment Failed', message: error.message });
+    if (error) {
+      addToast({ type: 'error', title: 'Comment Failed', message: error.message });
+    }
+    // No success toast, realtime will handle the refresh
   };
 
   const handleViewDocument = async (doc: EmployeeDocument) => {
@@ -187,6 +192,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const handleSignDocument = async (doc: EmployeeDocument, signedFile: File) => {
     if (!user) return;
     try {
+      // Upload signed document to storage
       const filePath = `${user.id}/signed_${signedFile.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('employee_documents')
@@ -198,6 +204,7 @@ const EmployeeDashboardPage: React.FC = () => {
         .from('employee_documents')
         .getPublicUrl(uploadData.path);
 
+      // Update document record
       const { error: updateError } = await supabase
         .from('employee_documents')
         .update({
@@ -210,69 +217,54 @@ const EmployeeDashboardPage: React.FC = () => {
 
       addToast({ type: 'success', title: 'Document Signed!', message: 'Your signed document has been uploaded.' });
 
+      // Refresh documents
       const result = await getEmployeeDocuments(user.id);
       if (!result.error) setDocuments(result.data || []);
     } catch (err: any) {
       addToast({ type: 'error', title: 'Signing Failed', message: err.message });
     }
   };
-
+  
   const getStatusProps = (status: string) => {
     switch (status) {
-      case 'completed': return { icon: CheckCircle, color: 'text-green-600', label: 'Completed' };
-      case 'in_progress': return { icon: Clock, color: 'text-blue-600', label: 'In Progress' };
-      case 'overdue': return { icon: AlertCircle, color: 'text-red-600', label: 'Overdue' };
-      default: return { icon: List, color: 'text-amber-600', label: status };
+      case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
+      case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
+      case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
+      default: return { icon: List, color: 'text-yellow-500', label: status };
     }
   };
 
-  // Avatar upload (safe add-on)
-  const handleAvatarUpload = async (file: File) => {
-    if (!user) return;
-    try {
-      setUploadingAvatar(true);
-      const fileExt = file.name.split('.').pop();
-      const filePath = `${user.id}/avatar.${fileExt}`;
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { data: publicUrl } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      const url = publicUrl?.publicUrl;
-
-      if (url) {
-        const { error: updateError } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', user.id);
-        if (updateError) throw updateError;
-        addToast({ type: 'success', title: 'Profile Photo Updated!' });
-        // quick refresh of profile view if your Auth context doesn't auto-sync
-        window.location.reload();
-      }
-    } catch (e: any) {
-      addToast({ type: 'error', title: 'Upload Failed', message: e.message });
-    } finally {
-      setUploadingAvatar(false);
-    }
-  };
-
-  // Loading skeleton (beautified)
+  // Loading skeleton
   const LoadingSkeleton = () => (
-    <div className="flex h-screen bg-gradient-to-b from-gray-50 to-white">
-      <aside className="hidden md:flex w-72 p-6 bg-white/60 backdrop-blur-md border-r border-gray-200" />
-      <main className="flex-1 overflow-y-auto p-8">
-        <div className="max-w-5xl mx-auto space-y-6">
-          <div className="h-10 w-2/3 bg-gray-200 rounded-lg animate-pulse" />
-          <div className="h-5 w-1/2 bg-gray-200 rounded-lg animate-pulse" />
-          <div className="grid md:grid-cols-2 gap-6 mt-6">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-32 bg-white shadow-sm rounded-xl border border-gray-100 animate-pulse" />
-            ))}
-          </div>
+    <div className="flex h-screen bg-gray-100">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="h-8 bg-gray-300 rounded w-1/3 animate-pulse" />
+          <div className="h-4 bg-gray-200 rounded w-2/3 mt-2 animate-pulse" />
+
+          <section className="mt-8">
+            <div className="h-6 bg-gray-300 rounded w-1/4 animate-pulse" />
+            <div className="mt-4 space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="w-full p-4 bg-white rounded-lg shadow-sm">
+                  <div className="h-5 bg-gray-300 rounded w-3/4 animate-pulse" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mt-2 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
       </main>
     </div>
   );
 
-  if (loading) return <LoadingSkeleton />;
-  if (error) return <div className="flex h-screen items-center justify-center text-red-600 font-medium">{error}</div>;
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+  
+  if (error) {
+    return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
+  }
 
   const handleEditProfile = () => {
     setProfileForm({
@@ -287,10 +279,15 @@ const EmployeeDashboardPage: React.FC = () => {
   const handleSaveProfile = async () => {
     if (!user) return;
     try {
-      const { error } = await supabase.from('profiles').update(profileForm).eq('id', user.id);
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileForm)
+        .eq('id', user.id);
+
       if (error) throw error;
       addToast({ type: 'success', title: 'Profile Updated!' });
       setIsEditingProfile(false);
+      // Refresh will happen via AuthContext
       window.location.reload();
     } catch (err: any) {
       addToast({ type: 'error', title: 'Update Failed', message: err.message });
@@ -307,208 +304,122 @@ const EmployeeDashboardPage: React.FC = () => {
     </div>
   );
 
-  // Sidebar (non-breaking, no routing assumptions)
-  const Sidebar = () => (
-    <aside className="hidden md:flex w-72 flex-col border-r border-gray-200 bg-white/70 backdrop-blur-md">
-      <div className="px-6 py-6 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-[#FF5722] to-orange-400 grid place-items-center shadow">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 leading-tight">SolveX Studios</p>
-            <p className="text-sm font-semibold text-gray-900">Employee Panel</p>
-          </div>
-        </div>
-      </div>
-      <nav className="px-3 py-4 space-y-1">
-        {[
-          { icon: LayoutDashboard, label: 'Dashboard' },
-          { icon: UserIcon, label: 'Profile' },
-          { icon: ClipboardList, label: 'Assignments' },
-          { icon: Building2, label: 'My Employment' },
-          { icon: FileText, label: 'Documents' },
-        ].map((item) => (
-          <button
-            key={item.label}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 group"
-          >
-            <span className="flex items-center gap-2">
-              <item.icon className="h-4 w-4 text-gray-400 group-hover:text-gray-700" />
-              {item.label}
-            </span>
-            <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500" />
-          </button>
-        ))}
-      </nav>
-      <div className="mt-auto p-4 text-xs text-gray-500 border-t border-gray-200">
-        © {new Date().getFullYear()} SolveX Studios
-      </div>
-    </aside>
-  );
-
   return (
-    <div className="flex h-screen bg-gradient-to-b from-gray-50 to-white">
-      {/* Sidebar */}
-      <Sidebar />
-
+    <div className="flex h-screen bg-gray-100">
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        {/* Top Bar */}
-        <div className="sticky top-0 z-10 bg-white/70 backdrop-blur-md border-b border-gray-200">
-          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-gradient-to-tr from-[#FF5722] to-orange-400 grid place-items-center shadow">
-                <Sparkles className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-lg md:text-xl font-semibold text-gray-900 flex items-center gap-2">
-                  Welcome, {profile?.first_name || 'Employee'}
-                  <span className="text-xs font-medium text-white bg-[#FF5722] rounded-full px-2 py-0.5">Active</span>
-                </h1>
-                <p className="text-xs text-gray-500">Here’s what’s on your plate. Let’s get to work.</p>
-              </div>
-            </div>
-
-            {/* Minimal avatar display */}
-            <div className="flex items-center gap-3">
-              {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="Avatar" className="h-9 w-9 rounded-full object-cover ring-2 ring-white shadow" />
-              ) : (
-                <div className="h-9 w-9 rounded-full bg-gray-200 grid place-items-center text-gray-500">
-                  <UserIcon className="h-5 w-5" />
-                </div>
-              )}
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile?.first_name || 'Employee'}</h1>
+              <p className="text-gray-600 mt-1">Here's what's on your plate. Let's get to work.</p>
             </div>
           </div>
-        </div>
 
-        <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
           {/* Profile Section */}
-          <motion.section
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm p-6"
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <UserIcon className="text-gray-500" /> My Profile
-              </h2>
-              {!isEditingProfile && (
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50 cursor-pointer">
-                    <Camera size={16} />
-                    {uploadingAvatar ? 'Uploading...' : 'Change Photo'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={uploadingAvatar}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) handleAvatarUpload(file);
-                      }}
-                    />
-                  </label>
+          <section className="mb-8">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <UserIcon className="text-gray-500" /> My Profile
+                </h2>
+                {!isEditingProfile && (
                   <button
                     onClick={handleEditProfile}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
                   >
                     <Edit2 size={16} /> Edit Profile
                   </button>
+                )}
+              </div>
+
+              {isEditingProfile ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">First Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.first_name}
+                        onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Last Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.last_name}
+                        onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Phone</label>
+                      <input
+                        type="text"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Home Address</label>
+                      <input
+                        type="text"
+                        value={profileForm.home_address}
+                        onChange={(e) => setProfileForm({ ...profileForm, home_address: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setIsEditingProfile(false)}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveProfile}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19]"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                    <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                    <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
+                    <InfoRow icon={Calendar} label="Birth Date" value={profile?.birth_date ? formatDate(profile.birth_date) : null} />
+                  </div>
+
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-6">Employment Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
+                    <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
+                    <InfoRow icon={Calendar} label="Start Date" value={profile?.start_date ? formatDate(profile.start_date) : null} />
+                  </div>
                 </div>
               )}
             </div>
-
-            {isEditingProfile ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">First Name</label>
-                    <input
-                      type="text"
-                      value={profileForm.first_name}
-                      onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Last Name</label>
-                    <input
-                      type="text"
-                      value={profileForm.last_name}
-                      onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Phone</label>
-                    <input
-                      type="text"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Home Address</label>
-                    <input
-                      type="text"
-                      value={profileForm.home_address}
-                      onChange={(e) => setProfileForm({ ...profileForm, home_address: e.target.value })}
-                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/50"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => setIsEditingProfile(false)}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveProfile}
-                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19]"
-                  >
-                    Save Changes
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <InfoRow icon={Mail} label="Email" value={profile?.email} />
-                  <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
-                  <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
-                  <InfoRow icon={Calendar} label="Birth Date" value={profile?.birth_date ? formatDate(profile.birth_date) : null} />
-                </div>
-
-                <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-6">Employment Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
-                  <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
-                  <InfoRow icon={Calendar} label="Start Date" value={profile?.start_date ? formatDate(profile.start_date) : null} />
-                </div>
-              </div>
-            )}
-          </motion.section>
+          </section>
 
           {/* Assignments Section */}
-          <motion.section
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+          <section>
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <List className="text-gray-500" /> My Assignments
             </h2>
             {assignments.length === 0 ? (
-              <div className="text-center p-10 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-dashed border-gray-300 mt-4">
-                <Inbox size={48} className="mx-auto text-gray-300" />
-                <h3 className="mt-4 font-semibold text-gray-800">All caught up!</h3>
-                <p className="text-sm text-gray-500">You have no active assignments.</p>
-              </div>
+               <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                  <Inbox size={48} className="mx-auto text-gray-300" />
+                  <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
+                  <p className="text-sm text-gray-500">You have no active assignments.</p>
+                </div>
             ) : (
               <div className="mt-4 space-y-3">
                 {assignments.map(assignment => {
@@ -517,12 +428,12 @@ const EmployeeDashboardPage: React.FC = () => {
                     <button
                       key={assignment.id}
                       onClick={() => handleAssignmentClick(assignment.id)}
-                      className={`w-full p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200 shadow-sm text-left transition-all ${
-                        selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722]' : 'hover:shadow-md hover:-translate-y-0.5'
+                      className={`w-full p-4 bg-white rounded-lg shadow-sm text-left transition-all ${
+                        selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722]' : 'hover:shadow-md'
                       }`}
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-semibold text-gray-900">{assignment.title}</span>
+                        <span className="font-semibold text-gray-800">{assignment.title}</span>
                         <span className={`flex items-center text-xs font-medium gap-1.5 ${color}`}>
                           <Icon size={14} /> {label}
                         </span>
@@ -533,44 +444,37 @@ const EmployeeDashboardPage: React.FC = () => {
                 })}
               </div>
             )}
-          </motion.section>
+          </section>
 
           {/* Documents Section */}
-          <motion.section
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="pb-10"
-          >
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+          <section className="mt-8">
+            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <FileText className="text-gray-500" /> My Documents
             </h2>
             {documents.length === 0 ? (
-              <div className="text-center p-10 bg-white/80 backdrop-blur-sm rounded-2xl shadow-sm border border-dashed border-gray-300 mt-4">
-                <FileText size={48} className="mx-auto text-gray-300" />
-                <h3 className="mt-4 font-semibold text-gray-800">No Documents</h3>
-                <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
-              </div>
+               <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                  <FileText size={48} className="mx-auto text-gray-300" />
+                  <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
+                  <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
+                </div>
             ) : (
               <div className="mt-4 space-y-3">
                 {documents.map(doc => {
                   const needsSignature = doc.requires_signing && !doc.signed_at;
                   return (
-                    <div
-                      key={doc.id}
-                      className={`p-4 bg-white/80 backdrop-blur-sm rounded-xl shadow-sm border ${
-                        needsSignature ? 'border-amber-300' : 'border-gray-200'
-                      }`}
-                    >
+                    <div key={doc.id} className={`p-4 bg-white rounded-lg shadow-sm border ${
+                      needsSignature ? 'border-yellow-300' : 'border-gray-200'
+                    }`}>
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
                         <div className="flex-1">
-                          <p className="font-semibold text-gray-900">{doc.document_name}</p>
+                          <p className="font-semibold text-gray-800">{doc.document_name}</p>
                           {needsSignature && (
-                            <div className="flex items-center gap-1.5 text-xs text-amber-700 font-medium mt-1">
+                            <div className="flex items-center gap-1.5 text-xs text-yellow-600 font-medium mt-1">
                               <AlertTriangle size={14} /> Pending Signature - Action Required
                             </div>
                           )}
                           {doc.signed_at && (
-                            <div className="flex items-center gap-1.5 text-xs text-green-700 font-medium mt-1">
+                            <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium mt-1">
                               <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
                             </div>
                           )}
@@ -615,7 +519,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 })}
               </div>
             )}
-          </motion.section>
+          </section>
         </div>
       </main>
 
@@ -626,7 +530,7 @@ const EmployeeDashboardPage: React.FC = () => {
         onPostComment={handlePostComment}
         onUpdateStatus={handleUpdateStatus}
       />
-
+      
       {/* PDF Viewer Modal */}
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
