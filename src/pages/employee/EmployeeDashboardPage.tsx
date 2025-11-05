@@ -1,4 +1,5 @@
-// src/pages/employee/EmployeeDashboardPage.tsx
+// PASTE THIS ENTIRE CODEBLOCK into src/pages/employee/EmployeeDashboardPage.tsx
+
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
@@ -10,7 +11,10 @@ import {
   getAssignmentsForEmployee,
   getEmployeeDocuments,
   getFullAssignmentDetails,
-  EmployeeDocument
+  EmployeeDocument,
+  // --- IMPORT THE NEW FUNCTIONS ---
+  uploadSignedEmployeeDocument,
+  createSignedDocumentSignedUrl
 } from '../../lib/supabase/operations';
 import {
   Loader2,
@@ -42,6 +46,8 @@ import {
   Filter,
   ArrowDownWideNarrow,
   Eye,
+  // --- IMPORT NEW ICON ---
+  Upload,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -257,6 +263,12 @@ const EmployeeDashboardPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all_active'); 
   const [sortType, setSortType] = useState('due_date'); // Default to due date
 
+  // --- ADD NEW STATE FOR UPLOADING ---
+  const [uploadingDocId, setUploadingDocId] = useState<string | null>(null);
+  const [isUploadingSignedDoc, setIsUploadingSignedDoc] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // ------------------------------------
+
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
     setIsSavingProfile(true);
@@ -371,7 +383,18 @@ const EmployeeDashboardPage: React.FC = () => {
   }, [filterStatus, sortType]);
 
 
-  // ... (rest of data fetching logic remains unchanged) ...
+  // --- Data Fetching Logic (unchanged) ---
+  const fetchDocuments = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await getEmployeeDocuments(user.id);
+      if (error) throw error;
+      setDocuments(data || []);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
+    }
+  }, [user, addToast]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -422,7 +445,7 @@ const EmployeeDashboardPage: React.FC = () => {
       supabase.removeChannel(channel);
     };
 
-  }, [user, addToast]);
+  }, [user, addToast, fetchDocuments]);
   
   const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
@@ -465,11 +488,12 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
+  // --- MODIFIED & NEW DOCUMENT HANDLERS ---
   const handleViewDocument = async (doc: EmployeeDocument) => {
     setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
     try {
-      const url = await createDocumentSignedUrl(doc);
+      const url = await createDocumentSignedUrl(doc); // Uses original function
       setViewingPdf(url);
     } catch (err: any) {
       addToast({ type: 'error', title: 'Could not load document' });
@@ -477,9 +501,42 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  const handleSignDocument = async () => {
-    addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
+  const handleViewSignedDocument = async (doc: EmployeeDocument) => {
+    setViewingPdf(null);
+    setViewingPdfTitle(`(SIGNED) ${doc.document_name}`);
+    try {
+      const url = await createSignedDocumentSignedUrl(doc); // Uses NEW function
+      setViewingPdf(url);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Could not load signed document' });
+      setViewingPdfTitle('');
+    }
   };
+
+  const handleUploadSignedClick = (doc: EmployeeDocument) => {
+    setUploadingDocId(doc.id);
+    // Trigger the file input click
+    // We need to find the specific file input for this document
+    document.getElementById(`file-input-${doc.id}`)?.click();
+  };
+
+  const handleSignedFileChange = async (event: React.ChangeEvent<HTMLInputElement>, doc: EmployeeDocument) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsUploadingSignedDoc(true);
+    try {
+      await uploadSignedEmployeeDocument(doc, file, user.id);
+      addToast({ type: 'success', title: 'Upload Successful!', message: `${file.name} was uploaded.` });
+      fetchDocuments(); // Refresh the documents list
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Upload Failed', message: err.message });
+    } finally {
+      setIsUploadingSignedDoc(false);
+      setUploadingDocId(null);
+    }
+  };
+  // --- END OF NEW HANDLERS ---
 
 
   const getStatusProps = (status: string) => {
@@ -703,36 +760,98 @@ const EmployeeDashboardPage: React.FC = () => {
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
                   <FileText className="text-gray-500" /> Important Documents
                 </h2>
-                {documents.length === 0 ? (
+                {loading ? (
+                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                ) : documents.length === 0 ? (
                   <div className="text-center p-10">
                       <FileText size={48} className="mx-auto text-gray-300" />
                       <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
                       <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
                     </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {documents.map(doc => (
-                      <div key={doc.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center border">
-                        <div>
-                          <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
-                          {doc.requires_signing && !doc.signed_at && (
-                            <span className="text-xs text-yellow-600 font-medium flex items-center gap-1 mt-0.5"><AlertTriangle size={12} /> Pending Signature</span>
+                  <div className="space-y-3">
+                    {documents.map(doc => {
+                      const isSigned = doc.requires_signing && doc.signed_storage_url;
+                      const isPending = doc.requires_signing && !doc.signed_storage_url;
+                      const isViewOnly = !doc.requires_signing;
+
+                      const isCurrentlyUploading = uploadingDocId === doc.id && isUploadingSignedDoc;
+
+                      return (
+                        <div key={doc.id} className={`p-4 bg-gray-50 rounded-lg border ${isPending ? 'border-yellow-300' : 'border-gray-200'}`}>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                            {/* Left Side: Name and Status */}
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                              {isViewOnly && (
+                                <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
+                                  <ShieldCheck size={14} /> View Only
+                                </span>
+                              )}
+                              {isPending && (
+                                <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
+                                  <AlertTriangle size={14} /> Pending Signature
+                                </span>
+                              )}
+                              {isSigned && (
+                                <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                                  <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
+                                </span>
+                              )}
+                            </div>
+                            {/* Right Side: Buttons */}
+                            <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
+                              <button
+                                onClick={() => handleViewDocument(doc)}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                                title="View original document"
+                              >
+                                <Eye size={14} /> View Unsigned
+                              </button>
+                              
+                              {isSigned && (
+                                <button
+                                  onClick={() => handleViewSignedDocument(doc)}
+                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                                  title="View your signed version"
+                                >
+                                  <Eye size={14} /> View Signed
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* --- NEW: Upload Section for Pending Docs --- */}
+                          {isPending && (
+                            <div className="mt-3 pt-3 border-t border-yellow-300">
+                              {isCurrentlyUploading ? (
+                                <div className="flex items-center justify-center gap-2 text-sm font-semibold text-gray-600 p-2">
+                                  <Loader2 size={16} className="animate-spin" />
+                                  Uploading...
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleUploadSignedClick(doc)}
+                                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 transition-colors"
+                                >
+                                  <Upload size={16} />
+                                  Upload Signed Version
+                                </button>
+                              )}
+                              {/* Hidden file input, triggered by the button */}
+                              <input
+                                type="file"
+                                id={`file-input-${doc.id}`}
+                                className="hidden"
+                                accept=".pdf,.doc,.docx,.png,.jpg"
+                                onChange={(e) => handleSignedFileChange(e, doc)}
+                              />
+                            </div>
                           )}
-                          {doc.signed_at && (
-                            <span className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5"><CheckCircle size={12} /> Signed</span>
-                          )}
-                          {!doc.requires_signing && (
-                            <span className="text-xs text-blue-600 font-medium mt-0.5">Reference Document</span>
-                          )}
+                          {/* --- END: Upload Section --- */}
                         </div>
-                        <button 
-                          onClick={() => handleViewDocument(doc)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] transition-colors"
-                        >
-                          <Eye size={14} /> View
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </section>
