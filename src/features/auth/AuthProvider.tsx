@@ -4,7 +4,7 @@ import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase/client';
 import { Database } from '../../lib/supabase/database.types';
 // --- 1. IMPORT NEW FUNCTIONS ---
-import { getEmployeeDashboardData } from '../../lib/supabase/operations';
+import { getEmployeeDashboardData, getFullAssignmentDetails } from '../../lib/supabase/operations'; // <-- Added getFullAssignmentDetails
 import type { EmployeeDocument } from '../../lib/supabase/operations';
 
 export type Profile = Database['public']['Tables']['profiles']['Row'];
@@ -40,7 +40,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchEmployeeData = async (currentUser: User) => {
     try {
       const { profile, assignments, documents } = await getEmployeeDashboardData(currentUser.id);
-      setProfile(profile);
+      // We set profile here again to be safe
+      setProfile(profile); 
       setAssignments(assignments || []);
       setDocuments(documents || []);
     } catch (error: any) {
@@ -61,8 +62,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(currentUser);
 
         if (currentUser) {
-          // --- THIS IS THE TOP 1% FIX ---
-          // On login, fetch EVERYTHING at once.
           try {
             // Fetch profile for everyone
             const { data: profileData, error } = await supabase
@@ -72,12 +71,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               .single();
               
             if (error) throw error;
+            
+            // Set profile *before* checking its role
             setProfile(profileData);
             
-            // If they are an employee, fetch all their dashboard data
-            if (profileData.role === 'employee') {
+            // --- THIS IS THE FIX ---
+            // We must check if profileData EXISTS before checking profileData.role
+            if (profileData && profileData.role === 'employee') {
+              // Now it's safe to fetch employee data
               await fetchEmployeeData(currentUser);
             }
+            // --- END FIX ---
             
           } catch (error: any) {
             console.error("Error fetching profile/data on auth change:", error);
@@ -102,7 +106,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
   
   // --- 6. ADD REALTIME LISTENERS (THE PROFESSIONAL WAY) ---
-  // These listeners live for the whole session and update global state
   useEffect(() => {
     if (!user || profile?.role !== 'employee') {
       return; // Only run for logged-in employees
@@ -152,7 +155,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   const refetchEmployeeData = () => {
     if (user) {
-      fetchEmployeeData(user);
+      setLoading(true); // Show loading spinner on manual refresh
+      fetchEmployeeData(user).finally(() => setLoading(false));
     }
   };
 
