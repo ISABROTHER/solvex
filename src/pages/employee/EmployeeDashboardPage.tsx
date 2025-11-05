@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
+import EnhancedPdfViewer from '../../components/EnhancedPdfViewer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -820,9 +821,9 @@ const EmployeeDashboardPage: React.FC = () => {
         onUpdateStatus={handleUpdateStatus}
       />
       
-      {/* PDF Viewer Modal (kept for completeness) */}
+      {/* Enhanced PDF Viewer Modal */}
       <AnimatePresence>
-        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
+        {viewingPdf && <EnhancedPdfViewer pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
 
       {/* Profile Edit Modal (New) */}
@@ -836,40 +837,5 @@ const EmployeeDashboardPage: React.FC = () => {
     </div>
   );
 };
-
-// Re-using simplified PdfViewerModal
-const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
-  <AnimatePresence>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
-      <motion.div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
-      >
-        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
-          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="flex-1 p-2">
-           <iframe 
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
-            className="w-full h-full border-0 rounded-b-lg"   
-            title="PDF Viewer" 
-          />
-        </div>
-      </motion.div>
-    </div>
-  </AnimatePresence>
-);
 
 export default EmployeeDashboardPage;
