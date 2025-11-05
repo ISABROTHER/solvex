@@ -268,61 +268,68 @@ const EmployeesTab: React.FC = () => {
            return;
         }
         
-        // 1. Create the Auth user.
-        // We use supabase.auth.signUp (which is client-safe)
-        // We pass `shouldCreateUser: false` so Supabase knows this is an
-        // admin action and doesn't log the admin out.
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: password,
-          options: {
-            // This tells Supabase we're creating a user, but not to
-            // log in as them or send a confirmation email.
-            // The admin has "confirmed" them.
-            data: {
-              // You can add initial data here if needed, but we'll
-              // use the profile upsert for that.
-            }
-          }
         });
         
-        if (authError) {
-          // Handle specific errors
-          if (authError.message.includes('User already registered')) {
-            addToast({ type: 'error', title: 'User Exists', message: 'A user with this email is already registered in Auth.' });
-          } else {
-            throw authError;
-          }
-          setIsSavingProfile(false);
-          return;
-        }
+        let userId = authData.user?.id;
 
-        const userId = authData.user?.id;
-        if (!userId) throw new Error('Could not get user ID after sign up.');
+        if (authError && authError.message.includes('User already registered')) {
+            // --- THIS IS THE FIX ---
+            // The user exists in auth. Let's try to find their profile and update it.
+            addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
+            
+            const { data: existingProfile, error: profileFindError } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('email', formData.email)
+              .single();
+
+            if (profileFindError || !existingProfile) {
+                // This is the "ghost" user problem.
+                // Auth user is deleted, identity is not. Profile is (maybe) deleted.
+                // We can't create a new auth user, and we can't find a profile to update.
+                addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please try again in 24 hours, or use a different email.' });
+                setIsSavingProfile(false);
+                return;
+            }
+
+            // We found their profile. Let's update it.
+            userId = existingProfile.id;
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ ...formData, role: 'employee' }) // Ensure role is set
+              .eq('id', userId);
+
+            if (updateError) throw updateError;
+            addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
+
+        } else if (authError) {
+            // A different, unexpected auth error
+            throw authError;
         
-        // 2. Create their profile
-        // This will now work because of the SQL fix
-        const profileData = {
-          ...formData,
-          id: userId, // Link profile to auth user
-          role: 'employee', // Hard-code new users as employees
-        };
-        
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert(profileData); // Use insert, not upsert, for new
-          
-        if (profileError) {
-            // Clean up the auth user if profile creation fails
-            // This requires an Edge Function. For now, we'll just log it.
-            console.error("Failed to create profile, but Auth user was made.", profileError);
-            throw profileError;
+        } else {
+            // --- Sign Up was successful (this is the normal path) ---
+            if (!userId) throw new Error('Could not get user ID after sign up.');
+            
+            const profileData = {
+              ...formData,
+              id: userId, // Link profile to auth user
+              role: 'employee',
+            };
+            
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .insert(profileData);
+              
+            if (profileError) throw profileError;
+            
+            addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
         }
-        
-        addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
       } else {
-        // --- Update Existing Employee ---
+        // --- Update Existing Employee (this logic is fine) ---
         const { error: updateError } = await supabase
           .from('profiles')
           .update(formData)
@@ -704,7 +711,7 @@ const EmployeesTab: React.FC = () => {
                           disabled={isUploadingDoc || !newDocFile || !newDocName}
                           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
-                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={1L} />}
                           {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
                         </button>
                       </motion.form>
