@@ -173,99 +173,64 @@ const getCommentsForAssignment = async (assignmentId: string) => {
   return data;
 }
 
-// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE (Optimized - list view only needs basic info)
+// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE
 export const getAssignmentsForEmployee = async (employeeId: string) => {
   const { data, error } = await supabase
     .from('assignment_members')
-    .select(`
-      assignment:assignments!inner(
-        id,
-        title,
-        status,
-        due_date,
-        instructions,
-        created_at
-      )
-    `)
+    .select('assignment:assignments!inner(*)')
     .eq('employee_id', employeeId);
 
   if (error) throw error;
   if (!data) return { data: [], error: null };
 
-  // For list view, we don't need assignees and comments - only load them when viewing details
-  const assignments = data.map((item) => {
-    const assignment = item.assignment;
-    return {
-      ...assignment,
-      description: assignment.instructions,
-      // These fields are for UI compatibility but won't be used in list view
-      milestones: [],
-      attachments: [],
-      deliverables: [],
-      supervisor: null,
-      category: 'Admin Task',
-      priority: 'medium',
-      assignees: [],
-      comments: [],
-    };
-  });
-
-  return { data: assignments, error: null };
+  // This is the "polyfill" to fix the white screen.
+  // We fetch real data, then add the empty fields the component expects.
+  const fullAssignments = await Promise.all(
+    data.map(async (item) => {
+      const assignment = item.assignment;
+      // Fetch real assignees and comments
+      const [assignees, comments] = await Promise.all([
+        getProfilesForAssignment(assignment.id),
+        getCommentsForAssignment(assignment.id)
+      ]);
+      
+      return {
+        ...assignment,
+        description: assignment.instructions, // Map instructions to description
+        // Add all the missing fields that the UI component expects
+        milestones: [],
+        attachments: [],
+        deliverables: [],
+        supervisor: null,
+        category: 'Admin Task',
+        priority: 'medium',
+        // Add the real data we fetched
+        assignees: assignees,
+        comments: comments,
+      };
+    })
+  );
+  
+  return { data: fullAssignments, error: null };
 };
 
-// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (Optimized with proper joins)
+// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (used when clicking)
 export const getFullAssignmentDetails = async (assignmentId: string) => {
-  // Fetch assignment first
-  const { data: assignment, error: assignmentError } = await supabase
+  const { data: assignment, error } = await supabase
     .from('assignments')
     .select('*')
     .eq('id', assignmentId)
     .single();
+    
+  if (error) throw error;
 
-  if (assignmentError) throw assignmentError;
-
-  // Then fetch members and messages separately to avoid circular RLS issues
-  const [membersRes, messagesRes] = await Promise.all([
-    supabase
-      .from('assignment_members')
-      .select('employee_id')
-      .eq('assignment_id', assignmentId),
-    supabase
-      .from('assignment_messages')
-      .select('id, content, created_at, sender_id')
-      .eq('assignment_id', assignmentId)
-      .order('created_at', { ascending: true })
+  // Fetch real assignees and comments
+  const [assignees, comments] = await Promise.all([
+    getProfilesForAssignment(assignmentId),
+    getCommentsForAssignment(assignmentId)
   ]);
 
-  // Fetch employee profiles separately
-  const employeeIds = membersRes.data?.map(m => m.employee_id) || [];
-  const senderIds = [...new Set(messagesRes.data?.map(m => m.sender_id) || [])];
-  const allProfileIds = [...new Set([...employeeIds, ...senderIds])];
-
-  let profiles = [];
-  if (allProfileIds.length > 0) {
-    const { data: profilesData } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, avatar_url')
-      .in('id', allProfileIds);
-    profiles = profilesData || [];
-  }
-
-  // Build profile map for quick lookup
-  const profileMap = {};
-  profiles.forEach(p => {
-    profileMap[p.id] = p;
-  });
-
-  // Transform assignees
-  const assignees = employeeIds.map(id => profileMap[id]).filter(Boolean);
-
-  // Transform comments with sender info
-  const comments = (messagesRes.data || []).map(msg => ({
-    ...msg,
-    sender: profileMap[msg.sender_id] || null
-  }));
-
+  // Polyfill missing fields to prevent white screen
   const fullAssignment = {
     ...assignment,
     description: assignment.instructions,
@@ -349,7 +314,7 @@ export const getEmployeeDocuments = async (profileId: string) => {
 };
 
 /**
- * Uploads a document for an employee.
+ * Uploads a document for an employee. (ADMIN ACTION)
  */
 export const uploadEmployeeDocument = async (
   profileId: string,
@@ -358,12 +323,12 @@ export const uploadEmployeeDocument = async (
   file: File
 ) => {
   // 1. Upload the file to storage
-  const filePath = `${profileId}/${file.name}`;
+  const filePath = `${profileId}/${Date.now()}_${file.name}`; // Add timestamp for uniqueness
   const { data: storageData, error: storageError } = await supabase.storage
     .from('employee_documents')
     .upload(filePath, file, {
       cacheControl: '3600',
-      upsert: true, // Overwrite if exists
+      upsert: false,
     });
 
   if (storageError) throw storageError;
@@ -391,31 +356,69 @@ export const uploadEmployeeDocument = async (
   return dbData;
 };
 
+// --- NEW FUNCTION: UPLOAD SIGNED DOCUMENT (EMPLOYEE ACTION) ---
+export const uploadSignedEmployeeDocument = async (
+  doc: EmployeeDocument,
+  file: File
+) => {
+  // 1. Upload the signed file
+  const filePath = `${doc.profile_id}/signed_${doc.id}_${file.name}`;
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from('employee_documents')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true, // Overwrite if they upload again
+    });
+
+  if (storageError) throw storageError;
+
+  // 2. Get the public URL
+  const { data: urlData } = supabase.storage
+    .from('employee_documents')
+    .getPublicUrl(storageData.path);
+  
+  const publicUrl = urlData.publicUrl;
+
+  // 3. Update the existing database record
+  const { data: dbData, error: dbError } = await supabase
+    .from('employee_documents')
+    .update({
+      signed_storage_url: publicUrl,
+      signed_at: new Date().toISOString(),
+    })
+    .eq('id', doc.id)
+    .select()
+    .single();
+
+  if (dbError) throw dbError;
+  return dbData;
+};
+
+
 /**
  * Deletes an employee document from both storage and database.
  */
 export const deleteEmployeeDocument = async (doc: EmployeeDocument) => {
-  // 1. Delete from storage
-  // Extract the file path from the URL
-  const urlParts = doc.storage_url.split('/');
-  const filePath = `${doc.profile_id}/${urlParts[urlParts.length - 1]}`;
+  // 1. Delete original file from storage
+  const originalUrlParts = doc.storage_url.split('/');
+  const originalFilePath = `${doc.profile_id}/${originalUrlParts[originalUrlParts.length - 1]}`;
 
   const { error: storageError } = await supabase.storage
     .from('employee_documents')
-    .remove([filePath]);
+    .remove([originalFilePath]);
 
   if (storageError && storageError.message !== 'The resource was not found') {
-    console.warn("Storage delete error:", storageError.message);
+    console.warn("Storage delete error (original):", storageError.message);
   }
   
-  // Also try to delete signed doc if it exists
+  // 2. Delete signed file from storage if it exists
   if(doc.signed_storage_url) {
      const signedUrlParts = doc.signed_storage_url.split('/');
      const signedFilePath = `${doc.profile_id}/${signedUrlParts[signedUrlParts.length - 1]}`;
      await supabase.storage.from('employee_documents').remove([signedFilePath]);
   }
 
-  // 2. Delete from database
+  // 3. Delete from database
   const { error: dbError } = await supabase
     .from('employee_documents')
     .delete()
@@ -425,19 +428,28 @@ export const deleteEmployeeDocument = async (doc: EmployeeDocument) => {
   return true;
 };
 
+// --- UPDATED FUNCTION: CREATE SIGNED URL ---
 /**
- * Generates a signed URL for viewing a private document.
- * NOTE: This is how employees will view docs. Admins can use public URLs
- * if policies are set, but signed URLs are safer.
+ * Generates a signed URL for viewing a private document (original or signed).
  */
-export const createDocumentSignedUrl = async (doc: EmployeeDocument) => {
-  const urlParts = doc.storage_url.split('/');
-  const filePath = `${doc.profile_id}/${urlParts[urlParts.length - 1]}`;
+export const createDocumentSignedUrl = async (
+  doc: EmployeeDocument,
+  type: 'original' | 'signed'
+) => {
+  let storageUrl = type === 'original' ? doc.storage_url : doc.signed_storage_url;
+  if (!storageUrl) throw new Error('No document URL found.');
+
+  // Extract the file path from the full URL
+  const url = new URL(storageUrl);
+  // The path starts after /object/public/employee_documents/
+  const filePath = url.pathname.split('/employee_documents/')[1];
+  
+  if (!filePath) throw new Error('Invalid file path.');
 
   const { data, error } = await supabase.storage
     .from('employee_documents')
-    .createSignedUrl(filePath, 3600); // URL expires in 1 hour
-
+    .createSignedUrl(filePath, 60); // URL expires in 60 seconds
+  
   if (error) throw error;
   return data.signedUrl;
 };
@@ -685,42 +697,3 @@ export const restoreTeam = async (id: string) => {
     .select()
     .single();
 };
-
-// --- START: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
-
-/**
- * Deletes a user from the auth.users table and cascadingly deletes their profile.
- * NOTE: This relies on Admin Auth privileges (e.g., service_role key or an Edge Function).
- * Calling this from the client requires RLS to be bypassed, which is usually unsafe.
- */
-export async function deleteEmployeeAccount(userId: string) {
-  // We rely on the Supabase client being configured with admin access 
-  // (e.g., in a non-browser environment) or proper RLS/Admin configuration.
-  const { data: authUser, error: authError } = await supabase.auth.admin.deleteUser(userId);
-
-  if (authError) {
-    console.error("Supabase Auth Delete Error:", authError);
-    return { error: new Error(`Failed to delete user in Auth: ${authError.message}`) };
-  }
-  
-  // The deletion of the public.profiles row relies on the ON DELETE CASCADE foreign key.
-  return { data: authUser, error: null };
-}
-
-/**
- * Updates an employee's role in the public.profiles table to block/unblock access.
- */
-export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 'blocked') {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ role: newRole, updated_at: new Date().toISOString() })
-    .eq('id', userId);
-
-  if (error) {
-    return { error };
-  }
-
-  return { data, error: null };
-}
-
-// --- END: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
