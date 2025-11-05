@@ -274,6 +274,116 @@ export const postAssignmentComment = async (assignmentId: string, senderId: stri
 
 // --- END: NEW ASSIGNMENT FUNCTIONS ---
 
+// --- START: EMPLOYEE DOCUMENT FUNCTIONS ---
+export type EmployeeDocument = Database['public']['Tables']['employee_documents']['Row'];
+
+/**
+ * Fetches all documents for a specific employee.
+ */
+export const getEmployeeDocuments = async (profileId: string) => {
+  return supabase
+    .from('employee_documents')
+    .select('*')
+    .eq('profile_id', profileId)
+    .order('created_at', { ascending: false });
+};
+
+/**
+ * Uploads a document for an employee.
+ */
+export const uploadEmployeeDocument = async (
+  profileId: string,
+  fileName: string,
+  requiresSigning: boolean,
+  file: File
+) => {
+  // 1. Upload the file to storage
+  const filePath = `${profileId}/${file.name}`;
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from('employee_documents')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: true, // Overwrite if exists
+    });
+
+  if (storageError) throw storageError;
+
+  // 2. Get the public URL
+  const { data: urlData } = supabase.storage
+    .from('employee_documents')
+    .getPublicUrl(storageData.path);
+  
+  const publicUrl = urlData.publicUrl;
+
+  // 3. Insert the record into the database table
+  const { data: dbData, error: dbError } = await supabase
+    .from('employee_documents')
+    .insert({
+      profile_id: profileId,
+      document_name: fileName,
+      storage_url: publicUrl, // Store the public URL
+      requires_signing: requiresSigning,
+    })
+    .select()
+    .single();
+
+  if (dbError) throw dbError;
+  return dbData;
+};
+
+/**
+ * Deletes an employee document from both storage and database.
+ */
+export const deleteEmployeeDocument = async (doc: EmployeeDocument) => {
+  // 1. Delete from storage
+  // Extract the file path from the URL
+  const urlParts = doc.storage_url.split('/');
+  const filePath = `${doc.profile_id}/${urlParts[urlParts.length - 1]}`;
+
+  const { error: storageError } = await supabase.storage
+    .from('employee_documents')
+    .remove([filePath]);
+
+  if (storageError && storageError.message !== 'The resource was not found') {
+    console.warn("Storage delete error:", storageError.message);
+  }
+  
+  // Also try to delete signed doc if it exists
+  if(doc.signed_storage_url) {
+     const signedUrlParts = doc.signed_storage_url.split('/');
+     const signedFilePath = `${doc.profile_id}/${signedUrlParts[signedUrlParts.length - 1]}`;
+     await supabase.storage.from('employee_documents').remove([signedFilePath]);
+  }
+
+  // 2. Delete from database
+  const { error: dbError } = await supabase
+    .from('employee_documents')
+    .delete()
+    .eq('id', doc.id);
+
+  if (dbError) throw dbError;
+  return true;
+};
+
+/**
+ * Generates a signed URL for viewing a private document.
+ * NOTE: This is how employees will view docs. Admins can use public URLs
+ * if policies are set, but signed URLs are safer.
+ */
+export const createDocumentSignedUrl = async (doc: EmployeeDocument) => {
+  const urlParts = doc.storage_url.split('/');
+  const filePath = `${doc.profile_id}/${urlParts[urlParts.length - 1]}`;
+
+  const { data, error } = await supabase.storage
+    .from('employee_documents')
+    .createSignedUrl(filePath, 60); // URL expires in 60 seconds
+  
+  if (error) throw error;
+  return data.signedUrl;
+};
+
+// --- END: EMPLOYEE DOCUMENT FUNCTIONS ---
+
 
 export type Service = Database['public']['Tables']['services']['Row'];
 
@@ -297,11 +407,9 @@ export const restoreService = async (id: string) => {
   return supabase.from('services').update({ deleted_at: null }).eq('id', id).select().single();
 };
 
-// --- ADD THIS NEW FUNCTION ---
 export const permanentDeleteService = async (id: string) => {
   return supabase.from('services').delete().eq('id', id);
 };
-// -----------------------------
 
 export const getDeletedServices = async () => {
   return supabase.from('services').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
