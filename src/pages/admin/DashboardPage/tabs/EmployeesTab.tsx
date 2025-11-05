@@ -1,108 +1,45 @@
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase } from '../../../../lib/supabase/client';
-import type { Database } from '../../../../lib/supabase/database.types';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import Card from '../components/Card';
-import { 
-  Loader2, 
-  User, 
-  Search, 
-  AlertCircle, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  Hash, 
-  FileText, 
-  DollarSign, 
-  Building, 
-  CreditCard,
-  Briefcase,
-  ClipboardList,
-  Eye,
-  FileDown,
-  Clock,
-  CheckCircle,
-  Plus,
-  Send,
-  X,
-  FileUp,
-  Trash2,
-  Edit2,
-  PlusCircle,
-  Download,
-  UploadCloud,
-  ChevronDown,
-  AlertTriangle,
-  ShieldCheck,
-  List,
+import {
+  Loader2, User, Search, AlertCircle, Mail, Phone, MapPin, Calendar, Hash,
+  FileText, DollarSign, Building, CreditCard, Briefcase, ClipboardList, Eye,
+  Clock, Plus, X, Trash2, Edit2, PlusCircle, Download, UploadCloud, ChevronDown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
-import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
+import CreateAssignmentModal from '../components/CreateAssignmentModal';
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
-// Assignment types (simplified for employee tab)
-type Assignment = {
-  id: string;
-  title: string;
-  category: string;
-  status: string;
-  due_date: string;
-  assignees: Array<{ id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }>;
-}; 
+import {
+  getAllEmployees,
+  createEmployee,
+  updateEmployee,
+  deleteEmployee,
+  onEmployeesChange,
+  getEmployeeDocuments,
+  createEmployeeDocument,
+  deleteEmployeeDocument,
+  uploadEmployeeDocument,
+  deleteEmployeeDocumentFile,
+  onEmployeeDocumentsChange,
+  getEmployeeAssignments,
+  getAllAssignments,
+  onAssignmentsChange,
+  type Profile,
+  type EmployeeDocument,
+  type Assignment
+} from '../../../../lib/supabase/operations';
+import { supabase } from '../../../../lib/supabase/client';
 
-// --- TYPE DEFINITIONS ---
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-type EmployeeDocument = {
-  id: string;
-  profile_id: string;
-  document_name: string;
-  storage_url: string;
-  requires_signing: boolean;
-  signed_storage_url: string | null;
-  signed_at: string | null;
-};
-
-// --- MOCK DATA (FRONTEND-FIRST) ---
-const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  {
-    id: 'assign_1',
-    title: 'Client Brand Strategy Deck',
-    category: 'Design',
-    status: 'In Progress',
-    due_date: '2025-11-15',
-    assignees: [MOCK_USER_1],
-  },
-  {
-    id: 'assign_3',
-    title: 'Pitch Video Editing',
-    category: 'Production',
-    status: 'Overdue',
-    due_date: '2025-11-03',
-    assignees: [MOCK_USER_1],
-  },
-];
-const MOCK_DOCUMENTS: EmployeeDocument[] = [
-  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null },
-  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null },
-];
-// --- END MOCK DATA ---
-
-
-// --- 1. ADD THIS HELPER FUNCTION BACK ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
-// --- END OF FIX ---
 
-
-// --- Reusable InfoRow ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
   icon: Icon,
   label,
@@ -117,10 +54,9 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
-// --- Reusable PDF Viewer ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div
         className="absolute inset-0 bg-black/80 backdrop-blur-sm"
         initial={{ opacity: 0 }}
@@ -135,16 +71,16 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
         className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
       >
         <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
-          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+          <h3 className="text-white font-semibold truncate pl-2">{title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white">
             <X size={20} />
           </button>
         </div>
         <div className="flex-1 p-2">
-          <iframe 
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
-            className="w-full h-full border-0 rounded-b-lg" 
-            title="PDF Viewer" 
+          <iframe
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`}
+            className="w-full h-full border-0 rounded-b-lg"
+            title="PDF Viewer"
           />
         </div>
       </motion.div>
@@ -152,103 +88,136 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
-// --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [selectedEmployee, setSelectedEmployee] = useState<Profile | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Partial<Profile> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  
+
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- State for Documents ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [newDocName, setNewDocName] = useState('');
   const [newDocFile, setNewDocFile] = useState<File | null>(null);
-  const [newDocRequiresSigning, setNewDocRequiresSigning] = useState(false);
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
 
-  // PDF Viewer
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- State for Assignments ---
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
-  const [isSavingAssignment, setIsSavingAssignment] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchEmployees = useCallback(async () => {
     setError(null);
     try {
-      const { data: employeesData, error: employeesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'employee')
-        .order('first_name');
-      if (employeesError) throw employeesError;
-      setEmployees(employeesData || []);
+      const { data, error: fetchError } = await getAllEmployees();
+      if (fetchError) throw fetchError;
+      setEmployees(data || []);
     } catch (err: any) {
-      console.error('Error fetching employee data:', err);
-      setError('Failed to load employee data. Check RLS policies.');
+      console.error('Error fetching employees:', err);
+      setError('Failed to load employees');
+      addToast({ type: 'error', title: 'Error', message: err.message });
     } finally {
       setLoading(false);
     }
-  }, []);
-  
-  useEffect(() => {
-    fetchData(); 
-    // ... (listeners will be added here later) ...
-  }, [fetchData]);
+  }, [addToast]);
 
-  // --- Function to fetch assignments ---
-  const fetchAssignments = async (profileId: string) => {
+  const fetchDocuments = useCallback(async (profileId: string) => {
+    setLoadingDocs(true);
+    try {
+      const { data, error } = await getEmployeeDocuments(profileId);
+      if (error) throw error;
+      setDocuments(data || []);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: 'Failed to load documents' });
+    } finally {
+      setLoadingDocs(false);
+    }
+  }, [addToast]);
+
+  const fetchAssignments = useCallback(async () => {
     setLoadingAssignments(true);
     try {
-      await new Promise(res => setTimeout(res, 500)); // Simulate load
-      setAssignments(MOCK_ASSIGNMENTS);
+      const { data, error } = await getAllAssignments();
+      if (error) throw error;
+      setAssignments(data || []);
     } catch (err: any) {
-      addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to load assignments' });
     } finally {
       setLoadingAssignments(false);
     }
-  };
-  
-  // --- Function to fetch documents ---
-  const fetchDocuments = async (profileId: string) => {
-      setLoadingDocs(true);
-      try {
-          await new Promise(res => setTimeout(res, 500)); 
-          setDocuments(MOCK_DOCUMENTS);
-      } catch (err: any) {
-          addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
-      } finally {
-          setLoadingDocs(false);
-      }
-  };
-  
-  // --- Fetch data on employee selection ---
-  useEffect(() => {
-      if (selectedEmployee) {
-          fetchDocuments(selectedEmployee.id);
-          fetchAssignments(selectedEmployee.id);
-      } else {
-          setDocuments([]); 
-          setAssignments([]);
-      }
-  }, [selectedEmployee]);
+  }, [addToast]);
 
-  // Filter employees
+  useEffect(() => {
+    fetchEmployees();
+    fetchAssignments();
+
+    const employeesChannel = onEmployeesChange((payload) => {
+      if (payload.eventType === 'INSERT') {
+        setEmployees(prev => [payload.new, ...prev]);
+        addToast({ type: 'success', title: 'Employee Added', message: 'New employee added' });
+      } else if (payload.eventType === 'UPDATE') {
+        setEmployees(prev => prev.map(emp => emp.id === payload.new.id ? payload.new : emp));
+        if (selectedEmployee?.id === payload.new.id) {
+          setSelectedEmployee(payload.new);
+        }
+        addToast({ type: 'info', title: 'Employee Updated', message: 'Employee information updated' });
+      } else if (payload.eventType === 'DELETE') {
+        setEmployees(prev => prev.filter(emp => emp.id !== payload.old.id));
+        if (selectedEmployee?.id === payload.old.id) {
+          setSelectedEmployee(null);
+        }
+        addToast({ type: 'info', title: 'Employee Removed', message: 'Employee removed' });
+      }
+    });
+
+    const assignmentsChannel = onAssignmentsChange((payload) => {
+      if (payload.eventType === 'INSERT') {
+        fetchAssignments();
+      } else if (payload.eventType === 'UPDATE') {
+        setAssignments(prev => prev.map(a => a.id === payload.new.id ? { ...a, ...payload.new } : a));
+      } else if (payload.eventType === 'DELETE') {
+        setAssignments(prev => prev.filter(a => a.id !== payload.old.id));
+      }
+    });
+
+    return () => {
+      employeesChannel.unsubscribe();
+      assignmentsChannel.unsubscribe();
+    };
+  }, [fetchEmployees, fetchAssignments, addToast, selectedEmployee?.id]);
+
+  useEffect(() => {
+    if (selectedEmployee) {
+      fetchDocuments(selectedEmployee.id);
+
+      const docsChannel = onEmployeeDocumentsChange(selectedEmployee.id, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setDocuments(prev => [payload.new, ...prev]);
+        } else if (payload.eventType === 'DELETE') {
+          setDocuments(prev => prev.filter(doc => doc.id !== payload.old.id));
+        }
+      });
+
+      return () => {
+        docsChannel.unsubscribe();
+      };
+    } else {
+      setDocuments([]);
+    }
+  }, [selectedEmployee, fetchDocuments]);
+
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.toLowerCase();
     if (!q) return employees;
@@ -259,59 +228,80 @@ const EmployeesTab: React.FC = () => {
       (e.position || '').toLowerCase().includes(q)
     );
   }, [employees, searchQuery]);
-  
-  // --- Employee Modal Handlers ---
+
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     setEditingEmployee(employee);
     setIsModalOpen(true);
   };
+
   const handleAddNewEmployee = () => {
-    setEditingEmployee({}); 
+    setEditingEmployee({});
     setIsModalOpen(true);
   };
+
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
-    // ... (Mocked logic) ...
     setIsSavingProfile(true);
-    await new Promise(res => setTimeout(res, 1000));
-    addToast({ type: 'success', title: 'Employee Saved (Mock)' });
-    setIsSavingProfile(false);
-    setIsModalOpen(false);
-    setEditingEmployee(null);
+    try {
+      if (editingEmployee?.id) {
+        const { data, error } = await updateEmployee(editingEmployee.id, formData);
+        if (error) throw error;
+        addToast({ type: 'success', title: 'Success', message: 'Employee updated successfully' });
+      } else {
+        if (!password) throw new Error('Password required for new employee');
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email!,
+          password,
+        });
+        if (authError) throw authError;
+        if (!authData.user) throw new Error('Failed to create user');
+
+        const { data, error } = await createEmployee({
+          ...formData,
+          id: authData.user.id,
+          role: 'employee'
+        });
+        if (error) throw error;
+        addToast({ type: 'success', title: 'Success', message: 'Employee created successfully' });
+      }
+      setIsModalOpen(false);
+      setEditingEmployee(null);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
-  
-  // --- Document Handlers ---
-  const handleViewPdf = (url: string, title: string) => {
-    setViewingPdf(url);
-    setViewingPdfTitle(title);
-  };
-  
+
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDocFile || !newDocName.trim()) {
-        setDocUploadError("Document name and file are required.");
-        return;
+    if (!newDocFile || !newDocName.trim() || !selectedEmployee) {
+      setDocUploadError("Document name and file are required");
+      return;
     }
     setIsUploadingDoc(true);
     setDocUploadError(null);
     try {
-      // --- MOCKED SUCCESS ---
-      await new Promise(res => setTimeout(res, 1000));
-      const newMockDoc: EmployeeDocument = {
-        id: `doc_${Date.now()}`,
-        document_name: newDocName.trim(),
-        storage_url: '/mock-new-doc.pdf',
-        requires_signing: newDocRequiresSigning,
-        signed_storage_url: null,
-        signed_at: null,
-      };
-      setDocuments(prev => [newMockDoc, ...prev]);
-      // --- END MOCKED ---
-      addToast({ type: 'success', title: 'Document Uploaded!' });
+      const { data: uploadData, error: uploadError } = await uploadEmployeeDocument(
+        selectedEmployee.id,
+        newDocFile,
+        newDocFile.name
+      );
+      if (uploadError) throw uploadError;
+
+      const { error: dbError } = await createEmployeeDocument({
+        profile_id: selectedEmployee.id,
+        document_name: newDocName,
+        storage_path: uploadData.path,
+        storage_url: uploadData.url,
+        uploaded_by: user?.id
+      });
+      if (dbError) throw dbError;
+
+      addToast({ type: 'success', title: 'Success', message: 'Document uploaded' });
+      setShowDocUpload(false);
       setNewDocName('');
       setNewDocFile(null);
-      setNewDocRequiresSigning(false);
-      setShowDocUpload(false);
     } catch (err: any) {
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
@@ -321,371 +311,317 @@ const EmployeesTab: React.FC = () => {
   };
 
   const handleDeleteDocument = async (doc: EmployeeDocument) => {
-    if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"?`)) return;
+    if (!confirm('Delete this document?')) return;
     try {
-      // --- MOCKED SUCCESS ---
-      await new Promise(res => setTimeout(res, 500));
-      setDocuments(prev => prev.filter(d => d.id !== doc.id));
-      // --- END MOCKED ---
-      addToast({ type: 'success', title: 'Document Deleted' });
+      await deleteEmployeeDocumentFile(doc.storage_path);
+      const { error } = await deleteEmployeeDocument(doc.id);
+      if (error) throw error;
+      addToast({ type: 'success', title: 'Deleted', message: 'Document removed' });
     } catch (err: any) {
-      addToast({ type: 'error', title: 'Delete Failed', message: err.message });
+      addToast({ type: 'error', title: 'Error', message: err.message });
     }
   };
-  
-  // --- Assignment Modal Handlers ---
-  const handleOpenCreateAssignment = () => {
-    setIsCreateAssignModalOpen(true);
-  };
-  
-  const handleSaveAssignment = async (data: any) => {
-    setIsSavingAssignment(true);
-    await new Promise(res => setTimeout(res, 1000));
-    addToast({ type: 'success', title: 'Assignment Created!' });
-    setIsSavingAssignment(false);
-    setIsCreateAssignModalOpen(false);
-    if(selectedEmployee) fetchAssignments(selectedEmployee.id);
-  };
-  
-  // --- Assignment Panel Handlers (Mocked) ---
-  const handleUpdateStatus = (newStatus: string) => {
-    if (!selectedAssignment) return;
-    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
-    setAssignments(prev =>
-      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
-    );
-    addToast({ type: 'info', title: 'Status Updated' });
-  };
-  const handlePostComment = (comment: string) => {
-    addToast({ type: 'info', title: 'Comment Posted (Mock)' });
-  };
-  const handleApprove = (id: string) => addToast({ type: 'success', title: 'Deliverable Approved (Mock)!' });
-  const handleRequestEdits = (id: string, msg: string) => addToast({ type: 'info', title: 'Edits Requested (Mock)' });
-  
 
-  if (loading && employees.length === 0) {
-    return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
+  const handleViewPdf = (url: string, title: string) => {
+    setViewingPdf(url);
+    setViewingPdfTitle(title);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="w-8 h-8 animate-spin text-[#FF5722]" />
+      </div>
+    );
   }
-  
+
   if (error) {
-    return <div className="text-center py-20 text-red-600 flex flex-col items-center gap-3"><AlertCircle className="w-6 h-6" />{error}</div>;
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <p className="text-red-600">{error}</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* --- Column 1: Employee List --- */}
-      <Card className="lg:col-span-1 flex flex-col" title="Employees">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Employees</h2>
+          <p className="text-sm text-gray-500">Manage employee profiles, documents, and assignments</p>
+        </div>
         <button
           onClick={handleAddNewEmployee}
-          className="w-full mb-4 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#FF5722] text-white text-sm font-semibold rounded-lg hover:bg-[#E64A19] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
         >
-          <PlusCircle size={18} />
-          Add New Employee
+          <PlusCircle size={20} />
+          Add Employee
         </button>
-        
-        <div className="relative mb-4">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search employees..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-3 py-2 text-sm rounded-lg border border-gray-300 w-full"
-          />
-        </div>
-        <div className="flex-1 overflow-y-auto -mr-6 -ml-6 pr-3 pl-6">
-          <div className="space-y-2">
-            {filteredEmployees.map(employee => (
-              <div
-                key={employee.id}
-                onClick={() => setSelectedEmployee(employee)}
-                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg text-left transition-colors cursor-pointer ${
-                  selectedEmployee?.id === employee.id ? 'bg-[#FF5722]/10' : 'hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {employee.avatar_url ? (
-                    <img src={employee.avatar_url} alt="avatar" className="w-10 h-10 rounded-full object-cover" />
-                  ) : (
-                    <span className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                      <User size={20} className="text-gray-500" />
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
-                    <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={(e) => handleEditEmployee(e, employee)}
-                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors flex-shrink-0"
-                  title={`Edit ${employee.first_name}`}
-                >
-                  <Edit2 size={16} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Card>
+      </div>
 
-      {/* --- Column 2: Selected Employee Details --- */}
-      <div className="lg:col-span-2 space-y-6">
-        {!selectedEmployee ? (
-          <Card className="flex items-center justify-center h-full min-h-[400px]">
-            <p className="text-gray-500">Select an employee to view their details</p>
-          </Card>
-        ) : (
-          <AnimatePresence>
-            <motion.div
-              key={selectedEmployee.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
-            >
-              <Card title="Profile & Contact">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+        <input
+          type="text"
+          placeholder="Search employees..."
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FF5722] focus:border-transparent"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 space-y-3">
+          {filteredEmployees.length === 0 ? (
+            <Card>
+              <p className="text-center text-gray-500 py-8">No employees found</p>
+            </Card>
+          ) : (
+            filteredEmployees.map(emp => (
+              <Card
+                key={emp.id}
+                className={`cursor-pointer transition-all hover:shadow-md ${
+                  selectedEmployee?.id === emp.id ? 'ring-2 ring-[#FF5722]' : ''
+                }`}
+                onClick={() => setSelectedEmployee(emp)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-[#FF5722]/10 flex items-center justify-center">
+                      <User size={20} className="text-[#FF5722]" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">
+                        {emp.first_name} {emp.last_name}
+                      </p>
+                      <p className="text-sm text-gray-500">{emp.position || 'No Position'}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => handleEditEmployee(e, emp)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <Edit2 size={16} className="text-gray-600" />
+                  </button>
+                </div>
+              </Card>
+            ))
+          )}
+        </div>
+
+        <div className="lg:col-span-2">
+          {selectedEmployee ? (
+            <div className="space-y-6">
+              <Card>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Employee Details</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
                   <InfoRow icon={Phone} label="Phone" value={selectedEmployee.phone} />
-                  <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
-                  {/* This line was causing the crash */}
+                  <InfoRow icon={Hash} label="Employee Number" value={selectedEmployee.employee_number} />
                   <InfoRow icon={Calendar} label="Birth Date" value={formatDate(selectedEmployee.birth_date)} />
-                </div>
-              </Card>
-
-              <Card title="Employment Details">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
-                  <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
-                  {/* This line was also causing the crash */}
-                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
                   <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
-                  <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary ? `GHS ${selectedEmployee.salary}` : 'N/A'} />
+                  <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
+                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
+                  <InfoRow icon={Calendar} label="End Date" value={formatDate(selectedEmployee.end_date)} />
+                  <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
+                  <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary} />
+                  <InfoRow icon={Clock} label="Payday" value={selectedEmployee.payday} />
                   <InfoRow icon={Building} label="Bank" value={selectedEmployee.bank_name} />
-                  <InfoRow icon={CreditCard} label="Account #" value={selectedEmployee.bank_account} />
-                </div>
-              </Card>
-              
-              {/* --- 2. RESTORED DOCUMENTS CARD --- */}
-              <Card title="Documents">
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-800">Employee Documents</h4>
-                  {loadingDocs ? (
-                    <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-                  ) : documents.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-2">No documents uploaded for this employee.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {documents.map(doc => {
-                        const isSigned = doc.requires_signing && doc.signed_storage_url;
-                        const isPending = doc.requires_signing && !doc.signed_storage_url;
-                        const isViewOnly = !doc.requires_signing;
-
-                        return (
-                          <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                              {/* Left Side: Name and Status */}
-                              <div className="min-w-0">
-                                <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
-                                {isViewOnly && (
-                                  <span className="flex items-center gap-1.5 text-xs font-medium text-blue-600">
-                                    <ShieldCheck size={14} /> View Only
-                                  </span>
-                                )}
-                                {isPending && (
-                                  <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-600">
-                                    <AlertTriangle size={14} /> Pending Signature
-                                  </span>
-                                )}
-                                {isSigned && (
-                                  <span className="flex items-center gap-1.5 text-xs font-medium text-green-600">
-                                    <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
-                                  </span>
-                                )}
-                              </div>
-                              {/* Right Side: Buttons */}
-                              <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
-                                <button
-                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
-                                  className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
-                                >
-                                  <Eye size={14} /> View
-                                </button>
-                                {isSigned && (
-                                  <button
-                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
-                                    className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
-                                  >
-                                    <Eye size={14} /> View Signed
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDeleteDocument(doc)}
-                                  className="sm:flex-none inline-flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* --- Upload Form Toggle Button --- */}
-                  <div className="border-t pt-4">
-                    <button
-                      onClick={() => setShowDocUpload(!showDocUpload)}
-                      className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold text-gray-700"
-                    >
-                      <span className="flex items-center gap-2">
-                        <UploadCloud size={16} />
-                        Upload New Document
-                      </span>
-                      <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
-                    </button>
-                  </div>
-
-                  {/* --- Collapsible Upload Form --- */}
-                  <AnimatePresence>
-                    {showDocUpload && (
-                      <motion.form
-                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                        animate={{ opacity: 1, height: 'auto', marginTop: '16px' }}
-                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                        onSubmit={handleUploadDocument} 
-                        className="space-y-4 p-4 bg-gray-50 border border-gray-200 rounded-lg overflow-hidden"
-                      >
-                        {docUploadError && (
-                          <div className="p-3 bg-red-100 border border-red-300 text-red-700 rounded-lg flex items-center gap-2 text-sm">
-                            <AlertCircle size={16} /> {docUploadError}
-                          </div>
-                        )}
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Document Name *</label>
-                          <input
-                            type="text"
-                            value={newDocName}
-                            onChange={(e) => setNewDocName(e.target.value)}
-                            placeholder="e.g., Employment Contract"
-                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">File *</label>
-                          <input
-                            type="file"
-                            onChange={(e) => setNewDocFile(e.target.files ? e.target.files[0] : null)}
-                            className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id="requires_signing"
-                            checked={newDocRequiresSigning}
-                            onChange={(e) => setNewDocRequiresSigning(e.target.checked)}
-                            className="h-4 w-4 rounded text-[#FF5722] focus:ring-[#FF5722]"
-                          />
-                          <label htmlFor="requires_signing" className="text-sm font-medium text-gray-700">
-                            Requires employee signature
-                          </label>
-                        </div>
-                        
-                        <button
-                          type="submit"
-                          disabled={isUploadingDoc || !newDocFile || !newDocName}
-                          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                        >
-                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
-                          {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
-                        </button>
-                      </motion.form>
-                    )}
-                  </AnimatePresence>
+                  <InfoRow icon={CreditCard} label="Account" value={selectedEmployee.bank_account} />
                 </div>
               </Card>
 
-              {/* --- NEW ASSIGNMENTS CARD --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <List size={20} /> Assignments
-                  </h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Documents</h3>
                   <button
-                    onClick={handleOpenCreateAssignment}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    onClick={() => setShowDocUpload(!showDocUpload)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#FF5722] text-white text-sm rounded-lg hover:bg-[#E64A19]"
                   >
-                    <PlusCircle size={16} />
-                    Create New
+                    <UploadCloud size={16} />
+                    Upload
                   </button>
                 </div>
-                
-                {loadingAssignments ? (
-                  <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-                ) : assignments.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">No assignments for this employee.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {assignments.map(assignment => (
-                      <button 
-                        key={assignment.id} 
-                        onClick={() => setSelectedAssignment(assignment)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 text-left"
+
+                {showDocUpload && (
+                  <form onSubmit={handleUploadDocument} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                    <input
+                      type="text"
+                      placeholder="Document name"
+                      value={newDocName}
+                      onChange={e => setNewDocName(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                    <input
+                      type="file"
+                      onChange={e => setNewDocFile(e.target.files?.[0] || null)}
+                      className="w-full"
+                      accept=".pdf,.doc,.docx,.jpg,.png"
+                    />
+                    {docUploadError && <p className="text-sm text-red-600">{docUploadError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={isUploadingDoc}
+                        className="px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] disabled:opacity-50"
                       >
-                        <div className="min-w-0">
-                          <p className="font-medium text-gray-800 truncate">{assignment.title}</p>
-                          <p className="text-sm text-gray-500">Due: {formatDate(assignment.due_date)}</p>
-                        </div>
-                        <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${
-                          assignment.status === 'Completed' ? 'bg-green-100 text-green-700' : 
-                          assignment.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 
-                          assignment.status === 'Overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {assignment.status}
-                        </span>
+                        {isUploadingDoc ? 'Uploading...' : 'Upload'}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDocUpload(false);
+                          setNewDocName('');
+                          setNewDocFile(null);
+                          setDocUploadError(null);
+                        }}
+                        className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {loadingDocs ? (
+                  <div className="text-center py-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#FF5722] mx-auto" />
+                  </div>
+                ) : documents.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No documents</p>
+                ) : (
+                  <div className="space-y-2">
+                    {documents.map(doc => (
+                      <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <FileText size={20} className="text-gray-400" />
+                          <span className="font-medium text-gray-900">{doc.document_name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                            className="p-2 hover:bg-gray-200 rounded-lg"
+                          >
+                            <Eye size={16} className="text-gray-600" />
+                          </button>
+                          <a
+                            href={doc.storage_url}
+                            download
+                            className="p-2 hover:bg-gray-200 rounded-lg"
+                          >
+                            <Download size={16} className="text-gray-600" />
+                          </a>
+                          <button
+                            onClick={() => handleDeleteDocument(doc)}
+                            className="p-2 hover:bg-red-100 rounded-lg"
+                          >
+                            <Trash2 size={16} className="text-red-600" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
               </Card>
-            </motion.div>
-          </AnimatePresence>
-        )}
+
+              <Card>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Assignments</h3>
+                  <button
+                    onClick={() => setIsCreateAssignModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-[#FF5722] text-white text-sm rounded-lg hover:bg-[#E64A19]"
+                  >
+                    <Plus size={16} />
+                    Create
+                  </button>
+                </div>
+
+                {loadingAssignments ? (
+                  <div className="text-center py-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-[#FF5722] mx-auto" />
+                  </div>
+                ) : assignments.filter(a => a.assignment_members?.some(m => m.employee_id === selectedEmployee.id)).length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No assignments</p>
+                ) : (
+                  <div className="space-y-2">
+                    {assignments
+                      .filter(a => a.assignment_members?.some(m => m.employee_id === selectedEmployee.id))
+                      .map(assign => (
+                        <div
+                          key={assign.id}
+                          onClick={() => setSelectedAssignment(assign)}
+                          className="p-3 bg-gray-50 rounded-lg cursor-pointer hover:bg-gray-100"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium text-gray-900">{assign.title}</p>
+                              <p className="text-sm text-gray-500">{assign.status}</p>
+                            </div>
+                            <ClipboardList size={20} className="text-gray-400" />
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </Card>
+            </div>
+          ) : (
+            <Card className="h-full flex items-center justify-center">
+              <div className="text-center text-gray-500">
+                <User size={48} className="mx-auto mb-4 text-gray-300" />
+                <p>Select an employee to view details</p>
+              </div>
+            </Card>
+          )}
+        </div>
       </div>
 
-      {/* --- Modals & Panels --- */}
-      <AnimatePresence>
-        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
-      </AnimatePresence>
-      
-      <EmployeeEditModal
-        isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingEmployee(null);
-        }}
-        employee={editingEmployee}
-        onSave={handleSaveEmployee}
-        isSaving={isSavingProfile}
-      />
-      
-      <CreateAssignmentModal
-        isOpen={isCreateAssignModalOpen}
-        onClose={() => setIsCreateAssignModalOpen(false)}
-        onSave={handleSaveAssignment}
-        isSaving={isSavingAssignment}
-      />
-      
-      <AssignmentDetailPanel
-        assignment={selectedAssignment}
-        onClose={() => setSelectedAssignment(null)}
-        onUpdateStatus={handleUpdateStatus}
-        onPostComment={handlePostComment}
-        onApproveDeliverable={handleApprove}
-        onRequestEdits={handleRequestEdits}
-      />
+      {isModalOpen && (
+        <EmployeeEditModal
+          employee={editingEmployee}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingEmployee(null);
+          }}
+          onSave={handleSaveEmployee}
+          isSaving={isSavingProfile}
+        />
+      )}
+
+      {isCreateAssignModalOpen && selectedEmployee && (
+        <CreateAssignmentModal
+          onClose={() => setIsCreateAssignModalOpen(false)}
+          onSave={async (data) => {
+            await fetchAssignments();
+            setIsCreateAssignModalOpen(false);
+            addToast({ type: 'success', title: 'Assignment Created' });
+          }}
+          allEmployees={employees}
+          preselectedEmployeeIds={[selectedEmployee.id]}
+        />
+      )}
+
+      {selectedAssignment && (
+        <AssignmentDetailPanel
+          assignment={selectedAssignment}
+          onClose={() => setSelectedAssignment(null)}
+          onUpdate={() => fetchAssignments()}
+        />
+      )}
+
+      {viewingPdf && (
+        <PdfViewerModal
+          pdfUrl={viewingPdf}
+          title={viewingPdfTitle}
+          onClose={() => {
+            setViewingPdf(null);
+            setViewingPdfTitle('');
+          }}
+        />
+      )}
     </div>
   );
 };
