@@ -1,6 +1,6 @@
 // src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
@@ -71,40 +71,88 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
+// Helpers for PDF support detection (no UI changes)
+const isIOS = () => {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+const browserSupportsInlinePdf = () => {
+  if (typeof navigator === 'undefined') return false;
+  const mt = (navigator.mimeTypes || {});
+  return !!mt['application/pdf'];
+};
+
 // --- PDF Viewer ---
-const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
-  <AnimatePresence>
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
-      <motion.div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-      />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.9 }}
-        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
-      >
-        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
-          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
-          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="flex-1 p-2">
-           <iframe 
-            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
-            className="w-full h-full border-0 rounded-b-lg" 
-            title="PDF Viewer" 
-          />
-        </div>
-      </motion.div>
-    </div>
-  </AnimatePresence>
-);
+const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => {
+  // Choose best rendering approach without touching visuals
+  const viewerSrc = useMemo(() => {
+    // If iOS or no inline PDF support, prefer Google viewer
+    const preferGoogle = isIOS() || !browserSupportsInlinePdf();
+    if (preferGoogle) {
+      return `https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
+    }
+    // Otherwise try direct inline PDF first (often smoother + mobile friendly on Android/desktop)
+    return `${pdfUrl}#toolbar=1&navpanes=0&view=FitH`;
+  }, [pdfUrl]);
+
+  const isGoogle = viewerSrc.includes('docs.google.com/gview');
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+        <motion.div
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+        >
+          <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+            <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
+            <div className="flex items-center gap-2">
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white"
+                aria-label="Open in new tab / Download"
+                title="Open in new tab / Download"
+              >
+                <Download size={18} />
+              </a>
+              <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 p-2">
+            {/* Keep exact container styles; only source selection changes */}
+            <iframe
+              src={viewerSrc}
+              className="w-full h-full border-0 rounded-b-lg"
+              title="PDF Viewer"
+              // improve mobile behavior
+              allow="fullscreen"
+              // sandbox omitted to preserve existing auth cookies for signed URLs if needed
+            />
+            {/* Gentle fallback messaging if Google viewer path used (no visual changes otherwise) */}
+            {isGoogle && (
+              <p className="sr-only">
+                If the document does not display, use the Download button in the header to open in a new tab.
+              </p>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+};
 
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
