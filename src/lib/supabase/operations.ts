@@ -11,9 +11,10 @@ export const uploadSignedEmployeeDocument = async (
   // 1. Create a new file path for the signed version
   const fileExtension = file.name.split('.').pop();
   const baseName = file.name.replace(`.${fileExtension}`, '');
+  // Add _SIGNED suffix to distinguish from original
   const signedFilePath = `${userId}/${baseName}_SIGNED.${fileExtension}`;
 
-  // 2. Upload the new signed file
+  // 2. Upload the new signed file to storage
   const { data: storageData, error: storageError } = await supabase.storage
     .from('employee_documents')
     .upload(signedFilePath, file, {
@@ -55,6 +56,7 @@ export const createSignedDocumentSignedUrl = async (doc: EmployeeDocument) => {
   
   // Extract path from the full public URL
   const urlParts = doc.signed_storage_url.split('/');
+  // Reconstruct the storage path: profile_id/filename_SIGNED.pdf
   const filePath = `${doc.profile_id}/${urlParts[urlParts.length - 1]}`;
 
   const { data, error } = await supabase.storage
