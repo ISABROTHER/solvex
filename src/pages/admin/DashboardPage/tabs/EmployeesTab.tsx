@@ -55,7 +55,10 @@ import {
   uploadEmployeeDocument,
   deleteEmployeeDocument,
   createDocumentSignedUrl,
-  EmployeeDocument, // <-- Import the type
+  EmployeeDocument, 
+  // --- IMPORTED NEW MANAGEMENT FUNCTIONS ---
+  deleteEmployeeAccount, 
+  blockEmployeeAccess 
 } from '../../../../lib/supabase/operations';
 
 
@@ -89,7 +92,7 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
-// --- Reusable PDF Viewer ---
+// --- Reusable PDF Viewer (Unchanged) ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
@@ -140,7 +143,7 @@ const EmployeesTab: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- 3. MAKE DOCUMENT STATE LIVE ---
+  // --- Document States (Unchanged) ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -154,7 +157,7 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- State for Assignments ---
+  // --- State for Assignments (Unchanged) ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
@@ -167,8 +170,8 @@ const EmployeesTab: React.FC = () => {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
-        // --- FIX: Query for both 'employee' and 'admin' ---
-        .in('role', ['employee', 'admin']) 
+        // --- FIX: Query for employee, admin, AND blocked users ---
+        .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
@@ -184,7 +187,54 @@ const EmployeesTab: React.FC = () => {
     fetchData(); 
   }, [fetchData]);
 
-  // --- Function to fetch assignments ---
+  // --- Management Handlers (NEW) ---
+  const handleBlockAccess = async (employee: Profile) => {
+    if (employee.role === 'admin') {
+      addToast({ type: 'error', title: 'Action Denied', message: 'Cannot block an Admin through this panel.' });
+      return;
+    }
+
+    const newRole = employee.role === 'blocked' ? 'employee' : 'blocked';
+    const action = newRole === 'blocked' ? 'BLOCK' : 'UNBLOCK';
+    
+    if (window.confirm(`Are you sure you want to ${action} access for ${employee.first_name} ${employee.last_name}?`)) {
+      const { error } = await blockEmployeeAccess(employee.id, newRole);
+      if (error) {
+        addToast({ type: 'error', title: 'Action Failed', message: error.message });
+      } else {
+        addToast({ type: 'success', title: 'Access Updated', message: `${employee.first_name}'s access is now ${newRole}.` });
+        fetchData(); // Refresh employee list
+        if (selectedEmployee?.id === employee.id) setSelectedEmployee(prev => prev ? { ...prev, role: newRole } : null);
+      }
+    }
+  };
+
+  const handleDeleteEmployee = async (employee: Profile) => {
+    if (employee.role === 'admin') {
+      addToast({ type: 'error', title: 'Action Denied', message: 'Admins must be demoted or removed manually from the database first.' });
+      return;
+    }
+
+    const employeeName = `${employee.first_name} ${employee.last_name}`;
+
+    if (window.confirm(`WARNING: Are you absolutely sure you want to PERMANENTLY DELETE ${employeeName}? This action is irreversible and will delete their AUTH account and all associated PROFILE data.`)) {
+      
+      const { error } = await deleteEmployeeAccount(employee.id);
+      
+      if (error) {
+        addToast({ type: 'error', title: 'Deletion Failed', message: error.message });
+      } else {
+        addToast({ type: 'success', title: 'Employee Deleted', message: `${employeeName} was permanently removed.` });
+        
+        // Update UI
+        if (selectedEmployee?.id === employee.id) setSelectedEmployee(null);
+        fetchData(); // Refresh list
+      }
+    }
+  };
+  // --- End Management Handlers ---
+
+  // --- Function to fetch assignments (Unchanged) ---
   const fetchAssignments = async (profileId: string) => {
     setLoadingAssignments(true);
     try {
@@ -198,7 +248,7 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- 4. MAKE FETCH DOCUMENTS LIVE ---
+  // --- Function to fetch documents (Unchanged) ---
   const fetchDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
@@ -212,7 +262,7 @@ const EmployeesTab: React.FC = () => {
       }
   };
   
-  // --- Fetch data on employee selection ---
+  // --- Fetch data on employee selection (Unchanged) ---
   useEffect(() => {
       if (selectedEmployee) {
           fetchDocuments(selectedEmployee.id);
@@ -242,7 +292,7 @@ const EmployeesTab: React.FC = () => {
     );
   }, [employees, searchQuery]);
   
-  // --- Employee Modal Handlers ---
+  // --- Employee Modal Handlers (Unchanged) ---
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
     e.stopPropagation(); 
     setEditingEmployee(employee);
@@ -253,8 +303,7 @@ const EmployeesTab: React.FC = () => {
     setIsModalOpen(true);
   };
   
-  // --- 5. MAKE EMPLOYEE SAVE/CREATE LIVE ---
-  // --- THIS IS THE MAIN FIX ---
+  // --- Employee Save/Create Handler (Unchanged) ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isNewUser = !formData.id;
@@ -351,14 +400,14 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Document Handlers ---
+  // --- Document Handlers (Unchanged) ---
   const handleViewPdf = (url: string, title: string) => {
     // For admin, just use the public URL
     setViewingPdf(url);
     setViewingPdfTitle(title);
   };
   
-  // --- 6. MAKE DOCUMENT UPLOAD LIVE ---
+  // --- Document Upload Handler (Unchanged) ---
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocFile || !newDocName.trim() || !selectedEmployee) {
@@ -392,7 +441,7 @@ const EmployeesTab: React.FC = () => {
     }
   };
 
-  // --- 7. MAKE DOCUMENT DELETE LIVE ---
+  // --- Document Delete Handler (Unchanged) ---
   const handleDeleteDocument = async (doc: EmployeeDocument) => {
     if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"?`)) return;
     try {
@@ -404,7 +453,7 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Assignment Modal Handlers ---
+  // --- Assignment Handlers (Unchanged) ---
   const handleOpenCreateAssignment = () => {
     setIsCreateAssignModalOpen(true);
   };
@@ -529,15 +578,43 @@ const EmployeesTab: React.FC = () => {
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
                     <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
+                    {/* NEW: Role Badge for quick status check */}
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full mt-0.5 ${
+                        employee.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 
+                        employee.role === 'blocked' ? 'bg-red-100 text-red-800' : 
+                        'bg-green-100 text-green-800'
+                    }`}>
+                      {employee.role || 'employee'}
+                    </span>
                   </div>
                 </div>
-                <button
-                  onClick={(e) => handleEditEmployee(e, employee)}
-                  className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors flex-shrink-0"
-                  title={`Edit ${employee.first_name}`}
-                >
-                  <Edit2 size={16} />
-                </button>
+                {/* NEW: Management Actions Dropdown/Menu for Mobile/Compact View (Optional alternative to a dedicated column) */}
+                <div className="flex space-x-2 flex-shrink-0">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleEditEmployee(e, employee); }}
+                      className="p-2 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+                      title={`Edit ${employee.first_name}`}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleBlockAccess(employee); }}
+                        className={`p-2 rounded-full text-white transition-colors ${employee.role === 'blocked' ? 'bg-green-500 hover:bg-green-600' : 'bg-yellow-500 hover:bg-yellow-600'}`}
+                        title={employee.role === 'blocked' ? 'Unblock Access' : 'Block Access'}
+                        disabled={employee.role === 'admin'}
+                    >
+                        {employee.role === 'blocked' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+                    </button>
+
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(employee); }}
+                        className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+                        title="Delete Employee"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
               </div>
             ))}
           </div>
@@ -558,6 +635,7 @@ const EmployeesTab: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
+              {/* Profile & Contact Card (Unchanged) */}
               <Card title="Profile & Contact">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
@@ -567,6 +645,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
+              {/* Employment Details Card (Unchanged) */}
               <Card title="Employment Details">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
@@ -579,7 +658,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* --- 8. DOCUMENTS CARD (NOW LIVE) --- */}
+              {/* Documents Card (Unchanged) */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -712,7 +791,6 @@ const EmployeesTab: React.FC = () => {
                           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
                           {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />} 
-                          {/* --- THIS WAS THE FIX: 1L -> 16 --- */}
                           {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
                         </button>
                       </motion.form>
@@ -769,7 +847,7 @@ const EmployeesTab: React.FC = () => {
         )}
       </div>
 
-      {/* --- Modals & Panels --- */}
+      {/* --- Modals & Panels (Unchanged) --- */}
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
