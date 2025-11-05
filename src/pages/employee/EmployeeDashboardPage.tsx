@@ -100,36 +100,99 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
 
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
-  // --- 1. GET ALL DATA DIRECTLY FROM THE GLOBAL HOOK ---
-  const { user, profile, assignments, documents, loading } = useAuth();
+  const { user, profile } = useAuth();
   const { addToast } = useToast();
 
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState<any>({});
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [assignmentResult, documentResult] = await Promise.all([
+          getAssignmentsForEmployee(user.id),
+          getEmployeeDocuments(user.id)
+        ]);
+
+        if (assignmentResult.error) throw assignmentResult.error;
+        if (documentResult.error) throw documentResult.error;
+
+        setAssignments(assignmentResult.data || []);
+        setDocuments(documentResult.data || []);
+
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch data.');
+        addToast({ type: 'error', title: 'Loading Failed', message: err.message });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Lightweight realtime listeners
+    const channel = supabase
+      .channel(`employee_dashboard:${user.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'assignments' },
+        async () => {
+          const result = await getAssignmentsForEmployee(user.id);
+          if (!result.error) setAssignments(result.data || []);
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
+        async () => {
+          const result = await getEmployeeDocuments(user.id);
+          if (!result.error) setDocuments(result.data || []);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+
+  }, [user, addToast]);
   
-  // Data is loaded by AuthProvider
-  
-  const handleAssignmentClick = (assignmentId: string) => {
+  const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(null); // Toggle off
+      setSelectedAssignment(null);
       return;
     }
-    // Find the assignment we already fetched (instant lookup)
-    const assignmentToOpen = assignments.find(a => a.id === assignmentId);
-    if (assignmentToOpen) {
-      setSelectedAssignment(assignmentToOpen);
-    } else {
-      addToast({ type: 'error', title: 'Error', message: 'Could not find assignment.' });
+
+    setSelectedAssignment({ id: assignmentId, loading: true });
+    try {
+      const { data, error } = await getFullAssignmentDetails(assignmentId);
+      if (error) throw error;
+      setSelectedAssignment(data);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: 'Could not load assignment details.' });
+      setSelectedAssignment(null);
     }
   };
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
-    // Optimistic update
+    setAssignments(prev =>
+      prev.map(a => a.id === assignmentId ? { ...a, status } : a)
+    );
     if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(prev => prev ? { ...prev, status: status } : null);
+      setSelectedAssignment(prev => prev ? { ...prev, status } : null);
     }
-    
+
     const { error } = await updateAssignmentStatus(assignmentId, status);
     if (error) {
       addToast({ type: 'error', title: 'Update Failed', message: error.message });
@@ -144,11 +207,10 @@ const EmployeeDashboardPage: React.FC = () => {
     if (error) {
       addToast({ type: 'error', title: 'Comment Failed', message: error.message });
     }
-    // AuthProvider's realtime listener will update the state
   };
 
   const handleViewDocument = async (doc: EmployeeDocument) => {
-    setViewingPdf(null); // Show loading
+    setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
     try {
       const url = await createDocumentSignedUrl(doc);
@@ -158,23 +220,118 @@ const EmployeeDashboardPage: React.FC = () => {
       setViewingPdfTitle('');
     }
   };
-  
+
+  const handleSignDocument = async (doc: EmployeeDocument, signedFile: File) => {
+    if (!user) return;
+    try {
+      const filePath = `${user.id}/signed_${signedFile.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('employee_documents')
+        .upload(filePath, signedFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('employee_documents')
+        .getPublicUrl(uploadData.path);
+
+      const { error: updateError } = await supabase
+        .from('employee_documents')
+        .update({
+          signed_storage_url: urlData.publicUrl,
+          signed_at: new Date().toISOString(),
+        })
+        .eq('id', doc.id);
+
+      if (updateError) throw updateError;
+
+      addToast({ type: 'success', title: 'Document Signed!', message: 'Your signed document has been uploaded.' });
+
+      const result = await getEmployeeDocuments(user.id);
+      if (!result.error) setDocuments(result.data || []);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Signing Failed', message: err.message });
+    }
+  };
+
+  const handleEditProfile = () => {
+    setProfileForm({
+      first_name: profile?.first_name || '',
+      last_name: profile?.last_name || '',
+      phone: profile?.phone || '',
+      home_address: profile?.home_address || '',
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileForm)
+        .eq('id', user.id);
+
+      if (error) throw error;
+      addToast({ type: 'success', title: 'Profile Updated!' });
+      setIsEditingProfile(false);
+      window.location.reload();
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Update Failed', message: err.message });
+    }
+  };
+
+  const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: string | null | undefined }) => (
+    <div className="flex items-start gap-3">
+      <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="font-medium text-gray-900">{value || 'N/A'}</p>
+      </div>
+    </div>
+  );
+
   const getStatusProps = (status: string) => {
     switch (status) {
       case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
       case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
       case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
-      case 'pending_review': return { icon: Eye, color: 'text-purple-500', label: 'Pending Review' };
-      default: return { icon: List, color: 'text-yellow-500', label: 'Pending' };
+      default: return { icon: List, color: 'text-yellow-500', label: status };
     }
   };
 
-  // --- FINAL LOADING CHECK ---
+  // Loading skeleton
+  const LoadingSkeleton = () => (
+    <div className="flex h-screen bg-gray-100">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="h-8 bg-gray-300 rounded w-1/3 animate-pulse" />
+          <div className="h-4 bg-gray-200 rounded w-2/3 mt-2 animate-pulse" />
+
+          <section className="mt-8">
+            <div className="h-6 bg-gray-300 rounded w-1/4 animate-pulse" />
+            <div className="mt-4 space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="w-full p-4 bg-white rounded-lg shadow-sm">
+                  <div className="h-5 bg-gray-300 rounded w-3/4 animate-pulse" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mt-2 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+
   if (loading) {
-    return <div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-[#FF5722]" /></div>;
+    return <LoadingSkeleton />;
   }
-  
-  // --- CRASH FIX: Ensure profile is NOT null before accessing its properties ---
+
+  if (error) {
+    return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
+  }
+
   if (!profile) {
     return (
       <div className="flex h-screen items-center justify-center text-center text-red-500">
@@ -186,7 +343,6 @@ const EmployeeDashboardPage: React.FC = () => {
       </div>
     );
   }
-  // --- END CRASH FIX ---
 
 
   return (
