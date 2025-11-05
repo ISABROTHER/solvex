@@ -47,12 +47,21 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
 
   const renderContent = () => {
     if (!assignment) return null;
-    
-    // Show loading skeleton
+
+    // Show loading skeleton with better UX
     if (assignment.loading) {
       return (
-        <div className="flex items-center justify-center h-full">
-          <Loader2 className="w-8 h-8 animate-spin text-[#FF5722]" />
+        <div className="p-6 space-y-4 animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          <div className="mt-6 space-y-3">
+            <div className="h-4 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded"></div>
+            <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+          </div>
+          <div className="mt-6">
+            <div className="h-10 bg-gray-200 rounded"></div>
+          </div>
         </div>
       );
     }

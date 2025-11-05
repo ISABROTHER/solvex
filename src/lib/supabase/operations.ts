@@ -173,64 +173,99 @@ const getCommentsForAssignment = async (assignmentId: string) => {
   return data;
 }
 
-// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE
+// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE (Optimized - list view only needs basic info)
 export const getAssignmentsForEmployee = async (employeeId: string) => {
   const { data, error } = await supabase
     .from('assignment_members')
-    .select('assignment:assignments!inner(*)')
+    .select(`
+      assignment:assignments!inner(
+        id,
+        title,
+        status,
+        due_date,
+        instructions,
+        created_at
+      )
+    `)
     .eq('employee_id', employeeId);
 
   if (error) throw error;
   if (!data) return { data: [], error: null };
 
-  // This is the "polyfill" to fix the white screen.
-  // We fetch real data, then add the empty fields the component expects.
-  const fullAssignments = await Promise.all(
-    data.map(async (item) => {
-      const assignment = item.assignment;
-      // Fetch real assignees and comments
-      const [assignees, comments] = await Promise.all([
-        getProfilesForAssignment(assignment.id),
-        getCommentsForAssignment(assignment.id)
-      ]);
-      
-      return {
-        ...assignment,
-        description: assignment.instructions, // Map instructions to description
-        // Add all the missing fields that the UI component expects
-        milestones: [],
-        attachments: [],
-        deliverables: [],
-        supervisor: null,
-        category: 'Admin Task',
-        priority: 'medium',
-        // Add the real data we fetched
-        assignees: assignees,
-        comments: comments,
-      };
-    })
-  );
-  
-  return { data: fullAssignments, error: null };
+  // For list view, we don't need assignees and comments - only load them when viewing details
+  const assignments = data.map((item) => {
+    const assignment = item.assignment;
+    return {
+      ...assignment,
+      description: assignment.instructions,
+      // These fields are for UI compatibility but won't be used in list view
+      milestones: [],
+      attachments: [],
+      deliverables: [],
+      supervisor: null,
+      category: 'Admin Task',
+      priority: 'medium',
+      assignees: [],
+      comments: [],
+    };
+  });
+
+  return { data: assignments, error: null };
 };
 
-// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (used when clicking)
+// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (Optimized with proper joins)
 export const getFullAssignmentDetails = async (assignmentId: string) => {
-  const { data: assignment, error } = await supabase
+  // Fetch assignment first
+  const { data: assignment, error: assignmentError } = await supabase
     .from('assignments')
     .select('*')
     .eq('id', assignmentId)
     .single();
-    
-  if (error) throw error;
 
-  // Fetch real assignees and comments
-  const [assignees, comments] = await Promise.all([
-    getProfilesForAssignment(assignmentId),
-    getCommentsForAssignment(assignmentId)
+  if (assignmentError) throw assignmentError;
+
+  // Then fetch members and messages separately to avoid circular RLS issues
+  const [membersRes, messagesRes] = await Promise.all([
+    supabase
+      .from('assignment_members')
+      .select('employee_id')
+      .eq('assignment_id', assignmentId),
+    supabase
+      .from('assignment_messages')
+      .select('id, content, created_at, sender_id')
+      .eq('assignment_id', assignmentId)
+      .order('created_at', { ascending: true })
   ]);
 
-  // Polyfill missing fields to prevent white screen
+  // Fetch employee profiles separately
+  const employeeIds = membersRes.data?.map(m => m.employee_id) || [];
+  const senderIds = [...new Set(messagesRes.data?.map(m => m.sender_id) || [])];
+  const allProfileIds = [...new Set([...employeeIds, ...senderIds])];
+
+  let profiles = [];
+  if (allProfileIds.length > 0) {
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name, avatar_url')
+      .in('id', allProfileIds);
+    profiles = profilesData || [];
+  }
+
+  // Build profile map for quick lookup
+  const profileMap = {};
+  profiles.forEach(p => {
+    profileMap[p.id] = p;
+  });
+
+  // Transform assignees
+  const assignees = employeeIds.map(id => profileMap[id]).filter(Boolean);
+
+  // Transform comments with sender info
+  const comments = (messagesRes.data || []).map(msg => ({
+    ...msg,
+    sender: profileMap[msg.sender_id] || null
+  }));
+
   const fullAssignment = {
     ...assignment,
     description: assignment.instructions,
