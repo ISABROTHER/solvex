@@ -14,7 +14,8 @@ import {
   FileText,
   Clock,
   AlertCircle,
-  AlertTriangle
+  AlertTriangle,
+  Calendar, // Added Calendar for Due Date InfoRow
 } from 'lucide-react';
 
 // Helper to format date
@@ -84,70 +85,91 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
     // Show full details
     return (
       <>
-        {/* Themed Header */}
-        <div className="flex-shrink-0 p-6 border-b bg-gray-50">
-          <div className="flex items-center justify-between">
+        {/* Themed Header & Metadata Group */}
+        <div className="flex-shrink-0 p-6 border-b bg-white">
+          
+          <h3 className="text-3xl font-extrabold text-gray-900">{assignment.title}</h3>
+
+          {/* Consolidated Metadata */}
+          <div className="flex items-center gap-4 mt-2">
             {/* Status Badge */}
             <span className={`flex items-center text-xs font-bold gap-1.5 px-3 py-1.5 rounded-full ${statusProps.bg} ${statusProps.color}`}>
               <statusProps.icon size={16} /> {statusProps.label}
             </span>
-             {/* Due Date */}
-            <p className="text-sm font-medium text-gray-500">
+            
+            {/* Due Date */}
+            <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
+                <Calendar size={14} className='text-gray-400' />
                 Due: <span className="font-bold text-[#FF5722]">{formatDate(assignment.due_date)}</span>
             </p>
-          </div>
 
-          <h3 className="text-3xl font-extrabold text-gray-900 mt-3">{assignment.title}</h3>
-          <p className="text-sm text-gray-600 mt-1">Category: <span className="font-medium text-gray-700">{assignment.category}</span></p>
+            {/* Category */}
+            <p className="text-sm font-medium text-gray-600 hidden sm:block">
+                Category: <span className="font-medium text-gray-700">{assignment.category}</span>
+            </p>
+          </div>
         </div>
         
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50">
           
-          {/* Status Updater Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <label htmlFor="status-select" className="text-sm font-bold text-gray-700 block mb-2">Change Status</label>
-            <div className="flex items-center gap-4">
-                <select
-                    id="status-select"
-                    value={assignment.status}
-                    onChange={(e) => onUpdateStatus(assignment.id, e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring focus:ring-[#FF5722]/50"
-                >
-                <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
-                <option value="pending_review">Pending Review</option>
-                <option value="completed">Completed</option>
-                {/* Keep Overdue visible if it's the current status, but not selectable if active */}
-                {assignment.status === 'overdue' && <option value="overdue">Overdue</option>}
-                </select>
-                <button
-                    onClick={() => onUpdateStatus(assignment.id, assignment.status === 'completed' ? 'pending_review' : 'completed')}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md"
-                >
-                    <CheckCircle size={18} /> Mark Done
-                </button>
-            </div>
-            {assignment.status === 'pending_review' && (
-              <p className="text-xs text-purple-600 mt-2">The task is awaiting final approval from the admin.</p>
-            )}
+          {/* --- 1. Primary Action Group (Status & Deliverables) --- */}
+          <div className="space-y-4">
+              {/* Status Updater Card */}
+              <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><Clock size={18} className="text-[#FF5722]" /> Update Progress</h4>
+                <label htmlFor="status-select" className="text-sm font-semibold text-gray-700 block mb-2">Change Status</label>
+                <div className="flex items-center gap-4">
+                    <select
+                        id="status-select"
+                        value={assignment.status}
+                        onChange={(e) => onUpdateStatus(assignment.id, e.target.value)}
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring focus:ring-[#FF5722]/50"
+                    >
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="pending_review">Pending Review</option>
+                    <option value="completed">Completed</option>
+                    {assignment.status === 'overdue' && <option value="overdue">Overdue</option>}
+                    </select>
+                    <button
+                        onClick={() => onUpdateStatus(assignment.id, assignment.status === 'completed' ? 'pending_review' : 'completed')}
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                    >
+                        <CheckCircle size={18} /> Mark Done
+                    </button>
+                </div>
+                {assignment.status === 'pending_review' && (
+                  <p className="text-xs text-purple-600 mt-2">The task is awaiting final approval from the admin.</p>
+                )}
+              </div>
+              
+              {/* Deliverables (Your Uploads) Card */}
+              <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><UploadCloud size={18} className="text-[#FF5722]" /> Submit Deliverables</h4>
+                <div className="mt-2 p-6 border-2 border-dashed border-gray-300 rounded-xl text-center bg-gray-50">
+                  <UploadCloud size={32} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-sm text-gray-600">Drag and drop files here, or <span className="text-[#FF5722] font-semibold cursor-pointer">browse</span>.</p>
+                  <p className="text-xs text-gray-500 mt-1">File upload not implemented yet.</p>
+                </div>
+              </div>
           </div>
           
-          {/* Description Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-2"><AlignLeft size={18} className="text-[#FF5722]" /> Assignment Description</h4>
-            <div className="text-sm text-gray-700 mt-2 p-3 bg-white rounded-lg whitespace-pre-wrap border border-gray-200">
+          {/* --- 2. Description Card --- */}
+          <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><AlignLeft size={18} className="text-[#FF5722]" /> Assignment Description</h4>
+            <div className="text-sm text-gray-700 mt-2 p-3 bg-gray-50 rounded-lg whitespace-pre-wrap border border-gray-100">
                 {assignment.description}
             </div>
           </div>
           
-          {/* Attachments from Admin Card */}
+          {/* --- 3. Attachments from Admin Card --- */}
           {assignment.attachments?.length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-              <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-3"><Paperclip size={18} className="text-[#FF5722]" /> Admin Attachments</h4>
+            <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+              <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><Paperclip size={18} className="text-[#FF5722]" /> Admin Attachments (Reference Files)</h4>
               <div className="space-y-2">
                 {assignment.attachments.map(file => (
-                  <a key={file.file_name} href={file.file_url} target="_blank" rel="noopener noreferrer" className="p-3 bg-white rounded-lg flex items-center gap-3 text-sm text-blue-600 hover:bg-blue-50 transition-colors shadow-sm border border-gray-200">
+                  <a key={file.file_name} href={file.file_url} target="_blank" rel="noopener noreferrer" className="p-3 bg-gray-50 rounded-lg flex items-center gap-3 text-sm text-blue-600 hover:bg-blue-100 transition-colors shadow-sm border border-gray-200">
                     <FileText size={18} className="text-blue-500 flex-shrink-0" /> 
                     <span className="truncate font-medium">{file.file_name}</span>
                   </a>
@@ -155,20 +177,10 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
               </div>
             </div>
           )}
-          
-          {/* Deliverables (Your Uploads) Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-3"><UploadCloud size={18} className="text-[#FF5722]" /> Submit Deliverables</h4>
-            <div className="mt-2 p-6 border-2 border-dashed border-gray-300 rounded-xl text-center bg-white">
-              <UploadCloud size={32} className="mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">Drag and drop files here, or <span className="text-[#FF5722] font-semibold cursor-pointer">browse</span>.</p>
-              <p className="text-xs text-gray-500 mt-1">File upload not implemented yet.</p>
-            </div>
-          </div>
 
-          {/* Comments/Activity Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-4"><List size={18} className="text-[#FF5722]" /> Activity Feed</h4>
+          {/* --- 4. Comments/Activity Card --- */}
+          <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-4"><List size={18} className="text-[#FF5722]" /> Activity Feed</h4>
             <div className="space-y-4">
               
               {/* Comment List */}
@@ -176,7 +188,7 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
                 <p className="text-sm text-gray-500 text-center py-4">No comments yet. Start the conversation!</p>
               ) : (
                 assignment.comments.slice().reverse().map(comment => (
-                  <div key={comment.id} className="flex items-start gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
+                  <div key={comment.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl shadow-sm border border-gray-100">
                     <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
                       <User size={16} className="text-gray-500" />
                     </span>
@@ -191,7 +203,7 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
                 ))
               )}
 
-              {/* New Comment Form (Moved to the bottom for context) */}
+              {/* New Comment Form (Cleaned up) */}
               <div className="pt-4 border-t border-gray-200">
                 <div className="flex items-end gap-3">
                     <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
