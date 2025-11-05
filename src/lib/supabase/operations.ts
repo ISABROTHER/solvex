@@ -1,7 +1,34 @@
-//  src/lib/supabase/operations.ts
+// src/lib/supabase/operations.ts
 // @ts-nocheck
 import { supabase } from './client';
 import type { Database } from './database.types';
+
+// --- START: NEW EFFICIENT FUNCTION ---
+
+/**
+ * Fetches all essential data for the employee dashboard in one go.
+ */
+export const getEmployeeDashboardData = async (userId: string) => {
+  // We fetch the profile first, then concurrently fetch assignments and documents
+  const [profileRes, assignmentsRes, documentsRes] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', userId).single(),
+    getAssignmentsForEmployee(userId),
+    getEmployeeDocuments(userId)
+  ]);
+
+  if (profileRes.error) throw profileRes.error;
+  if (assignmentsRes.error) throw assignmentsRes.error;
+  if (documentsRes.error) throw documentsRes.error;
+
+  return {
+    profile: profileRes.data,
+    assignments: assignmentsRes.data,
+    documents: documentsRes.data,
+  };
+};
+
+// --- END: NEW EFFICIENT FUNCTION ---
+
 
 // --- Type for Access Requests (ensure columns match your SQL) ---
 export type AccessRequest = Database['public']['Tables']['access_requests']['Row'];
@@ -120,52 +147,90 @@ export const onAccessRequestsChange = (callback: (payload: any) => void) => {
 
 // --- START: NEW ASSIGNMENT FUNCTIONS ---
 
-// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE (OPTIMIZED - list view only)
-export const getAssignmentsForEmployee = async (employeeId: string) => {
+// Helper to get full profile data for assignees
+const getProfilesForAssignment = async (assignmentId: string) => {
   const { data, error } = await supabase
     .from('assignment_members')
-    .select('assignment:assignments!inner(id, title, status, due_date, created_at)')
-    .eq('employee_id', employeeId)
-    .order('assignment(due_date)', { ascending: true });
-
-  if (error) return { data: [], error };
-  if (!data) return { data: [], error: null };
-
-  // Return minimal data for list view - no extra queries needed
-  const assignments = data.map(item => ({
-    id: item.assignment.id,
-    title: item.assignment.title,
-    status: item.assignment.status,
-    due_date: item.assignment.due_date,
-    created_at: item.assignment.created_at,
-  }));
-
-  return { data: assignments, error: null };
+    .select('profile:profiles!inner(id, first_name, last_name, avatar_url)')
+    .eq('assignment_id', assignmentId);
+  if (error) return [];
+  return data.map(item => item.profile);
 };
 
-// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (optimized with single query)
-export const getFullAssignmentDetails = async (assignmentId: string) => {
-  // Single query with all joined data
-  const { data: assignment, error: assignmentError } = await supabase
-    .from('assignments')
-    .select('*')
-    .eq('id', assignmentId)
-    .single();
-
-  if (assignmentError) return { data: null, error: assignmentError };
-
-  // Fetch comments with profiles in one query
-  const { data: messages, error: messagesError } = await supabase
+// Helper to get comments for an assignment
+const getCommentsForAssignment = async (assignmentId: string) => {
+   const { data, error } = await supabase
     .from('assignment_messages')
     .select(`
-      id,
-      content,
+      id, 
+      content, 
       created_at,
       profile:profiles!sender_id(first_name, last_name, avatar_url)
     `)
     .eq('assignment_id', assignmentId)
     .order('created_at', { ascending: true });
+  if (error) return [];
+  return data;
+}
 
+// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE
+export const getAssignmentsForEmployee = async (employeeId: string) => {
+  const { data, error } = await supabase
+    .from('assignment_members')
+    .select('assignment:assignments!inner(*)')
+    .eq('employee_id', employeeId);
+
+  if (error) throw error;
+  if (!data) return { data: [], error: null };
+
+  // This is the "polyfill" to fix the white screen.
+  // We fetch real data, then add the empty fields the component expects.
+  const fullAssignments = await Promise.all(
+    data.map(async (item) => {
+      const assignment = item.assignment;
+      // Fetch real assignees and comments
+      const [assignees, comments] = await Promise.all([
+        getProfilesForAssignment(assignment.id),
+        getCommentsForAssignment(assignment.id)
+      ]);
+      
+      return {
+        ...assignment,
+        description: assignment.instructions, // Map instructions to description
+        // Add all the missing fields that the UI component expects
+        milestones: [],
+        attachments: [],
+        deliverables: [],
+        supervisor: null,
+        category: 'Admin Task',
+        priority: 'medium',
+        // Add the real data we fetched
+        assignees: assignees,
+        comments: comments,
+      };
+    })
+  );
+  
+  return { data: fullAssignments, error: null };
+};
+
+// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (used when clicking)
+export const getFullAssignmentDetails = async (assignmentId: string) => {
+  const { data: assignment, error } = await supabase
+    .from('assignments')
+    .select('*')
+    .eq('id', assignmentId)
+    .single();
+    
+  if (error) throw error;
+
+  // Fetch real assignees and comments
+  const [assignees, comments] = await Promise.all([
+    getProfilesForAssignment(assignmentId),
+    getCommentsForAssignment(assignmentId)
+  ]);
+
+  // Polyfill missing fields to prevent white screen
   const fullAssignment = {
     ...assignment,
     description: assignment.instructions,
@@ -175,7 +240,8 @@ export const getFullAssignmentDetails = async (assignmentId: string) => {
     supervisor: null,
     category: 'Admin Task',
     priority: 'medium',
-    comments: messages || [],
+    assignees: assignees,
+    comments: comments,
   };
 
   return { data: fullAssignment, error: null };
