@@ -20,12 +20,7 @@ import {
 import { Profile } from '../tabs/EmployeesTab'; // We'll get this from EmployeesTab
 
 // --- Mock Data for Assignees ---
-// In the real app, we'll fetch this from your 'profiles' table
-const MOCK_EMPLOYEES: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url' | 'position'>[] = [
-  { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null, position: 'Designer' },
-  { id: '2', first_name: 'Jane', last_name: 'Smith', avatar_url: null, position: 'Content Writer' },
-  { id: '3', first_name: 'Mike', last_name: 'Brown', avatar_url: null, position: 'PR Specialist' },
-];
+// REMOVED MOCK_EMPLOYEES
 
 // --- Types (from your spec) ---
 const CATEGORIES = ['Design', 'Content', 'Public Relations', 'Innovation Lab', 'Production', 'Client Project'];
@@ -37,6 +32,7 @@ interface CreateAssignmentModalProps {
   onClose: () => void;
   onSave: (assignmentData: any) => Promise<void>;
   isSaving: boolean;
+  employees: Profile[]; // <-- ADD THIS PROP to receive the real employee list
 }
 
 const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
@@ -44,6 +40,7 @@ const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
   onClose,
   onSave,
   isSaving,
+  employees, // <-- DESTRUCTURE THE PROP
 }) => {
   const [error, setError] = useState<string | null>(null);
 
@@ -214,7 +211,8 @@ const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
             <div>
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Users size={16} /> Assignees *</label>
               <div className="mt-2 p-2 border border-gray-300 rounded-lg max-h-40 overflow-y-auto space-y-2">
-                {MOCK_EMPLOYEES.map(emp => (
+                {/* --- USE REAL EMPLOYEES PROP --- */}
+                {employees.map(emp => (
                   <label key={emp.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 cursor-pointer">
                     <input
                       type="checkbox"
@@ -239,7 +237,8 @@ const CreateAssignmentModal: React.FC<CreateAssignmentModalProps> = ({
               <label className="text-sm font-semibold text-gray-700 flex items-center gap-2"><User size={16} /> Supervisor / Project Lead</label>
               <select value={supervisorId || ''} onChange={(e) => setSupervisorId(e.target.value || null)} className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300">
                 <option value="">None</option>
-                {MOCK_EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                {/* --- USE REAL EMPLOYEES PROP --- */}
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
               </select>
             </div>
             
