@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect, ReactNode, useContext } from
 import { supabase } from '../../lib/supabase/client'; 
 import type { Session, User } from '@supabase/supabase-js';
 
-type UserRole = 'client' | 'admin' | null;
+type UserRole = 'client' | 'admin' | 'employee' | null;
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -83,7 +83,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
           const fetchedRole = (profile as { id: string; role: string }).role;
           console.log(`[updateUserState] Role value from profile: '${fetchedRole}'`);
 
-          if (fetchedRole === 'admin' || fetchedRole === 'client') {
+          if (fetchedRole === 'admin' || fetchedRole === 'client' || fetchedRole === 'employee') {
             userRole = fetchedRole;
             console.log(`[updateUserState] Role successfully verified as: ${userRole}`);
             setError(null);
