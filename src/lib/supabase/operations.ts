@@ -142,6 +142,12 @@ export const restoreService = async (id: string) => {
   return supabase.from('services').update({ deleted_at: null }).eq('id', id).select().single();
 };
 
+// --- ADD THIS NEW FUNCTION ---
+export const permanentDeleteService = async (id: string) => {
+  return supabase.from('services').delete().eq('id', id);
+};
+// -----------------------------
+
 export const getDeletedServices = async () => {
   return supabase.from('services').select('*').not('deleted_at', 'is', null).order('deleted_at', { ascending: false });
 };
@@ -336,7 +342,8 @@ export const updateJobPosition = async (id: string, updates: Partial<JobPosition
 };
 
 export const deleteJobPosition = async (id: string) => {
-  return supabase.from('job_positions').update({ deleted_at: new Date().toISOString(), is_deleted: true }).eq('id', id).select().single();
+  // --- MODIFICATION: Changed from .update() to .delete() ---
+  return supabase.from('job_positions').delete().eq('id', id);
 };
 
 export const getDeletedTeams = async () => {
