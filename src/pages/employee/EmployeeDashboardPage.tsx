@@ -1,23 +1,27 @@
 // src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
+import { supabase } from '../../lib/supabase/client';
 import {
   createDocumentSignedUrl,
   updateAssignmentStatus,
   postAssignmentComment,
+  getAssignmentsForEmployee,
+  getEmployeeDocuments,
+  getFullAssignmentDetails,
   EmployeeDocument
 } from '../../lib/supabase/operations';
-import { 
-  Loader2, 
-  List, 
-  FileText, 
-  CheckCircle, 
-  Clock, 
-  Send, 
-  Eye, 
-  Download, 
-  AlertCircle, 
+import {
+  Loader2,
+  List,
+  FileText,
+  CheckCircle,
+  Clock,
+  Send,
+  Eye,
+  Download,
+  AlertCircle,
   Inbox,
   User,
   Mail,
@@ -28,12 +32,16 @@ import {
   Hash,
   DollarSign,
   Building,
-  CreditCard
+  CreditCard,
+  Edit2,
+  Upload,
+  FileSignature,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
 
 // --- Helper Functions ---
 const formatDate = (dateString: string | null) => {
