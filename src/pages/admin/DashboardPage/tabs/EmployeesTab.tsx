@@ -711,7 +711,8 @@ const EmployeesTab: React.FC = () => {
                           disabled={isUploadingDoc || !newDocFile || !newDocName}
                           className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
-                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={1L} />}
+                          {isUploadingDoc ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />} 
+                          {/* --- THIS WAS THE FIX: 1L -> 16 --- */}
                           {isUploadingDoc ? 'Uploading...' : 'Upload Document'}
                         </button>
                       </motion.form>
