@@ -45,32 +45,30 @@ export const updateAccessRequestStatus = async (id: string, newStatus: 'approved
 
 /**
  * Invites a user via Supabase Auth Admin API.
- * ⚠️ SECURITY WARNING: Avoid calling admin functions directly from the client-side
- * in production. Use a Supabase Edge Function for security. This implementation
- * assumes the risks are understood or it's for development/internal tools.
+ * ⚠️ THIS CANNOT BE CALLED FROM THE CLIENT-SIDE BROWSER.
+ * This function must be moved to a Supabase Edge Function.
+ * The 'supabase.auth.admin' object is not available on the client.
  */
 export const inviteUserByEmail = async (email: string) => {
    if (!supabase.auth.admin) {
-       console.error("supabase.auth.admin is not available. Check Supabase client setup or move logic to Edge Function.");
-       // Return an error structure consistent with Supabase client errors
+       console.error("supabase.auth.admin is not available. Move this to an Edge Function.");
        return { data: null, error: { message: "Admin Auth API not available on client." } };
    }
+   
+   // --- THIS CODE WILL FAIL IF RUN FROM THE BROWSER ---
+   // --- IT MUST BE IN AN EDGE FUNCTION ---
    try {
-     // Use the admin API to invite
+     console.warn("Attempting to call admin function from client. This should be an Edge Function.");
      const { data, error } = await supabase.auth.admin.inviteUserByEmail(email);
 
-     // Handle specific "user already exists" error gracefully
      if (error && error.message?.includes('already registered')) {
-        console.warn(`User ${email} already registered. Proceeding without sending new invite.`);
-        // Return a specific indicator or fetch the existing user
+        console.warn(`User ${email} already registered.`);
         const { data: existingUserData, error: getUserError } = await supabase.auth.admin.listUsers({ email: email });
         if (getUserError || !existingUserData?.users?.length) {
-            console.error("Failed to retrieve existing user after invite conflict:", getUserError);
             return { data: null, error: { message: `User exists but failed to retrieve: ${getUserError?.message}` }};
         }
-        return { data: { user: existingUserData.users[0] }, error: null }; // Return existing user data
+        return { data: { user: existingUserData.users[0] }, error: null }; 
      }
-     // Return regular success or other errors
      return { data, error };
    } catch (err: any) {
       console.error("Caught exception during inviteUserByEmail:", err);
