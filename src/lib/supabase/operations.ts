@@ -552,10 +552,9 @@ export const getAllAssignments = async () => {
     .from('assignments')
     .select(`
       *,
-      created_by_profile:profiles!assignments_created_by_fkey(id, first_name, last_name, email),
       assignment_members(
         id,
-        employee:profiles!assignment_members_employee_id_fkey(id, first_name, last_name, email, position)
+        employee_id
       )
     `)
     .order('created_at', { ascending: false });
@@ -569,10 +568,9 @@ export const getEmployeeAssignments = async (employeeId: string) => {
     .from('assignments')
     .select(`
       *,
-      created_by_profile:profiles!assignments_created_by_fkey(id, first_name, last_name, email),
       assignment_members!inner(
         id,
-        employee:profiles!assignment_members_employee_id_fkey(id, first_name, last_name, email, position)
+        employee_id
       )
     `)
     .eq('assignment_members.employee_id', employeeId)
@@ -639,10 +637,7 @@ export const deleteAssignment = async (id: string) => {
 export const getAssignmentMessages = async (assignmentId: string) => {
   return supabase
     .from('assignment_messages')
-    .select(`
-      *,
-      sender:profiles!assignment_messages_sender_id_fkey(id, first_name, last_name, email, avatar_url)
-    `)
+    .select('*')
     .eq('assignment_id', assignmentId)
     .order('created_at', { ascending: true });
 };
@@ -664,10 +659,7 @@ export const sendAssignmentMessage = async (
       sender_id: user.user.id,
       content
     })
-    .select(`
-      *,
-      sender:profiles!assignment_messages_sender_id_fkey(id, first_name, last_name, email, avatar_url)
-    `)
+    .select()
     .single();
 };
 
