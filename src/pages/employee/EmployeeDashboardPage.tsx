@@ -37,7 +37,8 @@ import {
   LogOut,
   Home,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  ChevronDown // <-- Ensure ChevronDown is imported
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -78,7 +79,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
     last_name: profile?.last_name || '',
-    email: profile?.email || '', // <-- ADDED EMAIL TO FORM DATA
+    email: profile?.email || '', // <-- Added Email
     phone: profile?.phone || '',
     home_address: profile?.home_address || '',
   });
@@ -90,7 +91,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
     setFormData({
         first_name: profile?.first_name || '',
         last_name: profile?.last_name || '',
-        email: profile?.email || '', // <-- ADDED EMAIL
+        email: profile?.email || '',
         phone: profile?.phone || '',
         home_address: profile?.home_address || '',
     });
@@ -248,6 +249,9 @@ const EmployeeDashboardPage: React.FC = () => {
   const [assignmentPage, setAssignmentPage] = useState(0); 
   const ASSIGNMENTS_PER_PAGE = 7;
   
+  // NEW STATE for collapsing the Employment Details card on mobile
+  const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
+  
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -275,7 +279,7 @@ const EmployeeDashboardPage: React.FC = () => {
         
         // --- UPDATED PAYLOAD to include editable fields (email, phone, home_address) ---
         const updateData = {
-            email: formData.email, // <-- ADDED
+            email: formData.email, 
             phone: formData.phone,
             home_address: formData.home_address,
             avatar_url: avatarUrl 
@@ -669,7 +673,7 @@ const EmployeeDashboardPage: React.FC = () => {
             {/* Right Column: Profile Details (lg:col-span-1) */}
             <aside className="lg:col-span-1 space-y-6">
               
-              {/* Profile Card */}
+              {/* Profile Card (Always visible) */}
               <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-semibold text-gray-800">My Info</h2>
@@ -685,18 +689,56 @@ const EmployeeDashboardPage: React.FC = () => {
                 </div>
               </div>
               
-               {/* Employment Card (Read-only sensitive data) */}
-              <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4">Employment Details</h2>
-                <div className="space-y-2">
-                  <InfoRow icon={Briefcase} label="Position" value={profile.position} />
-                  <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
-                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
-                  <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
-                  <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
-                  <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
-                </div>
+              {/* Employment Card (Collapsible on Mobile, Static on LG+) */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                  
+                  {/* Header: Always visible, acts as toggle bar on mobile (<lg) */}
+                  <button
+                      onClick={() => setIsEmploymentDetailsOpen(!isEmploymentDetailsOpen)}
+                      className="w-full flex justify-between items-center p-6 text-xl font-semibold text-gray-800"
+                      aria-expanded={isEmploymentDetailsOpen}
+                      aria-controls="employment-details-content"
+                  >
+                      <h2 className="flex items-center gap-2">Employment Details</h2>
+                      
+                      {/* Chevron icon only visible on screens smaller than LG */}
+                      <motion.div
+                          className="lg:hidden"
+                          initial={false}
+                          animate={{ rotate: isEmploymentDetailsOpen ? 180 : 0 }}
+                          transition={{ duration: 0.3 }}
+                      >
+                          <ChevronDown size={24} className="text-gray-500" />
+                      </motion.div>
+                  </button>
+
+                  {/* Collapsible Content */}
+                  <AnimatePresence initial={false}>
+                      {isEmploymentDetailsOpen || (
+                          typeof window !== 'undefined' && window.innerWidth >= 1024
+                      ) ? (
+                          <motion.div
+                              key="employment-details-content"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                              className="overflow-hidden"
+                              id="employment-details-content"
+                          >
+                              <div className="p-6 pt-0 space-y-2">
+                                  <InfoRow icon={Briefcase} label="Position" value={profile.position} />
+                                  <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
+                                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
+                                  <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
+                                  <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
+                                  <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
+                              </div>
+                          </motion.div>
+                      ) : null}
+                  </AnimatePresence>
               </div>
+              
             </aside>
             
           </div>
