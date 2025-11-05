@@ -42,65 +42,36 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
-import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
 
-// --- ADD REAL FUNCTIONS ---
+// --- 1. IMPORT NEW FUNCTIONS ---
+import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
 import {
   getAssignmentsForEmployee,
   getFullAssignmentDetails,
   createAssignment,
   updateAssignmentStatus,
-  postAssignmentComment
+  postAssignmentComment,
+  getEmployeeDocuments,
+  uploadEmployeeDocument,
+  deleteEmployeeDocument,
+  createDocumentSignedUrl,
+  EmployeeDocument, // <-- Import the type
 } from '../../../../lib/supabase/operations';
 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
-type Assignment = {
-  id: string;
-  title: string;
-  description?: string;
-  instructions?: string;
-  status: string;
-  due_date: string | null;
-  created_at?: string;
-  updated_at?: string;
-  start_date?: string;
-  category?: string;
-  priority?: string;
-  milestones?: any[];
-  attachments?: any[];
-  deliverables?: any[];
-  supervisor?: any;
-  assignees?: any[];
-  comments?: any[];
-};
-type EmployeeDocument = {
-  id: string;
-  profile_id: string;
-  document_name: string;
-  storage_url: string;
-  requires_signing: boolean;
-  signed_storage_url: string | null;
-  signed_at: string | null;
-};
-
-// --- MOCK DATA (Only for docs, assignments will be live) ---
-const MOCK_DOCUMENTS: EmployeeDocument[] = [
-  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null },
-  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null },
-];
-// --- END MOCK DATA ---
+// --- 2. REMOVE MOCK DOCUMENTS ---
+// const MOCK_DOCUMENTS: EmployeeDocument[] = [ ... ];
 
 
-// --- 1. ADD THIS HELPER FUNCTION BACK ---
+// --- Helper Function ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
-// --- END OF FIX ---
 
 
 // --- Reusable InfoRow ---
@@ -142,6 +113,7 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
           </button>
         </div>
         <div className="flex-1 p-2">
+           {/* Use Google Docs viewer as a fallback for universal compatibility */}
           <iframe 
             src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
             className="w-full h-full border-0 rounded-b-lg" 
@@ -168,7 +140,7 @@ const EmployeesTab: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- State for Documents ---
+  // --- 3. MAKE DOCUMENT STATE LIVE ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -195,7 +167,8 @@ const EmployeesTab: React.FC = () => {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'employee')
+        // --- FIX: Query for both 'employee' and 'admin' ---
+        .in('role', ['employee', 'admin']) 
         .order('first_name');
       if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
@@ -209,18 +182,15 @@ const EmployeesTab: React.FC = () => {
   
   useEffect(() => {
     fetchData(); 
-    // ... (listeners will be added here later) ...
   }, [fetchData]);
 
   // --- Function to fetch assignments ---
   const fetchAssignments = async (profileId: string) => {
     setLoadingAssignments(true);
     try {
-      // --- REPLACE MOCK WITH REAL FUNCTION ---
       const { data, error } = await getAssignmentsForEmployee(profileId);
       if (error) throw error;
       setAssignments(data || []);
-      // --- END REPLACEMENT ---
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
     } finally {
@@ -228,12 +198,13 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Function to fetch documents ---
+  // --- 4. MAKE FETCH DOCUMENTS LIVE ---
   const fetchDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
-          await new Promise(res => setTimeout(res, 500)); 
-          setDocuments(MOCK_DOCUMENTS); // Still mocked for now
+          const { data, error } = await getEmployeeDocuments(profileId);
+          if (error) throw error;
+          setDocuments(data || []);
       } catch (err: any) {
           addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
       } finally {
@@ -250,6 +221,13 @@ const EmployeesTab: React.FC = () => {
           setDocuments([]); 
           setAssignments([]);
       }
+      // Reset upload form
+      setShowDocUpload(false);
+      setNewDocName('');
+      setNewDocFile(null);
+      setNewDocRequiresSigning(false);
+      setDocUploadError(null);
+      
   }, [selectedEmployee]);
 
   // Filter employees
@@ -274,49 +252,124 @@ const EmployeesTab: React.FC = () => {
     setEditingEmployee({}); 
     setIsModalOpen(true);
   };
+  
+  // --- 5. MAKE EMPLOYEE SAVE/CREATE LIVE ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
-    // ... (Mocked logic) ...
     setIsSavingProfile(true);
-    await new Promise(res => setTimeout(res, 1000));
-    addToast({ type: 'success', title: 'Employee Saved (Mock)' });
-    setIsSavingProfile(false);
-    setIsModalOpen(false);
-    setEditingEmployee(null);
-    fetchData(); // Refetch employee list
+    const isNewUser = !formData.id;
+    
+    try {
+      if (isNewUser) {
+        // --- Create New Employee ---
+        if (!formData.email || !password) {
+           addToast({ type: 'error', title: 'Error', message: 'Email and password are required for new employees.'});
+           setIsSavingProfile(false);
+           return;
+        }
+        
+        // 1. Invite the user (creates auth.user)
+        const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(formData.email, {
+          data: {
+             role: 'employee', // Assign role on invite
+          }
+        });
+        if (inviteError && !inviteError.message.includes('already registered')) {
+            throw inviteError;
+        }
+        
+        // Handle "already registered" case
+        let userId = inviteData?.user?.id;
+        if (inviteError && inviteError.message.includes('already registered')) {
+             addToast({ type: 'warning', title: 'User Exists', message: 'User already has an auth account. Updating their profile.' });
+             const { data: existingUser } = await supabase.from('profiles').select('id').eq('email', formData.email).single();
+             if (!existingUser) throw new Error('User exists in auth but not in profiles. Please check database.');
+             userId = existingUser.id;
+        }
+        
+        if (!userId) throw new Error('Could not get user ID after invite.');
+        
+        // 2. Create their profile
+        const profileData = {
+          ...formData,
+          id: userId, // Link profile to auth user
+          role: 'employee',
+        };
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert(profileData);
+          
+        if (profileError) throw profileError;
+        addToast({ type: 'success', title: 'Employee Created!', message: 'Invitation email sent.' });
+
+      } else {
+        // --- Update Existing Employee ---
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update(formData)
+          .eq('id', formData.id);
+          
+        if (updateError) throw updateError;
+        addToast({ type: 'success', title: 'Employee Updated!' });
+      }
+      
+      setIsModalOpen(false);
+      setEditingEmployee(null);
+      fetchData(); // Refetch employee list
+      
+    } catch (err: any) {
+      console.error("Save employee error:", err);
+      addToast({ type: 'error', title: 'Save Failed', message: err.message });
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
   
   // --- Document Handlers ---
   const handleViewPdf = (url: string, title: string) => {
+    // For admin, just use the public URL
     setViewingPdf(url);
     setViewingPdfTitle(title);
+    
+    // --- This is how you would use a signed URL (for employee-side) ---
+    /*
+    setViewingPdf(null); // Show loading
+    setViewingPdfTitle(title);
+    
+    createDocumentSignedUrl(doc)
+      .then(url => setViewingPdf(url))
+      .catch(err => {
+         addToast({ type: 'error', title: 'Could not load document' });
+         setViewingPdfTitle('');
+      });
+    */
   };
   
+  // --- 6. MAKE DOCUMENT UPLOAD LIVE ---
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDocFile || !newDocName.trim()) {
+    if (!newDocFile || !newDocName.trim() || !selectedEmployee) {
         setDocUploadError("Document name and file are required.");
         return;
     }
     setIsUploadingDoc(true);
     setDocUploadError(null);
     try {
-      // --- MOCKED SUCCESS ---
-      await new Promise(res => setTimeout(res, 1000));
-      const newMockDoc: EmployeeDocument = {
-        id: `doc_${Date.now()}`,
-        document_name: newDocName.trim(),
-        storage_url: '/mock-new-doc.pdf',
-        requires_signing: newDocRequiresSigning,
-        signed_storage_url: null,
-        signed_at: null,
-      };
-      setDocuments(prev => [newMockDoc, ...prev]);
-      // --- END MOCKED ---
+      const newDoc = await uploadEmployeeDocument(
+        selectedEmployee.id,
+        newDocName.trim(),
+        newDocRequiresSigning,
+        newDocFile
+      );
+      
+      setDocuments(prev => [newDoc, ...prev]);
       addToast({ type: 'success', title: 'Document Uploaded!' });
+      
+      // Reset form
       setNewDocName('');
       setNewDocFile(null);
       setNewDocRequiresSigning(false);
       setShowDocUpload(false);
+      
     } catch (err: any) {
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
@@ -325,13 +378,12 @@ const EmployeesTab: React.FC = () => {
     }
   };
 
+  // --- 7. MAKE DOCUMENT DELETE LIVE ---
   const handleDeleteDocument = async (doc: EmployeeDocument) => {
     if (!window.confirm(`Are you sure you want to delete "${doc.document_name}"?`)) return;
     try {
-      // --- MOCKED SUCCESS ---
-      await new Promise(res => setTimeout(res, 500));
+      await deleteEmployeeDocument(doc);
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
-      // --- END MOCKED ---
       addToast({ type: 'success', title: 'Document Deleted' });
     } catch (err: any) {
       addToast({ type: 'error', title: 'Delete Failed', message: err.message });
@@ -343,7 +395,6 @@ const EmployeesTab: React.FC = () => {
     setIsCreateAssignModalOpen(true);
   };
   
-  // --- MAKE THIS FUNCTION REAL ---
   const handleSaveAssignment = async (data: any) => {
     if (!user) return;
     setIsSavingAssignment(true);
@@ -361,7 +412,6 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- MAKE THESE FUNCTIONS REAL ---
   const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedAssignment) return;
     
@@ -391,11 +441,11 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'error', title: 'Comment Failed to Send' });
     } else {
       addToast({ type: 'success', title: 'Comment Posted!' });
-      // Real-time listener should handle the update
+      // Refetch details to show new comment
+      handleAssignmentClick(selectedAssignment);
     }
   };
 
-  // --- REFRESH FULL DETAILS ON CLICK ---
   const handleAssignmentClick = async (assignment: Assignment) => {
     setLoadingAssignments(true);
     setSelectedAssignment(null); // Clear first
@@ -499,7 +549,6 @@ const EmployeesTab: React.FC = () => {
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
                   <InfoRow icon={Phone} label="Phone" value={selectedEmployee.phone} />
                   <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
-                  {/* This line was causing the crash */}
                   <InfoRow icon={Calendar} label="Birth Date" value={formatDate(selectedEmployee.birth_date)} />
                 </div>
               </Card>
@@ -508,7 +557,6 @@ const EmployeesTab: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
                   <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
-                  {/* This line was also causing the crash */}
                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
                   <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
                   <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary ? `GHS ${selectedEmployee.salary}` : 'N/A'} />
@@ -517,7 +565,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* --- 2. RESTORED DOCUMENTS CARD --- */}
+              {/* --- 8. DOCUMENTS CARD (NOW LIVE) --- */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -533,7 +581,7 @@ const EmployeesTab: React.FC = () => {
                         const isViewOnly = !doc.requires_signing;
 
                         return (
-                          <div key={doc.id} className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                          <div key={doc.id} className={`p-3 rounded-lg bg-gray-50 border ${isPending ? 'border-yellow-300' : 'border-gray-200'}`}>
                             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                               {/* Left Side: Name and Status */}
                               <div className="min-w-0">
@@ -658,7 +706,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- NEW ASSIGNMENTS CARD --- */}
+              {/* --- ASSIGNMENTS CARD (Live) --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -694,7 +742,7 @@ const EmployeesTab: React.FC = () => {
                           assignment.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 
                           assignment.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
                         }`}>
-                          {assignment.status}
+                          {assignment.status.replace("_", " ")}
                         </span>
                       </button>
                     ))}
