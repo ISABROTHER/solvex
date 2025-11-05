@@ -41,29 +41,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
+// 1. IMPORT THE NEW COMPONENTS
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
-// Assignment types (simplified for employee tab)
-type Assignment = {
-  id: string;
-  title: string;
-  category: string;
-  status: string;
-  due_date: string;
-  assignees: Array<{ id: string; first_name: string | null; last_name: string | null; avatar_url: string | null }>;
-}; 
-
-// --- TYPE DEFINITIONS ---
-export type Profile = Database['public']['Tables']['profiles']['Row'];
-type EmployeeDocument = {
-  id: string;
-  profile_id: string;
-  document_name: string;
-  storage_url: string;
-  requires_signing: boolean;
-  signed_storage_url: string | null;
-  signed_at: string | null;
-};
+// 2. IMPORT FROM THE NEW SHARED TYPES FILE
+import { Profile, Assignment, EmployeeDocument, Status } from '../shared/types';
 
 // --- MOCK DATA (FRONTEND-FIRST) ---
 const MOCK_USER_1: Pick<Profile, 'id' | 'first_name' | 'last_name' | 'avatar_url'> = { id: '1', first_name: 'John', last_name: 'Doe', avatar_url: null };
@@ -75,6 +57,8 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     status: 'In Progress',
     due_date: '2025-11-15',
     assignees: [MOCK_USER_1],
+    description: 'Full deck', attachments: [], priority: 'medium', type: 'team',
+    start_date: null, milestones: [], supervisor: null, comments: [], deliverables: [],
   },
   {
     id: 'assign_3',
@@ -83,23 +67,24 @@ const MOCK_ASSIGNMENTS: Assignment[] = [
     status: 'Overdue',
     due_date: '2025-11-03',
     assignees: [MOCK_USER_1],
+    description: 'Final edit', attachments: [], priority: 'high', type: 'individual',
+    start_date: null, milestones: [], supervisor: null, comments: [], deliverables: [],
   },
 ];
 const MOCK_DOCUMENTS: EmployeeDocument[] = [
-  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null },
-  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null },
+  { id: 'doc_1', document_name: 'Employment Contract', storage_url: '/mock-contract.pdf', requires_signing: true, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
+  { id: 'doc_3', document_name: 'October 2025 Payslip', storage_url: '/mock-payslip.pdf', requires_signing: false, signed_storage_url: null, signed_at: null, profile_id: '1', signed_storage_path: null },
 ];
 // --- END MOCK DATA ---
 
 
-// --- 1. ADD THIS HELPER FUNCTION BACK ---
+// --- HELPER FUNCTION (This was the cause of the blank screen) ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 };
-// --- END OF FIX ---
 
 
 // --- Reusable InfoRow ---
@@ -181,7 +166,7 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- State for Assignments ---
+  // --- 3. STATE FOR NEW ASSIGNMENTS ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
@@ -215,8 +200,17 @@ const EmployeesTab: React.FC = () => {
   const fetchAssignments = async (profileId: string) => {
     setLoadingAssignments(true);
     try {
-      await new Promise(res => setTimeout(res, 500)); // Simulate load
+      // MOCKED:
+      await new Promise(res => setTimeout(res, 500)); 
       setAssignments(MOCK_ASSIGNMENTS);
+      //
+      // REAL QUERY WILL BE:
+      // const { data, error } = await supabase
+      //   .from('assignment_assignees')
+      //   .select('assignment:assignments!inner(*)')
+      //   .eq('profile_id', profileId);
+      // if (error) throw error;
+      // setAssignments(data.map(item => item.assignment));
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
     } finally {
@@ -228,8 +222,17 @@ const EmployeesTab: React.FC = () => {
   const fetchDocuments = async (profileId: string) => {
       setLoadingDocs(true);
       try {
+          // MOCKED:
           await new Promise(res => setTimeout(res, 500)); 
           setDocuments(MOCK_DOCUMENTS);
+          //
+          // REAL QUERY WILL BE:
+          // const { data, error } = await supabase
+          //   .from('documents') // This table name needs to match your SQL
+          //   .select('*')
+          //   .eq('profile_id', profileId);
+          // if (error) throw error;
+          // setDocuments(data);
       } catch (err: any) {
           addToast({ type: 'error', title: 'Error Fetching Documents', message: err.message });
       } finally {
@@ -304,6 +307,8 @@ const EmployeesTab: React.FC = () => {
         requires_signing: newDocRequiresSigning,
         signed_storage_url: null,
         signed_at: null,
+        profile_id: selectedEmployee!.id,
+        signed_storage_path: null
       };
       setDocuments(prev => [newMockDoc, ...prev]);
       // --- END MOCKED ---
@@ -350,9 +355,9 @@ const EmployeesTab: React.FC = () => {
   // --- Assignment Panel Handlers (Mocked) ---
   const handleUpdateStatus = (newStatus: string) => {
     if (!selectedAssignment) return;
-    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
+    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus as Status } : null);
     setAssignments(prev =>
-      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
+      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus as Status } : a)
     );
     addToast({ type: 'info', title: 'Status Updated' });
   };
@@ -448,7 +453,6 @@ const EmployeesTab: React.FC = () => {
                   <InfoRow icon={Mail} label="Email" value={selectedEmployee.email} />
                   <InfoRow icon={Phone} label="Phone" value={selectedEmployee.phone} />
                   <InfoRow icon={MapPin} label="Address" value={selectedEmployee.home_address} />
-                  {/* This line was causing the crash */}
                   <InfoRow icon={Calendar} label="Birth Date" value={formatDate(selectedEmployee.birth_date)} />
                 </div>
               </Card>
@@ -457,7 +461,6 @@ const EmployeesTab: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <InfoRow icon={Briefcase} label="Position" value={selectedEmployee.position} />
                   <InfoRow icon={Hash} label="Employee #" value={selectedEmployee.employee_number} />
-                  {/* This line was also causing the crash */}
                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(selectedEmployee.start_date)} />
                   <InfoRow icon={FileText} label="National ID" value={selectedEmployee.national_id} />
                   <InfoRow icon={DollarSign} label="Salary" value={selectedEmployee.salary ? `GHS ${selectedEmployee.salary}` : 'N/A'} />
@@ -466,7 +469,6 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* --- 2. RESTORED DOCUMENTS CARD --- */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -607,7 +609,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- NEW ASSIGNMENTS CARD --- */}
+              {/* --- 4. REPLACED OLD TASK CARDS WITH NEW ASSIGNMENTS --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
