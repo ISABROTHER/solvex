@@ -3,13 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
-  getAssignmentsForEmployee,
-  getFullAssignmentDetails, // We keep this for realtime refreshes
-  getEmployeeDocuments,
+  // --- 1. REMOVE ALL `get...` FUNCTIONS EXCEPT ACTIONS ---
   createDocumentSignedUrl,
   updateAssignmentStatus,
   postAssignmentComment,
-  EmployeeDocument
+  EmployeeDocument,
+  getFullAssignmentDetails // Keep for optimistic refresh
 } from '../../lib/supabase/operations';
 import { 
   Loader2, 
@@ -51,7 +50,7 @@ const formatSimpleDate = (dateString: string | null) => {
   return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// --- Reusable InfoRow (from Admin dashboard) ---
+// --- Reusable InfoRow ---
 const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
   icon: Icon,
   label,
@@ -103,118 +102,37 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
 
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
-  const { user, profile } = useAuth();
+  // --- 2. GET ALL DATA FROM THE AUTH HOOK ---
+  const { user, profile, assignments, documents, loading, refetchEmployeeData } = useAuth();
   const { addToast } = useToast();
 
-  const [assignments, setAssignments] = useState<any[]>([]);
-  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
-  
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
-
-  // --- Main Data Fetching Function ---
-  const fetchData = async (refreshAssignmentId?: string) => {
-    if (!user) return;
-    
-    // If we're just refreshing a single assignment (e.g., for a new comment)
-    if (refreshAssignmentId) {
-      try {
-        const { data, error } = await getFullAssignmentDetails(refreshAssignmentId);
-        if (error) throw error;
-        // Update the main list
-        setAssignments(prev => prev.map(a => a.id === refreshAssignmentId ? data : a));
-        // Update the open panel
-        if (selectedAssignment?.id === refreshAssignmentId) {
-          setSelectedAssignment(data);
-        }
-      } catch (err) {
-        console.error("Failed to refresh assignment", err);
-      }
-      return;
-    }
-
-    // Standard full load
-    setLoading(true);
-    setError(null);
-    try {
-      const [assignmentResult, documentResult] = await Promise.all([
-        getAssignmentsForEmployee(user.id),
-        getEmployeeDocuments(user.id)
-      ]);
-
-      if (assignmentResult.error) throw assignmentResult.error;
-      if (documentResult.error) throw documentResult.error;
-
-      setAssignments(assignmentResult.data || []);
-      setDocuments(documentResult.data || []);
-
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch data.');
-      addToast({ type: 'error', title: 'Loading Failed', message: err.message });
-    } finally {
-      setLoading(false);
-    }
-  };
   
-  // --- Initial Load and Realtime Setup ---
-  useEffect(() => {
-    if (!user) return;
+  // --- 3. REMOVE ALL DATA FETCHING USEEFFECTS ---
+  // The AuthProvider now handles all data loading and realtime updates.
+  // This page is now "dumb" and just displays state.
 
-    fetchData(); // Initial full load
-    
-    const channel = supabase
-      .channel(`employee_dashboard:${user.id}`)
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
-        () => fetchData() // Full refetch if assignments are added/removed
-      )
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'assignment_messages' },
-        (payload) => {
-          // If a message comes in, refresh just that assignment
-          if (payload.new.assignment_id) {
-             fetchData(payload.new.assignment_id);
-          }
-        }
-      )
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
-         () => fetchData() // Full refetch if documents change
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, addToast]); // Removed selectedAssignment dependency
-
-  // --- *** SPEED FIX *** ---
-  // This is now an instant local state update, not a DB call
   const handleAssignmentClick = (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
       setSelectedAssignment(null); // Toggle off
       return;
     }
-    
-    // Find the assignment we already fetched
     const assignmentToOpen = assignments.find(a => a.id === assignmentId);
     if (assignmentToOpen) {
-      setSelectedAssignment(assignmentToOpen); // Set it. This is instant.
+      setSelectedAssignment(assignmentToOpen);
     } else {
       addToast({ type: 'error', title: 'Error', message: 'Could not find assignment.' });
     }
   };
-  // --- *** END SPEED FIX *** ---
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
     // Optimistic update
-    setAssignments(prev => 
-      prev.map(a => a.id === assignmentId ? { ...a, status: status } : a)
-    );
+    const oldAssignments = [...assignments];
+    const newAssignments = oldAssignments.map(a => a.id === assignmentId ? { ...a, status: status } : a);
+    setAssignments(newAssignments); // This is a local state update, AuthProvider will get it via realtime
+    
     if (selectedAssignment?.id === assignmentId) {
       setSelectedAssignment(prev => prev ? { ...prev, status: status } : null);
     }
@@ -222,7 +140,7 @@ const EmployeeDashboardPage: React.FC = () => {
     const { error } = await updateAssignmentStatus(assignmentId, status);
     if (error) {
       addToast({ type: 'error', title: 'Update Failed', message: error.message });
-      // Revert (or just wait for realtime to refetch)
+      setAssignments(oldAssignments); // Revert on error
     } else {
       addToast({ type: 'success', title: 'Status Updated!' });
     }
@@ -234,14 +152,13 @@ const EmployeeDashboardPage: React.FC = () => {
     if (error) {
       addToast({ type: 'error', title: 'Comment Failed', message: error.message });
     }
-    // No success toast, realtime will handle the refresh
+    // AuthProvider's realtime listener will update the state
   };
 
   const handleViewDocument = async (doc: EmployeeDocument) => {
     setViewingPdf(null); // Show loading
     setViewingPdfTitle(doc.document_name);
     try {
-      // Use a secure, expiring signed URL
       const url = await createDocumentSignedUrl(doc);
       setViewingPdf(url);
     } catch (err: any) {
@@ -260,12 +177,21 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  if (loading && !profile) {
+  // --- 4. USE THE GLOBAL `loading` STATE ---
+  if (loading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-[#FF5722]" /></div>;
   }
   
-  if (error) {
-    return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
+  if (!profile) {
+    return (
+      <div className="flex h-screen items-center justify-center text-center text-red-500">
+        <div>
+          <AlertCircle className="w-12 h-12 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold">Could not load your profile.</h1>
+          <p className="text-gray-600">Please try logging out and back in.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -273,7 +199,7 @@ const EmployeeDashboardPage: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 md:p-10">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile?.first_name || 'Employee'}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile.first_name}</h1>
           <p className="text-gray-600 mt-1">Here's your personal dashboard. Let's get to work.</p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
@@ -284,11 +210,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                   <List className="text-gray-500" /> My Assignments
                 </h2>
-                {loading && assignments.length === 0 ? (
-                  <div className="flex justify-center p-10 bg-white rounded-lg shadow-sm mt-4">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                  </div>
-                ) : assignments.length === 0 ? (
+                {assignments.length === 0 ? (
                   <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
                       <Inbox size={48} className="mx-auto text-gray-300" />
                       <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
@@ -325,11 +247,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
                   <FileText className="text-gray-500" /> My Documents
                 </h2>
-                 {loading && documents.length === 0 ? (
-                  <div className="flex justify-center p-10 bg-white rounded-lg shadow-sm mt-4">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                  </div>
-                ) : documents.length === 0 ? (
+                {documents.length === 0 ? (
                   <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
                       <FileText size={48} className="mx-auto text-gray-300" />
                       <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
@@ -367,10 +285,10 @@ const EmployeeDashboardPage: React.FC = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">My Profile</h2>
                 <div className="space-y-2">
-                  <InfoRow icon={Mail} label="Email" value={profile?.email} />
-                  <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
-                  <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
-                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile?.birth_date)} />
+                  <InfoRow icon={Mail} label="Email" value={profile.email} />
+                  <InfoRow icon={Phone} label="Phone" value={profile.phone} />
+                  <InfoRow icon={MapPin} label="Address" value={profile.home_address} />
+                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile.birth_date)} />
                 </div>
               </div>
               
@@ -378,13 +296,13 @@ const EmployeeDashboardPage: React.FC = () => {
               <div className="bg-white p-6 rounded-lg shadow-sm">
                 <h2 className="text-xl font-semibold text-gray-800 mb-4">Employment Details</h2>
                 <div className="space-y-2">
-                  <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
-                  <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
-                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile?.start_date)} />
-                  <InfoRow icon={FileText} label="National ID" value={profile?.national_id} />
-                  <InfoRow icon={DollarSign} label="Salary" value={profile?.salary ? `GHS ${profile?.salary}` : 'N/A'} />
-                  <InfoRow icon={Building} label="Bank" value={profile?.bank_name} />
-                  <InfoRow icon={CreditCard} label="Account #" value={profile?.bank_account} />
+                  <InfoRow icon={Briefcase} label="Position" value={profile.position} />
+                  <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
+                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
+                  <InfoRow icon={FileText} label="National ID" value={profile.national_id} />
+                  <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
+                  <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
+                  <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
                 </div>
               </div>
             </aside>
