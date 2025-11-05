@@ -11,7 +11,7 @@ import {
   postAssignmentComment,
   EmployeeDocument
 } from '../../lib/supabase/operations';
-import { Loader2, List, FileText, CheckCircle, Clock, Send, Eye, Download, AlertCircle, Inbox } from 'lucide-react';
+import { Loader2, List, FileText, CheckCircle, Clock, Send, Eye, Download, AlertCircle, Inbox, User as UserIcon, Mail, Phone, MapPin, Calendar, Briefcase, Hash, DollarSign, Building, CreditCard, Edit2, Upload, FileSignature, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 
@@ -73,6 +73,8 @@ const EmployeeDashboardPage: React.FC = () => {
   
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState<any>({});
 
   useEffect(() => {
     if (!user) return;
@@ -176,15 +178,50 @@ const EmployeeDashboardPage: React.FC = () => {
   };
 
   const handleViewDocument = async (doc: EmployeeDocument) => {
-    setViewingPdf(null); // Show loading
+    setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
     try {
-      // Use a secure, expiring signed URL
       const url = await createDocumentSignedUrl(doc);
       setViewingPdf(url);
     } catch (err: any) {
       addToast({ type: 'error', title: 'Could not load document' });
       setViewingPdfTitle('');
+    }
+  };
+
+  const handleSignDocument = async (doc: EmployeeDocument, signedFile: File) => {
+    if (!user) return;
+    try {
+      // Upload signed document to storage
+      const filePath = `${user.id}/signed_${signedFile.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('employee_documents')
+        .upload(filePath, signedFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('employee_documents')
+        .getPublicUrl(uploadData.path);
+
+      // Update document record
+      const { error: updateError } = await supabase
+        .from('employee_documents')
+        .update({
+          signed_storage_url: urlData.publicUrl,
+          signed_at: new Date().toISOString(),
+        })
+        .eq('id', doc.id);
+
+      if (updateError) throw updateError;
+
+      addToast({ type: 'success', title: 'Document Signed!', message: 'Your signed document has been uploaded.' });
+
+      // Refresh documents
+      const result = await getEmployeeDocuments(user.id);
+      if (!result.error) setDocuments(result.data || []);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Signing Failed', message: err.message });
     }
   };
   
@@ -229,16 +266,151 @@ const EmployeeDashboardPage: React.FC = () => {
     return <div className="flex h-screen items-center justify-center text-red-500">{error}</div>;
   }
 
+  const handleEditProfile = () => {
+    setProfileForm({
+      first_name: profile?.first_name || '',
+      last_name: profile?.last_name || '',
+      phone: profile?.phone || '',
+      home_address: profile?.home_address || '',
+    });
+    setIsEditingProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(profileForm)
+        .eq('id', user.id);
+
+      if (error) throw error;
+      addToast({ type: 'success', title: 'Profile Updated!' });
+      setIsEditingProfile(false);
+      // Refresh will happen via AuthContext
+      window.location.reload();
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Update Failed', message: err.message });
+    }
+  };
+
+  const InfoRow = ({ icon: Icon, label, value }: { icon: any; label: string; value: string | null | undefined }) => (
+    <div className="flex items-start gap-3">
+      <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+      <div>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="font-medium text-gray-900">{value || 'N/A'}</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 md:p-10">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile?.first_name || 'Employee'}</h1>
-          <p className="text-gray-600 mt-1">Here's what's on your plate. Let's get to work.</p>
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile?.first_name || 'Employee'}</h1>
+              <p className="text-gray-600 mt-1">Here's what's on your plate. Let's get to work.</p>
+            </div>
+          </div>
+
+          {/* Profile Section */}
+          <section className="mb-8">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <UserIcon className="text-gray-500" /> My Profile
+                </h2>
+                {!isEditingProfile && (
+                  <button
+                    onClick={handleEditProfile}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
+                  >
+                    <Edit2 size={16} /> Edit Profile
+                  </button>
+                )}
+              </div>
+
+              {isEditingProfile ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">First Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.first_name}
+                        onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Last Name</label>
+                      <input
+                        type="text"
+                        value={profileForm.last_name}
+                        onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Phone</label>
+                      <input
+                        type="text"
+                        value={profileForm.phone}
+                        onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700">Home Address</label>
+                      <input
+                        type="text"
+                        value={profileForm.home_address}
+                        onChange={(e) => setProfileForm({ ...profileForm, home_address: e.target.value })}
+                        className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setIsEditingProfile(false)}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveProfile}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19]"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                    <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                    <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
+                    <InfoRow icon={Calendar} label="Birth Date" value={profile?.birth_date ? formatDate(profile.birth_date) : null} />
+                  </div>
+
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-6">Employment Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
+                    <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
+                    <InfoRow icon={Calendar} label="Start Date" value={profile?.start_date ? formatDate(profile.start_date) : null} />
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
 
           {/* Assignments Section */}
-          <section className="mt-8">
+          <section>
             <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <List className="text-gray-500" /> My Assignments
             </h2>
@@ -286,26 +458,65 @@ const EmployeeDashboardPage: React.FC = () => {
                   <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
                 </div>
             ) : (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {documents.map(doc => (
-                  <div key={doc.id} className="p-4 bg-white rounded-lg shadow-sm flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold text-gray-800">{doc.document_name}</p>
-                      {doc.requires_signing && !doc.signed_at && (
-                        <span className="text-xs text-yellow-600 font-medium">Pending Signature</span>
-                      )}
-                      {doc.signed_at && (
-                        <span className="text-xs text-green-600 font-medium">Signed</span>
-                      )}
+              <div className="mt-4 space-y-3">
+                {documents.map(doc => {
+                  const needsSignature = doc.requires_signing && !doc.signed_at;
+                  return (
+                    <div key={doc.id} className={`p-4 bg-white rounded-lg shadow-sm border ${
+                      needsSignature ? 'border-yellow-300' : 'border-gray-200'
+                    }`}>
+                      <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-800">{doc.document_name}</p>
+                          {needsSignature && (
+                            <div className="flex items-center gap-1.5 text-xs text-yellow-600 font-medium mt-1">
+                              <AlertTriangle size={14} /> Pending Signature - Action Required
+                            </div>
+                          )}
+                          {doc.signed_at && (
+                            <div className="flex items-center gap-1.5 text-xs text-green-600 font-medium mt-1">
+                              <CheckCircle size={14} /> Signed on {formatDate(doc.signed_at)}
+                            </div>
+                          )}
+                          {!doc.requires_signing && (
+                            <span className="text-xs text-gray-500 mt-1 block">View Only</span>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            onClick={() => handleViewDocument(doc)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                          >
+                            <Eye size={14} /> View
+                          </button>
+                          {needsSignature && (
+                            <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] cursor-pointer">
+                              <FileSignature size={14} /> Sign Document
+                              <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleSignDocument(doc, file);
+                                }}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                          {doc.signed_at && doc.signed_storage_url && (
+                            <a
+                              href={doc.signed_storage_url}
+                              download
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
+                            >
+                              <Download size={14} /> Download Signed
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => handleViewDocument(doc)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
-                    >
-                      <Eye size={14} /> View
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
