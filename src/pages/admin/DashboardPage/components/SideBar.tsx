@@ -1,3 +1,4 @@
+// src/pages/admin/DashboardPage/components/SideBar.tsx
 // @ts-nocheck
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
@@ -6,12 +7,12 @@ import {
   LayoutDashboard, Users, FileText, Settings, LogOut,
   Package, Wrench, Briefcase, FileCheck, UsersRound,
   UserCheck,
-  ClipboardList // <-- 1. IMPORT NEW ICON
+  ClipboardList // <-- This can be removed, but harmless to keep
 } from 'lucide-react';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import { TabKey } from '..'; 
 
-// --- ICONS & NAV ITEMS (Unchanged) ---
+// --- ICONS ---
 const icons = {
   home: LayoutDashboard,
   clients: UsersRound,
@@ -21,10 +22,11 @@ const icons = {
   jobs: Briefcase,
   applications: FileCheck,
   employees: Users,
-  assignments: ClipboardList, // <-- 2. ADD ICON
+  // assignments: ClipboardList, // <-- No longer needed
   settings: Settings,
 };
 
+// --- NAV ITEMS (MODIFIED) ---
 const navItems = [
   { name: 'Home', path: '', icon: 'home' },
   { name: 'Clients', path: 'clients', icon: 'clients' },
@@ -34,7 +36,7 @@ const navItems = [
   { name: 'Jobs', path: 'jobs', icon: 'jobs' },
   { name: 'Applications', path: 'applications', icon: 'applications' },
   { name: 'Employees', path: 'employees', icon: 'employees' },
-  { name: 'Assignments', path: 'assignments', icon: 'assignments' }, // <-- 3. ADD NAV ITEM
+  // { name: 'Assignments', path: 'assignments', icon: 'assignments' }, // <-- 3. REMOVED THIS LINE
   { name: 'Settings', path: 'settings', icon: 'settings' },
 ];
 
