@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface EnhancedPdfViewerProps {
   pdfUrl: string;
@@ -35,6 +35,7 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({ pdfUrl, title, on
 
   const onDocumentLoadError = (error: Error) => {
     console.error('Error loading PDF:', error);
+    console.error('PDF URL:', pdfUrl);
     setLoading(false);
   };
 
@@ -167,10 +168,15 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({ pdfUrl, title, on
             )}
 
             <Document
-              file={pdfUrl}
+              file={{ url: pdfUrl }}
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={onDocumentLoadError}
               loading={null}
+              options={{
+                cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+                cMapPacked: true,
+                standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
+              }}
               error={
                 <div className="text-center p-8">
                   <p className="text-red-400 font-semibold mb-2">Failed to load PDF</p>

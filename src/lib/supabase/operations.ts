@@ -436,8 +436,8 @@ export const createDocumentSignedUrl = async (doc: EmployeeDocument) => {
 
   const { data, error } = await supabase.storage
     .from('employee_documents')
-    .createSignedUrl(filePath, 60); // URL expires in 60 seconds
-  
+    .createSignedUrl(filePath, 3600); // URL expires in 1 hour
+
   if (error) throw error;
   return data.signedUrl;
 };
