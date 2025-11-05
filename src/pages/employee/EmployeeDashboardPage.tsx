@@ -1,248 +1,874 @@
+// src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Loader2, 
-  Send, 
-  User, 
-  AlignLeft, 
-  Paperclip, 
-  List, 
-  UploadCloud,
-  CheckCircle,
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useAuth } from '../../features/auth/AuthProvider';
+import { supabase } from '../../lib/supabase/client';
+import {
+  createDocumentSignedUrl,
+  updateAssignmentStatus,
+  postAssignmentComment,
+  getAssignmentsForEmployee,
+  getEmployeeDocuments,
+  getFullAssignmentDetails,
+  EmployeeDocument
+} from '../../lib/supabase/operations';
+import {
+  Loader2,
+  List,
   FileText,
-  Clock, // Added Clock for In Progress
-  AlertCircle, // Added AlertCircle for Overdue
-  AlertTriangle // Added AlertTriangle for Pending Review
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Inbox,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Briefcase,
+  Hash,
+  DollarSign,
+  Building,
+  CreditCard,
+  Edit2,
+  UploadCloud,
+  AlertTriangle,
+  X,
+  LogOut,
+  Home,
+  ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  Filter, 
+  ArrowDownWideNarrow, 
 } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
+import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Link, useNavigate } from 'react-router-dom';
 
-// Helper to format date
+// --- Helper Functions ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
-  return new Date(dateString).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const formatSimpleDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+};
+
+// --- Reusable InfoRow (Unchanged) ---
+const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null | undefined }> = ({
+  icon: Icon,
+  label,
+  value
+}) => (
+  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-medium text-gray-900 break-words">{value || 'N/A'}</p>
+    </div>
+  </div>
+);
+
+
+// --- Profile Edit Form Modal (Unchanged) ---
+const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
+  const [formData, setFormData] = useState({
+    first_name: profile?.first_name || '',
+    last_name: profile?.last_name || '',
+    email: profile?.email || '',
+    phone: profile?.phone || '',
+    home_address: profile?.home_address || '',
   });
-};
+  const [avatarFile, setAvatarFile] = useState(null);
+  const fileInputRef = useRef(null);
 
-// Helper to get status colors (copied logic from Dashboard page for consistency)
-const getStatusProps = (status: string) => {
-    switch (status) {
-      case 'completed': return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-100', label: 'Completed' };
-      case 'in_progress': return { icon: Clock, color: 'text-blue-500', bg: 'bg-blue-100', label: 'In Progress' };
-      case 'overdue': return { icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-100', label: 'Overdue' };
-      case 'pending': return { icon: List, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Pending' }; 
-      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Pending Review' }; 
-      default: return { icon: List, color: 'text-gray-600', bg: 'bg-gray-100', label: status };
-    }
-};
+  useEffect(() => {
+    setFormData({
+        first_name: profile?.first_name || '',
+        last_name: profile?.last_name || '',
+        email: profile?.email || '',
+        phone: profile?.phone || '',
+        home_address: profile?.home_address || '',
+    });
+    setAvatarFile(null);
+  }, [profile, isOpen]);
 
-// Panel component
-interface EmployeeAssignmentPanelProps {
-  assignment: any | null;
-  onClose: () => void;
-  onPostComment: (assignmentId: string, content: string) => void;
-  onUpdateStatus: (assignmentId: string, newStatus: string) => void;
-}
-
-const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
-  assignment,
-  onClose,
-  onPostComment,
-  onUpdateStatus,
-}) => {
-  const [newComment, setNewComment] = useState('');
-
-  const handlePostComment = () => {
-    if (!newComment.trim() || !assignment) return;
-    onPostComment(assignment.id, newComment.trim());
-    setNewComment('');
-  };
-
-  const renderContent = () => {
-    if (!assignment) return null;
-
-    // Show loading skeleton
-    if (assignment.loading) {
-      return (
-        <div className="p-8 space-y-8 animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-10 bg-gray-300 rounded w-full"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          <div className="mt-8 space-y-4">
-            <div className="h-40 bg-gray-100 rounded-lg"></div>
-            <div className="h-20 bg-gray-100 rounded-lg"></div>
-            <div className="h-40 bg-gray-100 rounded-lg"></div>
-          </div>
-        </div>
-      );
-    }
-    
-    const statusProps = getStatusProps(assignment.status);
-
-    // Show full details
-    return (
-      <>
-        {/* Themed Header */}
-        <div className="flex-shrink-0 p-6 border-b bg-gray-50">
-          <div className="flex items-center justify-between">
-            {/* Status Badge */}
-            <span className={`flex items-center text-xs font-bold gap-1.5 px-3 py-1.5 rounded-full ${statusProps.bg} ${statusProps.color}`}>
-              <statusProps.icon size={16} /> {statusProps.label}
-            </span>
-             {/* Due Date */}
-            <p className="text-sm font-medium text-gray-500">
-                Due: <span className="font-bold text-[#FF5722]">{formatDate(assignment.due_date)}</span>
-            </p>
-          </div>
-
-          <h3 className="text-3xl font-extrabold text-gray-900 mt-3">{assignment.title}</h3>
-          <p className="text-sm text-gray-600 mt-1">Category: <span className="font-medium text-gray-700">{assignment.category}</span></p>
-        </div>
-        
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-white">
-          
-          {/* Status Updater Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <label htmlFor="status-select" className="text-sm font-bold text-gray-700 block mb-2">Change Status</label>
-            <div className="flex items-center gap-4">
-                <select
-                    id="status-select"
-                    value={assignment.status}
-                    onChange={(e) => onUpdateStatus(assignment.id, e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring focus:ring-[#FF5722]/50"
-                >
-                <option value="pending">Pending</option>
-                <option value="in_progress">In Progress</option>
-                <option value="pending_review">Pending Review</option>
-                <option value="completed">Completed</option>
-                {assignment.status === 'overdue' && <option value="overdue">Overdue</option>}
-                </select>
-                <button
-                    onClick={() => onUpdateStatus(assignment.id, assignment.status === 'completed' ? 'pending_review' : 'completed')}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md"
-                >
-                    <CheckCircle size={18} /> Mark Done
-                </button>
-            </div>
-            {assignment.status === 'pending_review' && (
-              <p className="text-xs text-purple-600 mt-2">The task is awaiting final approval from the admin.</p>
-            )}
-          </div>
-          
-          {/* Description Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-2"><AlignLeft size={18} className="text-[#FF5722]" /> Assignment Description</h4>
-            <div className="text-sm text-gray-700 mt-2 p-3 bg-white rounded-lg whitespace-pre-wrap border border-gray-200">
-                {assignment.description}
-            </div>
-          </div>
-          
-          {/* Attachments from Admin Card */}
-          {assignment.attachments?.length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-              <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-3"><Paperclip size={18} className="text-[#FF5722]" /> Admin Attachments</h4>
-              <div className="space-y-2">
-                {assignment.attachments.map(file => (
-                  <a key={file.file_name} href={file.file_url} target="_blank" rel="noopener noreferrer" className="p-3 bg-white rounded-lg flex items-center gap-3 text-sm text-blue-600 hover:bg-blue-50 transition-colors shadow-sm border border-gray-200">
-                    <FileText size={18} className="text-blue-500 flex-shrink-0" /> 
-                    <span className="truncate font-medium">{file.file_name}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Deliverables (Your Uploads) Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-3"><UploadCloud size={18} className="text-[#FF5722]" /> Submit Deliverables</h4>
-            <div className="mt-2 p-6 border-2 border-dashed border-gray-300 rounded-xl text-center bg-white">
-              <UploadCloud size={32} className="mx-auto text-gray-400 mb-2" />
-              <p className="text-sm text-gray-600">Drag and drop files here, or <span className="text-[#FF5722] font-semibold cursor-pointer">browse</span>.</p>
-              <p className="text-xs text-gray-500 mt-1">File upload not implemented yet.</p>
-            </div>
-          </div>
-
-          {/* Comments/Activity Card */}
-          <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
-            <h4 className="font-extrabold text-gray-800 flex items-center gap-2 mb-4"><List size={18} className="text-[#FF5722]" /> Activity Feed</h4>
-            <div className="space-y-4">
-              
-              {/* Comment List */}
-              {assignment.comments?.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">No comments yet. Start the conversation!</p>
-              ) : (
-                assignment.comments.slice().reverse().map(comment => (
-                  <div key={comment.id} className="flex items-start gap-3 p-3 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
-                      <User size={16} className="text-gray-500" />
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-gray-800">
-                        {comment.profile?.first_name} {comment.profile?.last_name || 'Admin'}
-                        <span className="text-xs text-gray-400 font-normal ml-3">{formatDate(comment.created_at)}</span>
-                      </p>
-                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{comment.content}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-
-              {/* New Comment Form (Moved to the bottom for context) */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-end gap-3">
-                    <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
-                        <User size={16} className="text-gray-500" />
-                    </span>
-                    <div className="flex-1 relative">
-                        <textarea
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            placeholder="Add a comment or ask a question..."
-                            rows={3}
-                            className="w-full p-3 rounded-xl border border-gray-300 focus:border-[#FF5722] focus:ring-1 focus:ring-[#FF5722] resize-none"
-                        />
-                        <button 
-                            onClick={handlePostComment}
-                            disabled={!newComment.trim()}
-                            className="absolute right-2 bottom-2 p-2 rounded-full bg-[#FF5722] text-white hover:bg-[#E64A19] disabled:bg-gray-400 transition-colors"
-                        >
-                            <Send size={16} />
-                        </button>
-                    </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-        </div>
-      </>
-    );
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
   
+  const handleFileChange = (e) => {
+    setAvatarFile(e.target.files?.[0] || null);
+  };
+
+  const handleSave = () => {
+    onSave(formData, avatarFile);
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {assignment && (
-        <motion.div
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl flex flex-col z-40 border-l"
-        >
-          {/* Close Button (moved to outside the header for cleaner look) */}
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 z-50 text-gray-700">
-            <X size={24} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden"
+      >
+        <div className="p-6 border-b flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-900">Edit Personal Info</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          
+          {/* Avatar Section */}
+          <div className="flex items-center gap-4 border-b pb-4">
+            <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-gray-100">
+              {profile.avatar_url || avatarFile ? (
+                <img 
+                    src={avatarFile ? URL.createObjectURL(avatarFile) : profile.avatar_url} 
+                    alt="Avatar" 
+                    className="w-full h-full object-cover" 
+                />
+              ) : (
+                <User size={36} className="text-gray-500" />
+              )}
+            </div>
+            <div>
+              <label htmlFor="avatar-upload" className="cursor-pointer inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <UploadCloud size={16} className="mr-2" />
+                {avatarFile ? 'Change File' : 'Upload Photo'}
+              </label>
+              {avatarFile && <p className="text-xs text-gray-500 mt-1 truncate max-w-[150px]">{avatarFile.name}</p>}
+              <input ref={fileInputRef} type="file" id="avatar-upload" className="sr-only" accept="image/*" onChange={handleFileChange} />
+              
+            </div>
+          </div>
+
+          {/* Name Fields (Read-Only) */}
+          <div className="grid grid-cols-2 gap-4">
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">First Name</span>
+              <input 
+                type="text" 
+                name="first_name" 
+                value={formData.first_name} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
+                readOnly={true} 
+                disabled={isSaving}
+              />
+            </label>
+            <label className="block">
+              <span className="text-sm font-medium text-gray-700">Last Name</span>
+              <input 
+                type="text" 
+                name="last_name" 
+                value={formData.last_name} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
+                readOnly={true} 
+                disabled={isSaving}
+              />
+            </label>
+          </div>
+
+          {/* Email (Editable) */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Email</span>
+            <input 
+                type="email" 
+                name="email" 
+                value={formData.email} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
+             <p className="text-xs text-gray-500 mt-1">Note: Changing your email here updates your profile record, but changing your login email requires the main user authentication process.</p>
+          </label>
+          
+          {/* Phone (Editable) */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Phone</span>
+            <input 
+                type="tel" 
+                name="phone" 
+                value={formData.phone} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
+          </label>
+          {/* Home Address (Editable) */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Home Address</span>
+            <input 
+                type="text" 
+                name="home_address" 
+                value={formData.home_address} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
+          </label>
+        </div>
+        <div className="p-6 border-t flex justify-end">
+          <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white font-semibold rounded-lg hover:bg-[#E64A19] disabled:opacity-50">
+            {isSaving ? <Loader2 size={16} className="animate-spin" /> : 'Save Changes'}
           </button>
-          
-          {renderContent()}
-          
-        </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      </motion.div>
+    </div>
   );
 };
 
-export default EmployeeAssignmentPanel;
+
+// --- Main Employee Dashboard Page ---
+const EmployeeDashboardPage: React.FC = () => {
+  const { user, profile, logout } = useAuth();
+  const { addToast } = useToast();
+  const navigate = useNavigate();
+
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
+  const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
+  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
+  
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  
+  const [assignmentPage, setAssignmentPage] = useState(0); 
+  const ASSIGNMENTS_PER_PAGE = 7;
+  
+  const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
+  
+  const [filterStatus, setFilterStatus] = useState('all_active'); 
+  const [sortType, setSortType] = useState('due_date'); // Default to due date
+
+  const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
+    if (!user) return;
+    setIsSavingProfile(true);
+    
+    let avatarUrl = profile.avatar_url; 
+    
+    try {
+        if (avatarFile) {
+            const fileExtension = avatarFile.name.split('.').pop();
+            const filePath = `${user.id}/avatar.${fileExtension}`; 
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+                .from('avatars') 
+                .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
+
+            if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
+
+            const { data: urlData } = supabase.storage
+                .from('avatars')
+                .getPublicUrl(uploadData.path);
+            
+            avatarUrl = urlData.publicUrl;
+        }
+        
+        const updateData = {
+            email: formData.email, 
+            phone: formData.phone,
+            home_address: formData.home_address,
+            avatar_url: avatarUrl 
+        };
+        
+        const { error: dbError } = await supabase
+            .from('profiles')
+            .update(updateData)
+            .eq('id', user.id);
+
+        if (dbError) throw dbError;
+        
+        addToast({ type: 'success', title: 'Profile Updated!', message: 'Changes will reflect on next reload.' });
+        setIsEditingProfile(false);
+        setTimeout(() => window.location.reload(), 1500);
+
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Update Failed', message: err.message });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/my-page');
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Logout Failed', message: err.message });
+    }
+  };
+  
+  // --- REFACTORED: Assignment Filtering and Sorting Logic ---
+  const filteredAssignments = useMemo(() => {
+    let result = assignments.filter(a => a.status !== 'completed');
+    
+    if (filterStatus !== 'all_active') {
+        result = result.filter(a => a.status === filterStatus);
+    }
+
+    return result.sort((a, b) => {
+      const getPriority = (status) => {
+          const order = { 'overdue': 0, 'pending': 1, 'in_progress': 2, 'pending_review': 3 };
+          return order[status] !== undefined ? order[status] : 10;
+      };
+      
+      const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+      const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+      
+      let primarySort = 0;
+
+      if (sortType === 'due_date' || sortType === 'month_year') { // Group Month/Year with Due Date
+          // Primary sort: Due Date (ASC: Closest date first)
+          primarySort = dateA - dateB; 
+          if (primarySort !== 0) return primarySort;
+      } 
+      
+      if (sortType === 'title') {
+          const titleA = a.title.toLowerCase();
+          const titleB = b.title.toLowerCase();
+          if (titleA < titleB) return -1;
+          if (titleA > titleB) return 1;
+      }
+      
+      // Secondary sort (or primary if sortType is priority): Status Priority
+      return getPriority(a.status) - getPriority(b.status);
+    });
+  }, [assignments, filterStatus, sortType]);
+  
+  // Calculated visible assignments for pagination
+  const visibleAssignments = useMemo(() => {
+    const start = assignmentPage * ASSIGNMENTS_PER_PAGE;
+    const end = start + ASSIGNMENTS_PER_PAGE;
+    return filteredAssignments.slice(start, end);
+  }, [filteredAssignments, assignmentPage, ASSIGNMENTS_PER_PAGE]);
+  
+  const totalPages = Math.ceil(filteredAssignments.length / ASSIGNMENTS_PER_PAGE);
+  const totalAssignments = filteredAssignments.length;
+  const startAssignment = assignmentPage * ASSIGNMENTS_PER_PAGE + 1;
+  const endAssignment = Math.min(startAssignment + ASSIGNMENTS_PER_PAGE - 1, totalAssignments);
+
+
+  // Reset page when filters change
+  useEffect(() => {
+    setAssignmentPage(0);
+  }, [filterStatus, sortType]);
+
+
+  // ... (rest of data fetching logic remains unchanged) ...
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [assignmentResult, documentResult] = await Promise.all([
+          getAssignmentsForEmployee(user.id),
+          getEmployeeDocuments(user.id)
+        ]);
+
+        if (assignmentResult.error) throw assignmentResult.error;
+        if (documentResult.error) throw documentResult.error;
+
+        setAssignments(assignmentResult.data || []);
+        setDocuments(documentResult.data || []);
+
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch data.');
+        addToast({ type: 'error', title: 'Loading Failed', message: err.message });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    const channel = supabase
+      .channel(`employee_dashboard:${user.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'assignments' },
+        async () => {
+          const result = await getAssignmentsForEmployee(user.id);
+          if (!result.error) setAssignments(result.data || []);
+        }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
+        async () => {
+          const result = await getEmployeeDocuments(user.id);
+          if (!result.error) setDocuments(result.data || []);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+
+  }, [user, addToast]);
+  
+  const handleAssignmentClick = async (assignmentId: string) => {
+    if (selectedAssignment?.id === assignmentId) {
+      setSelectedAssignment(null);
+      return;
+    }
+
+    setSelectedAssignment({ id: assignmentId, loading: true });
+    try {
+      const { data, error } = await getFullAssignmentDetails(assignmentId);
+      if (error) throw error;
+      setSelectedAssignment(data);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error', message: 'Could not load assignment details.' });
+      setSelectedAssignment(null);
+    }
+  };
+
+  const handleUpdateStatus = async (assignmentId: string, status: string) => {
+    setAssignments(prev =>
+      prev.map(a => a.id === assignmentId ? { ...a, status } : a)
+    );
+    if (selectedAssignment?.id === assignmentId) {
+      setSelectedAssignment(prev => prev ? { ...prev, status } : null);
+    }
+
+    const { error } = await updateAssignmentStatus(assignmentId, status);
+    if (error) {
+      addToast({ type: 'error', title: 'Update Failed', message: error.message });
+    } else {
+      addToast({ type: 'success', title: 'Status Updated!' });
+    }
+  };
+
+  const handlePostComment = async (assignmentId: string, content: string) => {
+    if (!user) return;
+    const { error } = await postAssignmentComment(assignmentId, user.id, content);
+    if (error) {
+      addToast({ type: 'error', title: 'Comment Failed', message: error.message });
+    }
+  };
+
+  const handleViewDocument = async (doc: EmployeeDocument) => {
+    setViewingPdf(null);
+    setViewingPdfTitle(doc.document_name);
+    try {
+      const url = await createDocumentSignedUrl(doc);
+      setViewingPdf(url);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Could not load document' });
+      setViewingPdfTitle('');
+    }
+  };
+
+  const handleSignDocument = async () => {
+    addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
+  };
+
+
+  const getStatusProps = (status: string) => {
+    switch (status) {
+      case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
+      case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
+      case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
+      case 'pending': return { icon: List, color: 'text-yellow-500', label: 'Pending' }; 
+      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-500', label: 'Pending Review' }; 
+      default: return { icon: List, color: 'text-yellow-500', label: status };
+    }
+  };
+
+  // Loading skeleton (kept for completeness)
+  const LoadingSkeleton = () => (
+    <div className="flex h-screen bg-gray-100">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="h-8 bg-gray-300 rounded w-1/3 animate-pulse" />
+          <div className="h-4 bg-gray-200 rounded w-2/3 mt-2 animate-pulse" />
+        </div>
+      </main>
+    </div>
+  );
+
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+
+  if (error || !profile) {
+    return (
+      <div className="flex h-screen items-center justify-center text-center text-red-500 p-8">
+        <div>
+          <AlertCircle className="w-12 h-12 mx-auto" />
+          <h1 className="mt-4 text-xl font-bold">Could not load your profile.</h1>
+          <p className="text-gray-600">Ensure your user role is set to 'employee' in the database.</p>
+        </div>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex h-screen w-full flex-col bg-gray-50">
+      {/* --- Fixed Top Bar (Navigation) --- */}
+      <div className="flex-shrink-0 bg-white shadow-sm px-4 py-3 flex justify-between items-center sticky top-0 z-10 border-b">
+        <h1 className="text-xl font-bold text-gray-900">Employee Portal</h1>
+        <div className="flex items-center space-x-4">
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-[#FF5722] transition-colors"
+            title="Return to SolveX Studios Website"
+          >
+            <Home size={18} />
+            <span className="hidden sm:inline">Back to Site</span>
+          </Link>
+          <div className="h-6 w-px bg-gray-200"></div> 
+          <button
+            onClick={handleLogout}
+            className="text-gray-500 hover:text-red-600 flex items-center"
+            title="Logout"
+          >
+            <LogOut size={20} className="mr-1" />
+            <span className="hidden sm:inline text-sm">Logout</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-7xl mx-auto p-6 md:p-10">
+          
+          {/* --- Hero Section (Brand Color & Avatar) --- */}
+          <div className="relative p-8 md:p-10 bg-gradient-to-r from-[#FF5722] to-[#C10100] rounded-xl shadow-xl text-white mb-8">
+            <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5 }}>
+              <div className="flex items-center gap-6">
+                <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center overflow-hidden flex-shrink-0 border-2 border-white">
+                  {profile.avatar_url ? (
+                    <img 
+                      src={profile.avatar_url} 
+                      alt={`${profile.first_name} Avatar`} 
+                      className="w-full h-full object-cover" 
+                    />
+                  ) : (
+                    <User size={36} className="text-white" />
+                  )}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold">Welcome back, {profile.first_name}!</h1>
+                  <p className="text-orange-100">{profile.position || 'Employee'}</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+          {/* --- END: Hero Section --- */}
+
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left Column: Assignments & Documents (lg:col-span-2) */}
+            <div className="lg:col-span-2 space-y-8">
+              
+              {/* Assignments Section (Filtered and Paginated) */}
+              <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-4">
+                  <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-3 sm:mb-0">
+                    <List className="text-gray-500" /> Active Assignments ({filteredAssignments.length})
+                  </h2>
+                  
+                  {/* --- Filter and Sort Controls --- */}
+                  <div className="flex space-x-3 items-center">
+                      <div className="relative">
+                          <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <select 
+                              value={filterStatus} 
+                              onChange={(e) => setFilterStatus(e.target.value)}
+                              className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
+                          >
+                              <option value="all_active">All Active</option>
+                              <option value="overdue">Overdue</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="pending">Pending</option>
+                              <option value="pending_review">Pending Review</option>
+                          </select>
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      </div>
+
+                      <div className="relative">
+                          <ArrowDownWideNarrow size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <select 
+                              value={sortType} 
+                              onChange={(e) => setSortType(e.target.value)}
+                              className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
+                          >
+                              <option value="due_date">Sort by Date (Default)</option>
+                              <option value="month_year">Sort by Month/Year</option> 
+                              <option value="title">Sort by Title</option>
+                              <option value="priority">Sort by Status Priority</option>
+                          </select>
+                           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+                      </div>
+                  </div>
+                  {/* --- END: Filter and Sort Controls --- */}
+                  
+                  <Link to="/employee/all-assignments" className="text-sm text-[#FF5722] hover:underline hidden md:block">
+                     View All
+                  </Link>
+                </div>
+
+                {filteredAssignments.length === 0 ? (
+                  <div className="text-center p-10">
+                      <Inbox size={48} className="mx-auto text-gray-300" />
+                      <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
+                      <p className="text-sm text-gray-500">You have no assignments matching the current criteria.</p>
+                    </div>
+                ) : (
+                  <>
+                    <div className="space-y-3">
+                      {/* Only render visible assignments */}
+                      {visibleAssignments.map(assignment => {
+                        const { icon: Icon, color, label } = getStatusProps(assignment.status);
+                        return (
+                          <button
+                            key={assignment.id}
+                            onClick={() => handleAssignmentClick(assignment.id)}
+                            className={`w-full p-4 bg-gray-50 rounded-lg text-left transition-all border ${
+                              selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722] border-[#FF5722]' : 'hover:bg-gray-100 border-gray-200'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold text-gray-800">{assignment.title}</span>
+                              <span className={`flex items-center text-xs font-medium gap-1.5 px-3 py-1 rounded-full ${color.replace('text-', 'bg-').replace('500', '100')} ${color}`}>
+                                <Icon size={14} /> {label.replace("_", " ")}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-1">Due: {formatSimpleDate(assignment.due_date)}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Pagination/Next Button: Enhanced Design */}
+                    {totalAssignments > ASSIGNMENTS_PER_PAGE && (
+                      <div className="flex justify-between items-center border-t pt-4 mt-6">
+                        <span className="text-sm font-medium text-gray-600">
+                          Showing {startAssignment}-{endAssignment} of {totalAssignments} assignments
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setAssignmentPage(p => p - 1)}
+                            disabled={assignmentPage === 0}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 transition-colors"
+                            aria-label="Previous page"
+                          >
+                            <ChevronLeft size={16} /> Previous
+                          </button>
+                          <button
+                            onClick={() => setAssignmentPage(p => p + 1)}
+                            disabled={assignmentPage >= totalPages - 1}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-[#FF5722] hover:bg-[#E64A19] disabled:opacity-50 transition-colors"
+                            aria-label="Next page"
+                          >
+                            Next <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {filteredAssignments.length > ASSIGNMENTS_PER_PAGE && (
+                      <div className="text-center mt-4 md:hidden">
+                        <Link to="/employee/all-assignments" className="text-sm font-semibold text-[#FF5722] hover:underline">
+                          View All ({filteredAssignments.length})
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+
+              {/* Documents Section */}
+              <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                  <FileText className="text-gray-500" /> Important Documents
+                </h2>
+                {documents.length === 0 ? (
+                  <div className="text-center p-10">
+                      <FileText size={48} className="mx-auto text-gray-300" />
+                      <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
+                      <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
+                    </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {documents.map(doc => (
+                      <div key={doc.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center border">
+                        <div>
+                          <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                          {doc.requires_signing && !doc.signed_at && (
+                            <span className="text-xs text-yellow-600 font-medium flex items-center gap-1 mt-0.5"><AlertTriangle size={12} /> Pending Signature</span>
+                          )}
+                          {doc.signed_at && (
+                            <span className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5"><CheckCircle size={12} /> Signed</span>
+                          )}
+                          {!doc.requires_signing && (
+                            <span className="text-xs text-blue-600 font-medium mt-0.5">Reference Document</span>
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => handleViewDocument(doc)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] transition-colors"
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+            
+            {/* Right Column: Profile Details (lg:col-span-1) */}
+            <aside className="lg:col-span-1 space-y-6">
+              
+              {/* Profile Card (Always visible) */}
+              <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-semibold text-gray-800">My Info</h2>
+                  <button onClick={() => setIsEditingProfile(true)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-full" title="Edit Personal Info">
+                    <Edit2 size={16} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  <InfoRow icon={Mail} label="Email" value={profile.email} />
+                  <InfoRow icon={Phone} label="Phone" value={profile.phone} />
+                  <InfoRow icon={MapPin} label="Address" value={profile.home_address} />
+                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile.birth_date)} />
+                </div>
+              </div>
+              
+              {/* Employment Card (Collapsible on Mobile, Static on LG+) */}
+              <div className="bg-white rounded-xl shadow-md border border-gray-200">
+                  
+                  {/* Header: Always visible, acts as toggle bar on mobile (<lg) */}
+                  <button
+                      onClick={() => setIsEmploymentDetailsOpen(!isEmploymentDetailsOpen)}
+                      className="w-full flex justify-between items-center p-6 text-xl font-semibold text-gray-800"
+                      aria-expanded={isEmploymentDetailsOpen}
+                      aria-controls="employment-details-content"
+                  >
+                      <h2 className="flex items-center gap-2">Employment Details</h2>
+                      
+                      {/* Chevron icon only visible on screens smaller than LG */}
+                      <motion.div
+                          className="lg:hidden"
+                          initial={false}
+                          animate={{ rotate: isEmploymentDetailsOpen ? 180 : 0 }}
+                          transition={{ duration: 0.3 }}
+                      >
+                          <ChevronDown size={24} className="text-gray-500" />
+                      </motion.div>
+                  </button>
+
+                  {/* Collapsible Content */}
+                  <AnimatePresence initial={false}>
+                      {isEmploymentDetailsOpen || (
+                          typeof window !== 'undefined' && window.innerWidth >= 1024
+                      ) ? (
+                          <motion.div
+                              key="employment-details-content"
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                              className="overflow-hidden"
+                              id="employment-details-content"
+                          >
+                              <div className="p-6 pt-0 space-y-2">
+                                  <InfoRow icon={Briefcase} label="Position" value={profile.position} />
+                                  <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
+                                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
+                                  <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
+                                  <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
+                                  <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
+                              </div>
+                          </motion.div>
+                      ) : null}
+                  </AnimatePresence>
+              </div>
+              
+            </aside>
+            
+          </div>
+        </div>
+      </main>
+
+      {/* Assignment Detail Panel (kept) */}
+      <EmployeeAssignmentPanel
+        assignment={selectedAssignment}
+        onClose={() => setSelectedAssignment(null)}
+        onPostComment={handlePostComment}
+        onUpdateStatus={handleUpdateStatus}
+      />
+      
+      {/* PDF Viewer Modal (kept for completeness) */}
+      <AnimatePresence>
+        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
+      </AnimatePresence>
+
+      {/* Profile Edit Modal (New) */}
+      <ProfileEditModal
+        isOpen={isEditingProfile}
+        onClose={() => setIsEditingProfile(false)}
+        profile={profile}
+        onSave={handleSaveProfile}
+        isSaving={isSavingProfile}
+      />
+    </div>
+  );
+};
+
+// Re-using simplified PdfViewerModal
+const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
+  <AnimatePresence>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+      <motion.div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+      >
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+           <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg"  
+            title="PDF Viewer" 
+          />
+        </div>
+      </motion.div>
+    </div>
+  </AnimatePresence>
+);
+
+export default EmployeeDashboardPage;
