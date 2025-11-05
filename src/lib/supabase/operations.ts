@@ -685,3 +685,42 @@ export const restoreTeam = async (id: string) => {
     .select()
     .single();
 };
+
+// --- START: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
+
+/**
+ * Deletes a user from the auth.users table and cascadingly deletes their profile.
+ * NOTE: This relies on Admin Auth privileges (e.g., service_role key or an Edge Function).
+ * Calling this from the client requires RLS to be bypassed, which is usually unsafe.
+ */
+export async function deleteEmployeeAccount(userId: string) {
+  // We rely on the Supabase client being configured with admin access 
+  // (e.g., in a non-browser environment) or proper RLS/Admin configuration.
+  const { data: authUser, error: authError } = await supabase.auth.admin.deleteUser(userId);
+
+  if (authError) {
+    console.error("Supabase Auth Delete Error:", authError);
+    return { error: new Error(`Failed to delete user in Auth: ${authError.message}`) };
+  }
+  
+  // The deletion of the public.profiles row relies on the ON DELETE CASCADE foreign key.
+  return { data: authUser, error: null };
+}
+
+/**
+ * Updates an employee's role in the public.profiles table to block/unblock access.
+ */
+export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 'blocked') {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ role: newRole, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+
+  if (error) {
+    return { error };
+  }
+
+  return { data, error: null };
+}
+
+// --- END: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
