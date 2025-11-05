@@ -1,5 +1,3 @@
-// PASTE THIS ENTIRE CODEBLOCK into src/pages/admin/DashboardPage/tabs/EmployeesTab.tsx
-
 // @ts-nocheck
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../../../lib/supabase/client';
@@ -699,16 +697,12 @@ const EmployeesTab: React.FC = () => {
                               </div>
                               {/* Right Side: Buttons */}
                               <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
-                                
-                                {/* --- THIS IS THE CHANGED BUTTON --- */}
                                 <button
                                   onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
                                   className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                                 >
-                                  <Eye size={14} /> View Unsigned
+                                  <Eye size={14} /> View
                                 </button>
-                                {/* --- END OF CHANGE --- */}
-                                
                                 {isSigned && (
                                   <button
                                     onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
@@ -885,7 +879,7 @@ const EmployeesTab: React.FC = () => {
         onApproveDeliverable={handleApprove}
         onRequestEdits={handleRequestEdits}
       />
-    </div>
+    </div> 
   );
 };
 
