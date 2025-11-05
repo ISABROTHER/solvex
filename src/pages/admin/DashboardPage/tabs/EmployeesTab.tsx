@@ -150,14 +150,10 @@ const EmployeesTab: React.FC = () => {
     setLoadingAssignments(true);
     try {
       const { data, error } = await getAllAssignments();
-      if (error) {
-        console.error('Assignments error:', error);
-        throw error;
-      }
+      if (error) throw error;
       setAssignments(data || []);
     } catch (err: any) {
-      console.error('Failed to fetch assignments:', err);
-      addToast({ type: 'error', title: 'Error', message: err.message || 'Failed to load assignments' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to load assignments' });
     } finally {
       setLoadingAssignments(false);
     }

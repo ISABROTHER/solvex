@@ -103,14 +103,10 @@ const EmployeeDashboardPage: React.FC = () => {
     setLoadingAssignments(true);
     try {
       const { data, error } = await getEmployeeAssignments(user.id);
-      if (error) {
-        console.error('Employee assignments error:', error);
-        throw error;
-      }
+      if (error) throw error;
       setAssignments(data || []);
     } catch (err: any) {
-      console.error('Failed to fetch employee assignments:', err);
-      addToast({ type: 'error', title: 'Error', message: err.message || 'Failed to load assignments' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to load assignments' });
     } finally {
       setLoadingAssignments(false);
     }
