@@ -1,7 +1,7 @@
+// src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
-import { supabase } from '../../lib/supabase/client';
 import {
   createDocumentSignedUrl,
   updateAssignmentStatus,
@@ -100,7 +100,8 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
 
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
-  const { user, profile, assignments, documents, loading, refetchEmployeeData } = useAuth();
+  // --- 1. GET ALL DATA DIRECTLY FROM THE GLOBAL HOOK ---
+  const { user, profile, assignments, documents, loading } = useAuth();
   const { addToast } = useToast();
 
   const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
@@ -125,7 +126,6 @@ const EmployeeDashboardPage: React.FC = () => {
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
     // Optimistic update
-    // The AuthProvider will update the main state via realtime/refetch
     if (selectedAssignment?.id === assignmentId) {
       setSelectedAssignment(prev => prev ? { ...prev, status: status } : null);
     }
@@ -169,11 +169,12 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // --- LOADING CHECK ---
+  // --- FINAL LOADING CHECK ---
   if (loading) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-[#FF5722]" /></div>;
   }
   
+  // --- CRASH FIX: Ensure profile is NOT null before accessing its properties ---
   if (!profile) {
     return (
       <div className="flex h-screen items-center justify-center text-center text-red-500">
@@ -185,6 +186,8 @@ const EmployeeDashboardPage: React.FC = () => {
       </div>
     );
   }
+  // --- END CRASH FIX ---
+
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -280,7 +283,7 @@ const EmployeeDashboardPage: React.FC = () => {
                   <InfoRow icon={Mail} label="Email" value={profile.email} />
                   <InfoRow icon={Phone} label="Phone" value={profile.phone} />
                   <InfoRow icon={MapPin} label="Address" value={profile.home_address} />
-                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile.birth_date)} />
+                  <InfoRow icon={Calendar} label="Birth Date" value={profile.birth_date} />
                 </div>
               </div>
               
@@ -290,7 +293,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 <div className="space-y-2">
                   <InfoRow icon={Briefcase} label="Position" value={profile.position} />
                   <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
-                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
+                  <InfoRow icon={Calendar} label="Start Date" value={profile.start_date} />
                   <InfoRow icon={FileText} label="National ID" value={profile.national_id} />
                   <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
                   <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
