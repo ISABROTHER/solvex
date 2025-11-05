@@ -73,8 +73,9 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
 );
 
 
-// --- Profile Edit Form Modal (Final Refactored) ---
+// --- Profile Edit Form Modal (Updated Editability) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
+  // Keep name fields here to pre-fill, but they will be readOnly
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
     last_name: profile?.last_name || '',
@@ -104,7 +105,8 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   };
 
   const handleSave = () => {
-    // Pass both form data and the file to the parent handler
+    // We only pass editable fields (phone, address) + the avatar file. 
+    // The name fields are excluded or passed read-only via formData which is fine since the backend update payload will merge correctly.
     onSave(formData, avatarFile);
   };
 
@@ -150,22 +152,54 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
+            {/* First Name (Read-Only) */}
             <label className="block">
               <span className="text-sm font-medium text-gray-700">First Name</span>
-              <input type="text" name="first_name" value={formData.first_name} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md bg-gray-50" />
+              <input 
+                type="text" 
+                name="first_name" 
+                value={formData.first_name} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
+                readOnly={true} // <-- SET READ ONLY
+                disabled={isSaving}
+              />
             </label>
+            {/* Last Name (Read-Only) */}
             <label className="block">
               <span className="text-sm font-medium text-gray-700">Last Name</span>
-              <input type="text" name="last_name" value={formData.last_name} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md bg-gray-50" />
+              <input 
+                type="text" 
+                name="last_name" 
+                value={formData.last_name} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
+                readOnly={true} // <-- SET READ ONLY
+                disabled={isSaving}
+              />
             </label>
           </div>
+          {/* Phone (Editable) */}
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Phone</span>
-            <input type="tel" name="phone" value={formData.phone} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md bg-gray-50" />
+            <input 
+                type="tel" 
+                name="phone" 
+                value={formData.phone} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
           </label>
+          {/* Home Address (Editable) */}
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Home Address</span>
-            <input type="text" name="home_address" value={formData.home_address} onChange={handleChange} className="mt-1 w-full p-2 border rounded-md bg-gray-50" />
+            <input 
+                type="text" 
+                name="home_address" 
+                value={formData.home_address} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
           </label>
         </div>
         <div className="p-6 border-t flex justify-end">
@@ -179,7 +213,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
 };
 
 
-// --- Main Employee Dashboard Page ---
+// --- Main Employee Dashboard Page (rest of file remains the same) ---
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const { addToast } = useToast();
@@ -211,24 +245,26 @@ const EmployeeDashboardPage: React.FC = () => {
     try {
         if (avatarFile) {
             const fileExtension = avatarFile.name.split('.').pop();
-            // Use a consistent name to allow upsert/overwrite
             const filePath = `${user.id}/avatar.${fileExtension}`; 
             
             const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('employee_avatars') 
+                .from('avatars') 
                 .upload(filePath, avatarFile, { cacheControl: '3600', upsert: true });
 
             if (uploadError) throw new Error(`Avatar upload failed: ${uploadError.message}`);
 
             const { data: urlData } = supabase.storage
-                .from('employee_avatars')
+                .from('avatars')
                 .getPublicUrl(uploadData.path);
             
             avatarUrl = urlData.publicUrl;
         }
         
+        // Pass only the fields that were allowed to be edited in the modal 
+        // (Phone and Home Address) plus the avatar URL.
         const updateData = {
-            ...formData,
+            phone: formData.phone,
+            home_address: formData.home_address,
             avatar_url: avatarUrl 
         };
         
@@ -241,7 +277,6 @@ const EmployeeDashboardPage: React.FC = () => {
         
         addToast({ type: 'success', title: 'Profile Updated!', message: 'Changes will reflect on next reload.' });
         setIsEditingProfile(false);
-        // Force a soft refresh to load the new profile image/data
         setTimeout(() => window.location.reload(), 1500);
 
     } catch (err: any) {
