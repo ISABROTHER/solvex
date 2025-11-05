@@ -1,3 +1,4 @@
+// src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
@@ -38,15 +39,16 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  Filter, 
-  ArrowDownWideNarrow, 
+  Filter,
+  ArrowDownWideNarrow,
+  Eye,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 
-// --- Helper Functions (Unchanged) ---
+// --- Helper Functions ---
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);
@@ -252,7 +254,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
   
   const [filterStatus, setFilterStatus] = useState('all_active'); 
-  const [sortType, setSortType] = useState('due_date'); 
+  const [sortType, setSortType] = useState('due_date'); // Default to due date
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -312,7 +314,7 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
   
-  // --- Assignment Filtering and Sorting Logic (Unchanged) ---
+  // --- REFACTORED: Assignment Filtering and Sorting Logic ---
   const filteredAssignments = useMemo(() => {
     let result = assignments.filter(a => a.status !== 'completed');
     
@@ -331,7 +333,8 @@ const EmployeeDashboardPage: React.FC = () => {
       
       let primarySort = 0;
 
-      if (sortType === 'due_date' || sortType === 'month_year') { 
+      if (sortType === 'due_date' || sortType === 'month_year') { // Group Month/Year with Due Date
+          // Primary sort: Due Date (ASC: Closest date first)
           primarySort = dateA - dateB; 
           if (primarySort !== 0) return primarySort;
       } 
@@ -343,11 +346,12 @@ const EmployeeDashboardPage: React.FC = () => {
           if (titleA > titleB) return 1;
       }
       
+      // Secondary sort (or primary if sortType is priority): Status Priority
       return getPriority(a.status) - getPriority(b.status);
     });
   }, [assignments, filterStatus, sortType]);
   
-  // Calculated visible assignments for pagination (Unchanged)
+  // Calculated visible assignments for pagination
   const visibleAssignments = useMemo(() => {
     const start = assignmentPage * ASSIGNMENTS_PER_PAGE;
     const end = start + ASSIGNMENTS_PER_PAGE;
@@ -360,7 +364,7 @@ const EmployeeDashboardPage: React.FC = () => {
   const endAssignment = Math.min(startAssignment + ASSIGNMENTS_PER_PAGE - 1, totalAssignments);
 
 
-  // Reset page when filters change (Unchanged)
+  // Reset page when filters change
   useEffect(() => {
     setAssignmentPage(0);
   }, [filterStatus, sortType]);
@@ -464,7 +468,6 @@ const EmployeeDashboardPage: React.FC = () => {
     setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
     try {
-      // Fetching the signed URL is the correct first step
       const url = await createDocumentSignedUrl(doc);
       setViewingPdf(url);
     } catch (err: any) {
@@ -817,7 +820,7 @@ const EmployeeDashboardPage: React.FC = () => {
         onUpdateStatus={handleUpdateStatus}
       />
       
-      {/* PDF Viewer Modal (FIXED) */}
+      {/* PDF Viewer Modal (kept for completeness) */}
       <AnimatePresence>
         {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
@@ -859,11 +862,8 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
         </div>
         <div className="flex-1 p-2">
            <iframe 
-            // --- FIX: Use the signed URL directly in the iframe source ---
-            // The browser is authenticated and can handle the signed token, 
-            // unlike the external Google Viewer server.
-            src={pdfUrl} 
-            className="w-full h-full border-0 rounded-b-lg" 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg"   
             title="PDF Viewer" 
           />
         </div>
