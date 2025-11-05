@@ -13,7 +13,7 @@ import {
 } from '../../lib/supabase/operations';
 import {
   Loader2, List, FileText, CheckCircle, Clock, Eye, Download, AlertCircle, Inbox, User as UserIcon,
-  Mail, Phone, MapPin, Calendar, Briefcase, Hash, Edit2, FileSignature, AlertTriangle, ChevronDown
+  Mail, Phone, MapPin, Calendar, Briefcase, Hash, Edit2, FileSignature, AlertTriangle, CalendarDays,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -26,33 +26,6 @@ import { X } from 'lucide-react';
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-};
-
-const getInitials = (first?: string, last?: string) => {
-  const a = (first || '').trim()[0] || '';
-  const b = (last || '').trim()[0] || '';
-  return (a + b || 'E').toUpperCase();
-};
-
-const Avatar = ({ src, first, last, size = 80 }: { src?: string; first?: string; last?: string; size?: number }) => {
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt="Profile"
-        className="rounded-full object-cover ring-2 ring-white shadow-lg"
-        style={{ width: size, height: size }}
-      />
-    );
-  }
-  return (
-    <div
-      className="rounded-full bg-white/30 text-white font-semibold grid place-items-center ring-2 ring-white shadow-lg"
-      style={{ width: size, height: size }}
-    >
-      {getInitials(first, last)}
-    </div>
-  );
 };
 
 // --- PDF Viewer (Copied from Admin Dashboard) ---
@@ -90,7 +63,6 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
-// --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile } = useAuth();
   const { addToast } = useToast();
@@ -106,7 +78,6 @@ const EmployeeDashboardPage: React.FC = () => {
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState<any>({});
-  const [profileOpen, setProfileOpen] = useState(true); // dropdown open by default
 
   useEffect(() => {
     if (!user) return;
@@ -136,7 +107,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
     fetchData();
 
-    // Realtime listener for assignments and messages
+    // Realtime listener
     const channel = supabase
       .channel(`employee_assignments:${user.id}`)
       .on('postgres_changes',
@@ -164,7 +135,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
   const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(null); // Toggle off
+      setSelectedAssignment(null);
       return;
     }
     setSelectedAssignment({ id: assignmentId, loading: true });
@@ -179,14 +150,19 @@ const EmployeeDashboardPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
-    // Optimistic update
-    setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, status } : a));
+    setAssignments(prev => 
+      prev.map(a => a.id === assignmentId ? { ...a, status } : a)
+    );
     if (selectedAssignment?.id === assignmentId) {
       setSelectedAssignment(prev => prev ? { ...prev, status } : null);
     }
+    
     const { error } = await updateAssignmentStatus(assignmentId, status);
-    if (error) addToast({ type: 'error', title: 'Update Failed', message: error.message });
-    else addToast({ type: 'success', title: 'Status Updated!' });
+    if (error) {
+      addToast({ type: 'error', title: 'Update Failed', message: error.message });
+    } else {
+      addToast({ type: 'success', title: 'Status Updated!' });
+    }
   };
 
   const handlePostComment = async (assignmentId: string, content: string) => {
@@ -239,35 +215,41 @@ const EmployeeDashboardPage: React.FC = () => {
       addToast({ type: 'error', title: 'Signing Failed', message: err.message });
     }
   };
-
+  
   const getStatusProps = (status: string) => {
     switch (status) {
-      case 'completed': return { icon: CheckCircle, color: 'text-green-600', label: 'Completed' };
-      case 'in_progress': return { icon: Clock, color: 'text-blue-600', label: 'In Progress' };
-      case 'overdue': return { icon: AlertCircle, color: 'text-red-600', label: 'Overdue' };
-      default: return { icon: List, color: 'text-amber-600', label: status };
+      case 'completed': return { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50', ring: 'ring-green-200', label: 'Completed' };
+      case 'in_progress': return { icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-200', label: 'In Progress' };
+      case 'overdue': return { icon: AlertCircle, color: 'text-red-600', bg: 'bg-red-50', ring: 'ring-red-200', label: 'Overdue' };
+      default: return { icon: List, color: 'text-amber-600', bg: 'bg-amber-50', ring: 'ring-amber-200', label: status };
     }
   };
 
-  // Stats for profile section
+  // --- Pretty counts for header stats
   const stats = useMemo(() => {
     const total = assignments.length;
-    const inProgress = assignments.filter(a => a.status === 'in_progress').length;
     const completed = assignments.filter(a => a.status === 'completed').length;
+    const inProgress = assignments.filter(a => a.status === 'in_progress').length;
     const overdue = assignments.filter(a => a.status === 'overdue').length;
-    return { total, inProgress, completed, overdue };
+    return { total, completed, inProgress, overdue };
   }, [assignments]);
 
-  // Loading skeleton
+  // Loading skeleton (beautified)
   const LoadingSkeleton = () => (
     <div className="flex h-screen bg-gradient-to-b from-white to-gray-50">
       <main className="flex-1 overflow-y-auto p-6 md:p-10">
         <div className="max-w-5xl mx-auto space-y-6">
-          <div className="h-40 w-full bg-gray-200 rounded-2xl animate-pulse" />
-          <div className="h-6 bg-gray-200 rounded w-1/3 animate-pulse" />
+          <div className="h-10 bg-gray-200 rounded-xl w-2/3 animate-pulse" />
+          <div className="h-5 bg-gray-200 rounded w-1/2 animate-pulse" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1,2,3,4].map(i=>(
+              <div key={i} className="h-24 rounded-2xl bg-white shadow-sm border border-gray-100 animate-pulse" />
+            ))}
+          </div>
+          <div className="h-6 bg-gray-200 rounded w-1/4 animate-pulse" />
           <div className="space-y-3">
             {[1,2,3].map(i=>(
-              <div key={i} className="h-24 rounded-xl bg-white shadow-sm border border-gray-100 animate-pulse" />
+              <div key={i} className="h-20 rounded-2xl bg-white shadow-sm border border-gray-100 animate-pulse" />
             ))}
           </div>
         </div>
@@ -299,7 +281,6 @@ const EmployeeDashboardPage: React.FC = () => {
       if (error) throw error;
       addToast({ type: 'success', title: 'Profile Updated!' });
       setIsEditingProfile(false);
-      // Refresh will happen via AuthContext
       window.location.reload();
     } catch (err: any) {
       addToast({ type: 'error', title: 'Update Failed', message: err.message });
@@ -316,186 +297,157 @@ const EmployeeDashboardPage: React.FC = () => {
     </div>
   );
 
+  // --- UI helpers
+  const SectionTitle = ({ icon: Icon, children }: any) => (
+    <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+      <Icon className="text-gray-500" /> {children}
+    </h2>
+  );
+
+  const StatCard = ({ label, value, className, Icon }: any) => (
+    <div className={`rounded-2xl border border-gray-200 bg-white/80 backdrop-blur-sm shadow-sm p-4 ${className || ''}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+        {Icon && <Icon className="h-4 w-4 text-gray-400" />}
+      </div>
+      <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+    </div>
+  );
+
   return (
     <div className="flex h-screen bg-gradient-to-b from-white to-gray-50">
       <main className="flex-1 overflow-y-auto">
-        {/* Gradient Header with employee photo */}
+        {/* Gradient Header */}
         <div className="relative">
-          <div className="h-40 bg-gradient-to-r from-[#FF5722] via-orange-500 to-amber-400" />
-          <div className="max-w-5xl mx-auto px-6">
-            <div className="relative -mt-10 flex items-end justify-between">
-              <div className="text-white drop-shadow-sm">
-                <h1 className="text-xl md:text-2xl font-semibold">
+          <div className="absolute inset-0 h-40 bg-gradient-to-r from-[#FF5722] via-orange-500 to-amber-400 opacity-90" />
+          <div className="relative max-w-5xl mx-auto px-6 py-8">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-white/90 grid place-items-center shadow">
+                <CalendarDays className="h-5 w-5 text-[#FF5722]" />
+              </div>
+              <div>
+                <h1 className="text-white text-xl md:text-2xl font-semibold">
                   Welcome, {profile?.first_name || 'Employee'}
                 </h1>
-                <p className="text-white/90 text-xs md:text-sm">Here’s what’s on your plate. Let’s get to work.</p>
+                <p className="text-white/90 text-xs">
+                  Here’s what’s on your plate. Let’s get to work.
+                </p>
               </div>
-              <div className="translate-y-6">
-                <Avatar
-                  src={profile?.avatar_url}
-                  first={profile?.first_name}
-                  last={profile?.last_name}
-                  size={80}
-                />
-              </div>
+            </div>
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
+              <StatCard label="Total" value={stats.total} Icon={List} />
+              <StatCard label="In Progress" value={stats.inProgress} Icon={Clock} />
+              <StatCard label="Completed" value={stats.completed} Icon={CheckCircle} />
+              <StatCard label="Overdue" value={stats.overdue} Icon={AlertCircle} />
             </div>
           </div>
         </div>
 
         {/* Page Content */}
-        <div className="max-w-5xl mx-auto px-6 pb-10 space-y-8 mt-10">
-          {/* Profile Section (collapsible) */}
-          <section className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-            {/* Header / Toggle */}
-            <button
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50"
-              onClick={() => setProfileOpen(v => !v)}
-              aria-expanded={profileOpen}
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-full bg-gray-100 grid place-items-center">
-                  <UserIcon className="h-5 w-5 text-gray-500" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm text-gray-500">Profile</p>
-                  <p className="text-base font-semibold text-gray-900">{profile?.first_name} {profile?.last_name}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {!isEditingProfile && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleEditProfile(); }}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
-                  >
-                    <Edit2 size={14} /> Edit
-                  </button>
-                )}
-                <ChevronDown
-                  className={`h-5 w-5 text-gray-500 transition-transform ${profileOpen ? 'rotate-180' : ''}`}
-                />
-              </div>
-            </button>
-
-            {/* Dropdown content */}
-            <AnimatePresence initial={false}>
-              {profileOpen && (
-                <motion.div
-                  key="profile-content"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ type: 'tween', duration: 0.2 }}
-                  className="px-6 pb-6"
+        <div className="max-w-5xl mx-auto px-6 pb-10 -mt-4 space-y-8">
+          {/* Profile Section */}
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-gray-200 bg-white/90 backdrop-blur-sm shadow-sm p-6"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <SectionTitle icon={UserIcon}>My Profile</SectionTitle>
+              {!isEditingProfile && (
+                <button
+                  onClick={handleEditProfile}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
                 >
-                  {/* If editing form */}
-                  {isEditingProfile ? (
-                    <div className="space-y-4 pt-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">First Name</label>
-                          <input
-                            type="text"
-                            value={profileForm.first_name}
-                            onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
-                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Last Name</label>
-                          <input
-                            type="text"
-                            value={profileForm.last_name}
-                            onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
-                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Phone</label>
-                          <input
-                            type="text"
-                            value={profileForm.phone}
-                            onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium text-gray-700">Home Address</label>
-                          <input
-                            type="text"
-                            value={profileForm.home_address}
-                            onChange={(e) => setProfileForm({ ...profileForm, home_address: e.target.value })}
-                            className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex gap-2 justify-end">
-                        <button
-                          onClick={() => setIsEditingProfile(false)}
-                          className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSaveProfile}
-                          className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19]"
-                        >
-                          Save Changes
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Profile stats inside dropdown */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
-                        <div className="rounded-xl border border-gray-200 p-4 bg-white/80">
-                          <p className="text-xs text-gray-500">Total</p>
-                          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-                        </div>
-                        <div className="rounded-xl border border-gray-200 p-4 bg-white/80">
-                          <p className="text-xs text-gray-500">In Progress</p>
-                          <p className="text-2xl font-bold text-gray-900">{stats.inProgress}</p>
-                        </div>
-                        <div className="rounded-xl border border-gray-200 p-4 bg-white/80">
-                          <p className="text-xs text-gray-500">Completed</p>
-                          <p className="text-2xl font-bold text-gray-900">{stats.completed}</p>
-                        </div>
-                        <div className="rounded-xl border border-gray-200 p-4 bg-white/80">
-                          <p className="text-xs text-gray-500">Overdue</p>
-                          <p className="text-2xl font-bold text-gray-900">{stats.overdue}</p>
-                        </div>
-                      </div>
-
-                      {/* Info blocks */}
-                      <div className="mt-6">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                          <InfoRow icon={Mail} label="Email" value={profile?.email} />
-                          <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
-                          <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
-                          <InfoRow icon={Calendar} label="Birth Date" value={profile?.birth_date ? formatDate(profile.birth_date) : null} />
-                        </div>
-
-                        <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-6">Employment Details</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
-                          <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
-                          <InfoRow icon={Calendar} label="Start Date" value={profile?.start_date ? formatDate(profile.start_date) : null} />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </motion.div>
+                  <Edit2 size={16} /> Edit Profile
+                </button>
               )}
-            </AnimatePresence>
-          </section>
+            </div>
+
+            {isEditingProfile ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">First Name</label>
+                    <input
+                      type="text"
+                      value={profileForm.first_name}
+                      onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Last Name</label>
+                    <input
+                      type="text"
+                      value={profileForm.last_name}
+                      onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Phone</label>
+                    <input
+                      type="text"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Home Address</label>
+                    <input
+                      type="text"
+                      value={profileForm.home_address}
+                      onChange={(e) => setProfileForm({ ...profileForm, home_address: e.target.value })}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#FF5722]/40"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => setIsEditingProfile(false)}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveProfile}
+                    className="px-4 py-2 text-sm font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19]"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Contact Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                  <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                  <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
+                  <InfoRow icon={Calendar} label="Birth Date" value={profile?.birth_date ? formatDate(profile.birth_date) : null} />
+                </div>
+
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 mt-6">Employment Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
+                  <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
+                  <InfoRow icon={Calendar} label="Start Date" value={profile?.start_date ? formatDate(profile.start_date) : null} />
+                </div>
+              </div>
+            )}
+          </motion.section>
 
           {/* Assignments Section */}
-          <section>
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <List className="text-gray-500" /> My Assignments
-            </h2>
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <SectionTitle icon={List}>My Assignments</SectionTitle>
             {assignments.length === 0 ? (
-               <div className="text-center p-10 bg-white rounded-2xl shadow-sm mt-4 border border-dashed border-gray-300">
+               <div className="text-center p-10 bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm mt-4 border border-dashed border-gray-300">
                   <Inbox size={48} className="mx-auto text-gray-300" />
                   <h3 className="mt-4 font-semibold text-gray-800">All caught up!</h3>
                   <p className="text-sm text-gray-500">You have no active assignments.</p>
@@ -503,18 +455,18 @@ const EmployeeDashboardPage: React.FC = () => {
             ) : (
               <div className="mt-4 space-y-3">
                 {assignments.map(assignment => {
-                  const { icon: Icon, color, label } = getStatusProps(assignment.status);
+                  const { icon: Icon, color, bg, ring, label } = getStatusProps(assignment.status);
                   return (
                     <button
                       key={assignment.id}
                       onClick={() => handleAssignmentClick(assignment.id)}
-                      className={`w-full p-4 bg-white rounded-2xl border border-gray-200 shadow-sm text-left transition-all ${
+                      className={`w-full p-4 bg-white/90 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm text-left transition-all ${
                         selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722]' : 'hover:shadow-md hover:-translate-y-0.5'
                       }`}
                     >
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-900">{assignment.title}</span>
-                        <span className={`flex items-center text-xs font-medium gap-1.5 ${color}`}>
+                        <span className={`flex items-center text-xs font-medium gap-1.5 ${color} ${bg} px-2 py-1 rounded-full ring-1 ${ring}`}>
                           <Icon size={14} /> {label}
                         </span>
                       </div>
@@ -524,15 +476,17 @@ const EmployeeDashboardPage: React.FC = () => {
                 })}
               </div>
             )}
-          </section>
+          </motion.section>
 
           {/* Documents Section */}
-          <section className="mt-8 pb-10">
-            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
-              <FileText className="text-gray-500" /> My Documents
-            </h2>
+          <motion.section
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pb-10"
+          >
+            <SectionTitle icon={FileText}>My Documents</SectionTitle>
             {documents.length === 0 ? (
-               <div className="text-center p-10 bg-white rounded-2xl shadow-sm mt-4 border border-dashed border-gray-300">
+               <div className="text-center p-10 bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm mt-4 border border-dashed border-gray-300">
                   <FileText size={48} className="mx-auto text-gray-300" />
                   <h3 className="mt-4 font-semibold text-gray-800">No Documents</h3>
                   <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
@@ -542,7 +496,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 {documents.map(doc => {
                   const needsSignature = doc.requires_signing && !doc.signed_at;
                   return (
-                    <div key={doc.id} className={`p-4 bg-white rounded-2xl shadow-sm border ${
+                    <div key={doc.id} className={`p-4 bg-white/90 backdrop-blur-sm rounded-2xl shadow-sm border ${
                       needsSignature ? 'border-amber-300' : 'border-gray-200'
                     }`}>
                       <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
@@ -599,7 +553,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 })}
               </div>
             )}
-          </section>
+          </motion.section>
         </div>
       </main>
 
