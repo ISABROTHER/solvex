@@ -1,10 +1,3 @@
-I understand. You want the sliding assignment detail panel (`EmployeeAssignmentPanel.tsx`) to adopt a clean, themed design that is consistent with the rest of your new Employee Dashboard, moving away from the previous plain look.
-
-I have refactored the design of **`src/pages/employee/EmployeeAssignmentPanel.tsx`** to be more visually appealing, use your brand color (`#FF5722`), and provide better structure with distinct sections.
-
-### `src/pages/employee/EmployeeAssignmentPanel.tsx`
-
-```tsx
 // @ts-nocheck
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,9 +12,9 @@ import {
   UploadCloud,
   CheckCircle,
   FileText,
-  Clock, // Added Clock for In Progress
-  AlertCircle, // Added AlertCircle for Overdue
-  AlertTriangle // Added AlertTriangle for Pending Review
+  Clock,
+  AlertCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 // Helper to format date
@@ -33,7 +26,7 @@ const formatDate = (dateString: string | null) => {
   });
 };
 
-// Helper to get status colors (copied logic from Dashboard page for consistency)
+// Helper to get status colors (for consistent theming with Dashboard)
 const getStatusProps = (status: string) => {
     switch (status) {
       case 'completed': return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-100', label: 'Completed' };
@@ -254,4 +247,3 @@ const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
 };
 
 export default EmployeeAssignmentPanel;
-```
