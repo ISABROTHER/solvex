@@ -101,18 +101,22 @@ const EmployeeDashboardPage: React.FC = () => {
     };
 
     fetchData();
-    
-    // Set up Realtime listener for assignments
+
+    // Set up Realtime listener for assignments - only refresh list on assignment_members changes
     const channel = supabase
       .channel(`employee_assignments:${user.id}`)
-      .on('postgres_changes', 
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
-        fetchData
+        async () => {
+          // Only refresh assignments list, not full refetch
+          const result = await getAssignmentsForEmployee(user.id);
+          if (!result.error) setAssignments(result.data || []);
+        }
       )
-      .on('postgres_changes', 
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'assignment_messages' },
         (payload) => {
-          // If a message comes in for the currently selected assignment, refresh it
+          // If a message comes in for the currently selected assignment, refresh it silently
           if (selectedAssignment && payload.new.assignment_id === selectedAssignment.id) {
             handleAssignmentClick(selectedAssignment.id);
           }
@@ -124,7 +128,7 @@ const EmployeeDashboardPage: React.FC = () => {
       supabase.removeChannel(channel);
     };
 
-  }, [user, addToast, selectedAssignment]);
+  }, [user, addToast]);
 
   const handleAssignmentClick = async (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
@@ -193,8 +197,32 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
+  // Loading skeleton
+  const LoadingSkeleton = () => (
+    <div className="flex h-screen bg-gray-100">
+      <main className="flex-1 overflow-y-auto p-6 md:p-10">
+        <div className="max-w-4xl mx-auto">
+          <div className="h-8 bg-gray-300 rounded w-1/3 animate-pulse" />
+          <div className="h-4 bg-gray-200 rounded w-2/3 mt-2 animate-pulse" />
+
+          <section className="mt-8">
+            <div className="h-6 bg-gray-300 rounded w-1/4 animate-pulse" />
+            <div className="mt-4 space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="w-full p-4 bg-white rounded-lg shadow-sm">
+                  <div className="h-5 bg-gray-300 rounded w-3/4 animate-pulse" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2 mt-2 animate-pulse" />
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+  );
+
   if (loading) {
-    return <div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-[#FF5722]" /></div>;
+    return <LoadingSkeleton />;
   }
   
   if (error) {
