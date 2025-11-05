@@ -4,27 +4,69 @@ import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
   getAssignmentsForEmployee,
-  getFullAssignmentDetails,
+  getFullAssignmentDetails, // We keep this for realtime refreshes
   getEmployeeDocuments,
   createDocumentSignedUrl,
   updateAssignmentStatus,
   postAssignmentComment,
   EmployeeDocument
 } from '../../lib/supabase/operations';
-import { Loader2, List, FileText, CheckCircle, Clock, Send, Eye, Download, AlertCircle, Inbox } from 'lucide-react';
+import { 
+  Loader2, 
+  List, 
+  FileText, 
+  CheckCircle, 
+  Clock, 
+  Send, 
+  Eye, 
+  Download, 
+  AlertCircle, 
+  Inbox,
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Briefcase,
+  Hash,
+  DollarSign,
+  Building,
+  CreditCard
+} from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X } from 'lucide-react';
 
-// Helper to format date
+// --- Helper Functions ---
 const formatDate = (dateString: string | null) => {
+  if (!dateString) return 'N/A';
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return 'N/A';
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+const formatSimpleDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
-// --- PDF Viewer (Copied from Admin Dashboard) ---
-import { motion, AnimatePresence } from 'framer-motion';
-import { X } from 'lucide-react';
+// --- Reusable InfoRow (from Admin dashboard) ---
+const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string | number | null }> = ({
+  icon: Icon,
+  label,
+  value
+}) => (
+  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+    <Icon className="w-4 h-4 text-gray-400 flex-shrink-0 mt-1" />
+    <div>
+      <p className="text-xs text-gray-500">{label}</p>
+      <p className="font-medium text-gray-900 break-words">{value || 'N/A'}</p>
+    </div>
+  </div>
+);
 
+// --- PDF Viewer ---
 const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
   <AnimatePresence>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
@@ -74,75 +116,99 @@ const EmployeeDashboardPage: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
+  // --- Main Data Fetching Function ---
+  const fetchData = async (refreshAssignmentId?: string) => {
+    if (!user) return;
+    
+    // If we're just refreshing a single assignment (e.g., for a new comment)
+    if (refreshAssignmentId) {
+      try {
+        const { data, error } = await getFullAssignmentDetails(refreshAssignmentId);
+        if (error) throw error;
+        // Update the main list
+        setAssignments(prev => prev.map(a => a.id === refreshAssignmentId ? data : a));
+        // Update the open panel
+        if (selectedAssignment?.id === refreshAssignmentId) {
+          setSelectedAssignment(data);
+        }
+      } catch (err) {
+        console.error("Failed to refresh assignment", err);
+      }
+      return;
+    }
+
+    // Standard full load
+    setLoading(true);
+    setError(null);
+    try {
+      const [assignmentResult, documentResult] = await Promise.all([
+        getAssignmentsForEmployee(user.id),
+        getEmployeeDocuments(user.id)
+      ]);
+
+      if (assignmentResult.error) throw assignmentResult.error;
+      if (documentResult.error) throw documentResult.error;
+
+      setAssignments(assignmentResult.data || []);
+      setDocuments(documentResult.data || []);
+
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch data.');
+      addToast({ type: 'error', title: 'Loading Failed', message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // --- Initial Load and Realtime Setup ---
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [assignmentResult, documentResult] = await Promise.all([
-          getAssignmentsForEmployee(user.id),
-          getEmployeeDocuments(user.id)
-        ]);
-
-        if (assignmentResult.error) throw assignmentResult.error;
-        if (documentResult.error) throw documentResult.error;
-
-        setAssignments(assignmentResult.data || []);
-        setDocuments(documentResult.data || []);
-
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch data.');
-        addToast({ type: 'error', title: 'Loading Failed', message: err.message });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchData(); // Initial full load
     
-    // Set up Realtime listener for assignments
     const channel = supabase
-      .channel(`employee_assignments:${user.id}`)
+      .channel(`employee_dashboard:${user.id}`)
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'assignment_members', filter: `employee_id=eq.${user.id}` },
-        fetchData
+        () => fetchData() // Full refetch if assignments are added/removed
       )
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'assignment_messages' },
         (payload) => {
-          // If a message comes in for the currently selected assignment, refresh it
-          if (selectedAssignment && payload.new.assignment_id === selectedAssignment.id) {
-            handleAssignmentClick(selectedAssignment.id);
+          // If a message comes in, refresh just that assignment
+          if (payload.new.assignment_id) {
+             fetchData(payload.new.assignment_id);
           }
         }
+      )
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'employee_documents', filter: `profile_id=eq.${user.id}` },
+         () => fetchData() // Full refetch if documents change
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [user, addToast]); // Removed selectedAssignment dependency
 
-  }, [user, addToast, selectedAssignment]);
-
-  const handleAssignmentClick = async (assignmentId: string) => {
+  // --- *** SPEED FIX *** ---
+  // This is now an instant local state update, not a DB call
+  const handleAssignmentClick = (assignmentId: string) => {
     if (selectedAssignment?.id === assignmentId) {
       setSelectedAssignment(null); // Toggle off
       return;
     }
     
-    // Show loading skeleton in panel
-    setSelectedAssignment({ id: assignmentId, loading: true }); 
-    try {
-      const { data, error } = await getFullAssignmentDetails(assignmentId);
-      if (error) throw error;
-      setSelectedAssignment(data);
-    } catch (err: any) {
-      addToast({ type: 'error', title: 'Error', message: 'Could not load assignment details.' });
-      setSelectedAssignment(null);
+    // Find the assignment we already fetched
+    const assignmentToOpen = assignments.find(a => a.id === assignmentId);
+    if (assignmentToOpen) {
+      setSelectedAssignment(assignmentToOpen); // Set it. This is instant.
+    } else {
+      addToast({ type: 'error', title: 'Error', message: 'Could not find assignment.' });
     }
   };
+  // --- *** END SPEED FIX *** ---
 
   const handleUpdateStatus = async (assignmentId: string, status: string) => {
     // Optimistic update
@@ -189,11 +255,12 @@ const EmployeeDashboardPage: React.FC = () => {
       case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
       case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
       case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
-      default: return { icon: List, color: 'text-yellow-500', label: status };
+      case 'pending_review': return { icon: Eye, color: 'text-purple-500', label: 'Pending Review' };
+      default: return { icon: List, color: 'text-yellow-500', label: 'Pending' };
     }
   };
 
-  if (loading) {
+  if (loading && !profile) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="w-12 h-12 animate-spin text-[#FF5722]" /></div>;
   }
   
@@ -205,82 +272,124 @@ const EmployeeDashboardPage: React.FC = () => {
     <div className="flex h-screen bg-gray-100">
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto p-6 md:p-10">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-7xl mx-auto">
           <h1 className="text-3xl font-bold text-gray-900">Welcome, {profile?.first_name || 'Employee'}</h1>
-          <p className="text-gray-600 mt-1">Here's what's on your plate. Let's get to work.</p>
+          <p className="text-gray-600 mt-1">Here's your personal dashboard. Let's get to work.</p>
 
-          {/* Assignments Section */}
-          <section className="mt-8">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <List className="text-gray-500" /> My Assignments
-            </h2>
-            {assignments.length === 0 ? (
-               <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
-                  <Inbox size={48} className="mx-auto text-gray-300" />
-                  <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
-                  <p className="text-sm text-gray-500">You have no active assignments.</p>
-                </div>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {assignments.map(assignment => {
-                  const { icon: Icon, color, label } = getStatusProps(assignment.status);
-                  return (
-                    <button
-                      key={assignment.id}
-                      onClick={() => handleAssignmentClick(assignment.id)}
-                      className={`w-full p-4 bg-white rounded-lg shadow-sm text-left transition-all ${
-                        selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722]' : 'hover:shadow-md'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="font-semibold text-gray-800">{assignment.title}</span>
-                        <span className={`flex items-center text-xs font-medium gap-1.5 ${color}`}>
-                          <Icon size={14} /> {label}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">Due: {formatDate(assignment.due_date)}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          {/* Documents Section */}
-          <section className="mt-8">
-            <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <FileText className="text-gray-500" /> My Documents
-            </h2>
-            {documents.length === 0 ? (
-               <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
-                  <FileText size={48} className="mx-auto text-gray-300" />
-                  <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
-                  <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
-                </div>
-            ) : (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {documents.map(doc => (
-                  <div key={doc.id} className="p-4 bg-white rounded-lg shadow-sm flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold text-gray-800">{doc.document_name}</p>
-                      {doc.requires_signing && !doc.signed_at && (
-                        <span className="text-xs text-yellow-600 font-medium">Pending Signature</span>
-                      )}
-                      {doc.signed_at && (
-                        <span className="text-xs text-green-600 font-medium">Signed</span>
-                      )}
-                    </div>
-                    <button 
-                      onClick={() => handleViewDocument(doc)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
-                    >
-                      <Eye size={14} /> View
-                    </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+            {/* Left Column: Assignments & Documents */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Assignments Section */}
+              <section>
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <List className="text-gray-500" /> My Assignments
+                </h2>
+                {loading && assignments.length === 0 ? (
+                  <div className="flex justify-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                   </div>
-                ))}
+                ) : assignments.length === 0 ? (
+                  <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                      <Inbox size={48} className="mx-auto text-gray-300" />
+                      <h3 className="mt-4 font-semibold text-gray-700">All caught up!</h3>
+                      <p className="text-sm text-gray-500">You have no active assignments.</p>
+                    </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {assignments.map(assignment => {
+                      const { icon: Icon, color, label } = getStatusProps(assignment.status);
+                      return (
+                        <button
+                          key={assignment.id}
+                          onClick={() => handleAssignmentClick(assignment.id)}
+                          className={`w-full p-4 bg-white rounded-lg shadow-sm text-left transition-all ${
+                            selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722]' : 'hover:shadow-md'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-gray-800">{assignment.title}</span>
+                            <span className={`flex items-center text-xs font-medium gap-1.5 ${color}`}>
+                              <Icon size={14} /> {label.replace("_", " ")}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-500 mt-1">Due: {formatSimpleDate(assignment.due_date)}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {/* Documents Section */}
+              <section>
+                <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                  <FileText className="text-gray-500" /> My Documents
+                </h2>
+                 {loading && documents.length === 0 ? (
+                  <div className="flex justify-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                ) : documents.length === 0 ? (
+                  <div className="text-center p-10 bg-white rounded-lg shadow-sm mt-4">
+                      <FileText size={48} className="mx-auto text-gray-300" />
+                      <h3 className="mt-4 font-semibold text-gray-700">No Documents</h3>
+                      <p className="text-sm text-gray-500">Your admin hasn't uploaded any documents for you yet.</p>
+                    </div>
+                ) : (
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {documents.map(doc => (
+                      <div key={doc.id} className="p-4 bg-white rounded-lg shadow-sm flex justify-between items-center">
+                        <div>
+                          <p className="font-semibold text-gray-800">{doc.document_name}</p>
+                          {doc.requires_signing && !doc.signed_at && (
+                            <span className="text-xs text-yellow-600 font-medium">Pending Signature</span>
+                          )}
+                          {doc.signed_at && (
+                            <span className="text-xs text-green-600 font-medium">Signed</span>
+                          )}
+                        </div>
+                        <button 
+                          onClick={() => handleViewDocument(doc)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
+                        >
+                          <Eye size={14} /> View
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+            
+            {/* Right Column: Profile Details */}
+            <aside className="lg:col-span-1 space-y-6">
+              {/* Profile Card */}
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">My Profile</h2>
+                <div className="space-y-2">
+                  <InfoRow icon={Mail} label="Email" value={profile?.email} />
+                  <InfoRow icon={Phone} label="Phone" value={profile?.phone} />
+                  <InfoRow icon={MapPin} label="Address" value={profile?.home_address} />
+                  <InfoRow icon={Calendar} label="Birth Date" value={formatDate(profile?.birth_date)} />
+                </div>
               </div>
-            )}
-          </section>
+              
+               {/* Employment Card */}
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <h2 className="text-xl font-semibold text-gray-800 mb-4">Employment Details</h2>
+                <div className="space-y-2">
+                  <InfoRow icon={Briefcase} label="Position" value={profile?.position} />
+                  <InfoRow icon={Hash} label="Employee #" value={profile?.employee_number} />
+                  <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile?.start_date)} />
+                  <InfoRow icon={FileText} label="National ID" value={profile?.national_id} />
+                  <InfoRow icon={DollarSign} label="Salary" value={profile?.salary ? `GHS ${profile?.salary}` : 'N/A'} />
+                  <InfoRow icon={Building} label="Bank" value={profile?.bank_name} />
+                  <InfoRow icon={CreditCard} label="Account #" value={profile?.bank_account} />
+                </div>
+              </div>
+            </aside>
+            
+          </div>
         </div>
       </main>
 
