@@ -75,10 +75,10 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
 
 // --- Profile Edit Form Modal (Updated Editability) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
-  // Keep name fields here to pre-fill, but they will be readOnly
   const [formData, setFormData] = useState({
     first_name: profile?.first_name || '',
     last_name: profile?.last_name || '',
+    email: profile?.email || '', // <-- ADDED EMAIL TO FORM DATA
     phone: profile?.phone || '',
     home_address: profile?.home_address || '',
   });
@@ -90,6 +90,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
     setFormData({
         first_name: profile?.first_name || '',
         last_name: profile?.last_name || '',
+        email: profile?.email || '', // <-- ADDED EMAIL
         phone: profile?.phone || '',
         home_address: profile?.home_address || '',
     });
@@ -105,8 +106,6 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   };
 
   const handleSave = () => {
-    // We only pass editable fields (phone, address) + the avatar file. 
-    // The name fields are excluded or passed read-only via formData which is fine since the backend update payload will merge correctly.
     onSave(formData, avatarFile);
   };
 
@@ -151,8 +150,8 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
             </div>
           </div>
 
+          {/* Name Fields (Read-Only) */}
           <div className="grid grid-cols-2 gap-4">
-            {/* First Name (Read-Only) */}
             <label className="block">
               <span className="text-sm font-medium text-gray-700">First Name</span>
               <input 
@@ -160,11 +159,10 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
                 name="first_name" 
                 value={formData.first_name} 
                 className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
-                readOnly={true} // <-- SET READ ONLY
+                readOnly={true} // <-- READ-ONLY
                 disabled={isSaving}
               />
             </label>
-            {/* Last Name (Read-Only) */}
             <label className="block">
               <span className="text-sm font-medium text-gray-700">Last Name</span>
               <input 
@@ -172,11 +170,26 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
                 name="last_name" 
                 value={formData.last_name} 
                 className="mt-1 w-full p-2 border rounded-md bg-gray-100 cursor-not-allowed" 
-                readOnly={true} // <-- SET READ ONLY
+                readOnly={true} // <-- READ-ONLY
                 disabled={isSaving}
               />
             </label>
           </div>
+
+          {/* Email (Editable) */}
+          <label className="block">
+            <span className="text-sm font-medium text-gray-700">Email</span>
+            <input 
+                type="email" 
+                name="email" 
+                value={formData.email} 
+                onChange={handleChange} 
+                className="mt-1 w-full p-2 border rounded-md bg-gray-50"
+                disabled={isSaving}
+            />
+             <p className="text-xs text-gray-500 mt-1">Note: Changing your email here updates your profile record, but changing your login email requires the main user authentication process.</p>
+          </label>
+          
           {/* Phone (Editable) */}
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Phone</span>
@@ -213,7 +226,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
 };
 
 
-// --- Main Employee Dashboard Page (rest of file remains the same) ---
+// --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const { addToast } = useToast();
@@ -260,9 +273,9 @@ const EmployeeDashboardPage: React.FC = () => {
             avatarUrl = urlData.publicUrl;
         }
         
-        // Pass only the fields that were allowed to be edited in the modal 
-        // (Phone and Home Address) plus the avatar URL.
+        // --- UPDATED PAYLOAD to include editable fields (email, phone, home_address) ---
         const updateData = {
+            email: formData.email, // <-- ADDED
             phone: formData.phone,
             home_address: formData.home_address,
             avatar_url: avatarUrl 
