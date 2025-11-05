@@ -150,10 +150,14 @@ const EmployeesTab: React.FC = () => {
     setLoadingAssignments(true);
     try {
       const { data, error } = await getAllAssignments();
-      if (error) throw error;
+      if (error) {
+        console.error('Assignments error:', error);
+        throw error;
+      }
       setAssignments(data || []);
     } catch (err: any) {
-      addToast({ type: 'error', title: 'Error', message: 'Failed to load assignments' });
+      console.error('Failed to fetch assignments:', err);
+      addToast({ type: 'error', title: 'Error', message: err.message || 'Failed to load assignments' });
     } finally {
       setLoadingAssignments(false);
     }
@@ -232,11 +236,6 @@ const EmployeesTab: React.FC = () => {
   const handleEditEmployee = (e: React.MouseEvent, employee: Profile) => {
     e.stopPropagation();
     setEditingEmployee(employee);
-    setIsModalOpen(true);
-  };
-
-  const handleAddNewEmployee = () => {
-    setEditingEmployee({});
     setIsModalOpen(true);
   };
 
@@ -354,7 +353,10 @@ const EmployeesTab: React.FC = () => {
           <p className="text-sm text-gray-500">Manage employee profiles, documents, and assignments</p>
         </div>
         <button
-          onClick={handleAddNewEmployee}
+          onClick={() => {
+            setEditingEmployee({}); // Set to empty object for "create" mode
+            setIsModalOpen(true);
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
         >
           <PlusCircle size={20} />

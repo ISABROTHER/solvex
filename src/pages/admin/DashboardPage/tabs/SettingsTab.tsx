@@ -348,4 +348,4 @@ const DatabaseManagementCard = ({ isSyncing, syncStatus, syncMessage, setIsSynci
   );
 };
 
-export default SettingsTab;
+export default SettingsTab; 
