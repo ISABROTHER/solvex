@@ -39,8 +39,9 @@ import {
   ChevronRight,
   ChevronLeft,
   ChevronDown,
-  Filter, 
-  ArrowDownWideNarrow, 
+  Filter,
+  ArrowDownWideNarrow,
+  Eye,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
