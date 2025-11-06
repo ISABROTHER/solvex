@@ -39,6 +39,9 @@ interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   error: string | null;
   setError: (error: string | null) => void;
+  // --- 1. ADD NEW STATE AND SETTER ---
+  isRestoring: boolean;
+  setRestoring: (isRestoring: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +64,8 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     isLoading: true,
   });
   const [error, setError] = useState<string | null>(null);
+  // --- 2. ADD RESTORING STATE ---
+  const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -128,9 +133,23 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         profile: profileData,
         isLoading: false,
       });
+      
+      // --- 3. RESET RESTORING FLAG ON SUCCESS ---
+      if (isRestoring) {
+        setIsRestoring(false);
+      }
+      
       console.log("[updateUserState] Auth state updated:", { role: userRole, isAuthenticated: true });
     } else {
-      console.log("[updateUserState] No active session. Clearing auth state.");
+      console.log("[updateUserState] No active session.");
+      
+      // --- 4. IGNORE NULL SESSION IF RESTORING ---
+      if (isRestoring) {
+        console.log("[updateUserState] Restoring session, ignoring null session.");
+        return authState.role; // Keep current (admin) role
+      }
+      
+      console.log("[updateUserState] Clearing auth state.");
       setAuthState({
         isAuthenticated: false,
         role: null,
@@ -228,6 +247,10 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const logout = async () => {
     console.log("[logout] Logging out user");
     setError(null);
+    // --- 5. ENSURE isRestoring IS FALSE ON MANUAL LOGOUT ---
+    if (isRestoring) {
+      setIsRestoring(false);
+    }
     setAuthState(prev => ({ ...prev, isLoading: true }));
 
     try {
@@ -265,6 +288,9 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     logout,
     error,
     setError,
+    // --- 6. PROVIDE NEW STATE AND SETTER ---
+    isRestoring,
+    setRestoring: setIsRestoring,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
