@@ -15,7 +15,7 @@ interface Profile {
   birth_date?: string;
   position?: string;
   employee_number?: string;
-  start_date?: string; 
+  start_date?: string;
   avatar_url?: string;
   [key: string]: any;
 }

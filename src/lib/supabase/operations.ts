@@ -1,5 +1,5 @@
 // src/lib/supabase/operations.ts
-// @ts-nocheck 
+// @ts-nocheck
 import { supabase } from './client';
 import type { Database } from './database.types';
 
@@ -715,7 +715,7 @@ export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 
     .from('profiles')
     .update({ role: newRole, updated_at: new Date().toISOString() })
     .eq('id', userId);
- 
+
   if (error) {
     return { error };
   }

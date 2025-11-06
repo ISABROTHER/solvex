@@ -1,243 +1,248 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Loader2,
   X,
   ChevronLeft,
   ChevronRight,
   ZoomIn,
   ZoomOut,
   Download,
-  AlertCircle,
+  Maximize2,
+  Minimize2,
+  Loader2,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../lib/supabase/client'; 
 
-// --- THIS IS THE FIX ---
-// Instead of a CDN link, we import the worker file directly from the
-// installed 'react-pdf' package. Vite will handle bundling this.
-// We use the 'dist' (non-esm) entry point as the 'esm' one failed for CSS.
-import pdfjsWorker from 'react-pdf/dist/pdf.worker.entry';
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-// --- END OF FIX ---
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface EnhancedPdfViewerProps {
-  storagePath: string; 
+  pdfUrl: string;
   title: string;
   onClose: () => void;
 }
 
-const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
-  storagePath,
-  title,
-  onClose,
-}) => {
-  const [file, setFile] = useState<Blob | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({ pdfUrl, title, onClose }) => {
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [scale, setScale] = useState(1.0);
-
-  useEffect(() => {
-    if (!storagePath) {
-      setError('No file path provided.');
-      setIsLoading(false);
-      return;
-    }
-
-    const downloadPdf = async () => {
-      setIsLoading(true);
-      setError(null);
-      setFile(null);
-
-      try {
-        const { data, error } = await supabase.storage
-          .from('employee_documents')
-          .download(storagePath);
-
-        if (error) {
-          throw error;
-        }
-
-        if (data) {
-          setFile(data);
-        } else {
-          throw new Error('No data returned from storage.');
-        }
-      } catch (err: any) {
-        console.error('Error downloading PDF:', err);
-        if (err.message.includes('Object not found')) {
-          setError('File not found. It may have been deleted.');
-        } else {
-          setError(`Failed to load document: ${err.message}`);
-        }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    downloadPdf();
-  }, [storagePath]);
-
-  function onDocumentLoadSuccess({ numPages }: { numPages: number }): void {
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
-    setPageNumber(1); // Reset to first page on new doc load
-  }
-
-  const goToPrevPage = () =>
-    setPageNumber((prev) => (prev > 1 ? prev - 1 : prev));
-  const goToNextPage = () =>
-    setPageNumber((prev) => (numPages && prev < numPages ? prev + 1 : prev));
-
-  const zoomIn = () => setScale((prev) => prev + 0.1);
-  const zoomOut = () => setScale((prev) => (prev > 0.5 ? prev - 0.1 : prev));
-
-  const handleDownload = () => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = title.endsWith('.pdf') ? title : `${title}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
+    setLoading(false);
   };
 
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-white">
-          <Loader2 className="w-12 h-12 animate-spin" />
-          <p className="mt-4 text-lg">Loading document...</p>
-        </div>
-      );
-    }
+  const onDocumentLoadError = (error: Error) => {
+    console.error('Error loading PDF:', error);
+    console.error('PDF URL:', pdfUrl);
+    setLoading(false);
+  };
 
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-white bg-red-500/20 p-8 rounded-lg">
-          <AlertCircle className="w-16 h-16 text-red-300" />
-          <p className="mt-4 text-xl font-semibold">Error</p>
-          <p className="mt-2 text-center text-red-200">{error}</p>
-        </div>
-      );
-    }
+  const goToPrevPage = () => {
+    setPageNumber((prev) => Math.max(prev - 1, 1));
+  };
 
-    if (file) {
-      return (
-        <div className="flex-1 overflow-auto p-4 md:p-8 w-full flex justify-center">
-          <div className="relative" style={{ transform: `scale(${scale})` }}>
+  const goToNextPage = () => {
+    setPageNumber((prev) => Math.min(prev + 1, numPages));
+  };
+
+  const zoomIn = () => {
+    setScale((prev) => Math.min(prev + 0.2, 3.0));
+  };
+
+  const zoomOut = () => {
+    setScale((prev) => Math.max(prev - 0.2, 0.5));
+  };
+
+  const toggleFullScreen = () => {
+    setIsFullScreen(!isFullScreen);
+  };
+
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = pdfUrl;
+    link.download = title || 'document.pdf';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <AnimatePresence>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        aria-labelledby="pdf-title"
+        role="dialog"
+        aria-modal="true"
+      >
+        <motion.div
+          className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          className={`relative bg-gray-900 rounded-lg shadow-2xl flex flex-col ${
+            isFullScreen ? 'w-full h-full' : 'w-full max-w-5xl h-[90vh]'
+          }`}
+        >
+          {/* Header */}
+          <div className="flex-shrink-0 p-4 flex justify-between items-center border-b border-gray-700">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <h3 id="pdf-title" className="text-white font-semibold truncate">
+                {title}
+              </h3>
+              {numPages > 0 && (
+                <span className="text-gray-400 text-sm flex-shrink-0">
+                  Page {pageNumber} of {numPages}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Zoom Controls */}
+              <button
+                onClick={zoomOut}
+                disabled={scale <= 0.5}
+                className="p-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Zoom Out"
+              >
+                <ZoomOut size={20} />
+              </button>
+              <span className="text-gray-400 text-sm min-w-[60px] text-center">
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                onClick={zoomIn}
+                disabled={scale >= 3.0}
+                className="p-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                title="Zoom In"
+              >
+                <ZoomIn size={20} />
+              </button>
+
+              <div className="w-px h-6 bg-gray-700 mx-1" />
+
+              {/* Download Button */}
+              <button
+                onClick={handleDownload}
+                className="p-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                title="Download PDF"
+              >
+                <Download size={20} />
+              </button>
+
+              {/* Full Screen Toggle */}
+              <button
+                onClick={toggleFullScreen}
+                className="p-2 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+                title={isFullScreen ? 'Exit Full Screen' : 'Full Screen'}
+              >
+                {isFullScreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+              </button>
+
+              {/* Close Button */}
+              <button
+                onClick={onClose}
+                className="p-2 rounded-lg text-gray-300 hover:bg-red-600 hover:text-white transition-colors"
+                aria-label="Close document viewer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+
+          {/* PDF Content */}
+          <div className="flex-1 overflow-auto bg-gray-800 flex items-center justify-center p-4">
+            {loading && (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-10 h-10 text-[#FF5722] animate-spin" />
+                <p className="text-gray-400">Loading document...</p>
+              </div>
+            )}
+
             <Document
-              file={file} 
+              file={{ url: pdfUrl }}
               onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={(err) => {
-                console.error('React-PDF load error:', err);
-                setError(`Failed to render PDF: ${err.message}`);
+              onLoadError={onDocumentLoadError}
+              loading={null}
+              options={{
+                cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/cmaps/`,
+                cMapPacked: true,
+                standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjs.version}/standard_fonts/`,
               }}
-              loading={
-                <div className="flex items-center justify-center h-96 text-white">
-                  <Loader2 className="w-8 h-8 animate-spin" />
+              error={
+                <div className="text-center p-8">
+                  <p className="text-red-400 font-semibold mb-2">Failed to load PDF</p>
+                  <p className="text-gray-400 text-sm mb-4">
+                    The document could not be loaded. Please try downloading it instead.
+                  </p>
+                  <button
+                    onClick={handleDownload}
+                    className="px-4 py-2 bg-[#FF5722] text-white rounded-lg hover:bg-[#E64A19] transition-colors"
+                  >
+                    Download PDF
+                  </button>
                 </div>
               }
             >
               <Page
                 pageNumber={pageNumber}
-                renderTextLayer={true}
-                renderAnnotationLayer={true}
+                scale={scale}
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                className="shadow-2xl"
               />
             </Document>
           </div>
-        </div>
-      );
-    }
 
-    return null; // Should be covered by loading/error states
-  };
+          {/* Footer Navigation */}
+          {numPages > 1 && (
+            <div className="flex-shrink-0 p-4 flex justify-center items-center gap-4 border-t border-gray-700">
+              <button
+                onClick={goToPrevPage}
+                disabled={pageNumber <= 1}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={18} />
+                <span className="hidden sm:inline">Previous</span>
+              </button>
 
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex flex-col bg-gray-900/90 backdrop-blur-sm"
-      >
-        {/* Header Bar */}
-        <header className="flex-shrink-0 flex items-center justify-between w-full h-16 px-4 bg-gray-900/50 border-b border-gray-700">
-          <div className="flex items-center min-w-0">
-            <h2 className="text-lg font-semibold text-white truncate">
-              {title}
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Page Controls */}
-            {numPages && (
-              <>
-                <button
-                  onClick={goToPrevPage}
-                  disabled={pageNumber <= 1}
-                  className="p-2 text-white rounded-full hover:bg-gray-700 disabled:opacity-50"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <span className="text-sm text-white">
-                  {pageNumber} / {numPages}
-                </span>
-                <button
-                  onClick={goToNextPage}
-                  disabled={pageNumber >= numPages}
-                  className="p-2 text-white rounded-full hover:bg-gray-700 disabled:opacity-50"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </>
-            )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={numPages}
+                  value={pageNumber}
+                  onChange={(e) => {
+                    const page = parseInt(e.target.value, 10);
+                    if (page >= 1 && page <= numPages) {
+                      setPageNumber(page);
+                    }
+                  }}
+                  className="w-16 px-2 py-1 text-center bg-gray-700 text-white rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-[#FF5722]"
+                />
+                <span className="text-gray-400">/ {numPages}</span>
+              </div>
 
-            {/* Zoom Controls */}
-            <button
-              onClick={zoomOut}
-              disabled={scale <= 0.5}
-              className="p-2 text-white rounded-full hover:bg-gray-700 disabled:opacity-50"
-            >
-              <ZoomOut size={20} />
-            </button>
-            <button
-              onClick={zoomIn}
-              className="p-2 text-white rounded-full hover:bg-gray-700"
-            >
-              <ZoomIn size={20} />
-            </button>
-
-            {/* Download Button */}
-            <button
-              onClick={handleDownload}
-              disabled={!file || isLoading}
-              className="p-2 text-white rounded-full hover:bg-gray-700 disabled:opacity-50"
-            >
-              <Download size={20} />
-            </button>
-
-            {/* Close Button */}
-            <button
-              onClick={onClose}
-              className="p-2 text-white rounded-full hover:bg-gray-700"
-            >
-              <X size={24} />
-            </button>
-          </div>
-        </header>
-
-        {/* Content Area */}
-        <div className="flex-1 w-full h-full overflow-hidden flex justify-center items-center">
-          {renderContent()}
-        </div>
-      </motion.div>
+              <button
+                onClick={goToNextPage}
+                disabled={pageNumber >= numPages}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 text-white hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <span className="hidden sm:inline">Next</span>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </div>
     </AnimatePresence>
   );
 };
