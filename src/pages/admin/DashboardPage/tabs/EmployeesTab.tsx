@@ -391,32 +391,34 @@ const EmployeesTab: React.FC = () => {
         } else {
             // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
-            
+
             const { id, email, ...updateData } = formData;
-            
+
             const { error: profileUpdateError } = await supabase
               .from('profiles')
-              .update(updateData) 
+              .update(updateData)
               .eq('id', userId);
-              
+
             if (profileUpdateError) throw profileUpdateError;
-            
+
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
             // --- 3. THE SILENT SESSION-RESTORE LOGIC ---
             await supabase.auth.signOut(); // Logs out the new employee
-            
+
             const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
-            
+
             if (restoreError) {
               // Log the error for debugging but don't bother the user
               console.error("Admin session restore failed:", restoreError);
+              setRestoring(false); // Reset on error
             }
-            
-            // --- TOASTS REMOVED AS REQUESTED ---
-            
+
+            // Wait a bit for the session to be fully restored
+            await new Promise(resolve => setTimeout(resolve, 500));
+
             // --- 4. Now we can safely refresh the list ---
-            // The AuthProvider will setRestoring(false) when it processes the adminSession
+            setRestoring(false); // Reset the flag
             fetchEmployeeList();
         }
 
