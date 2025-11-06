@@ -1,308 +1,417 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react'; // <-- Added useEffect
+// src/pages/employee/EmployeeAssignmentPanel.tsx
+// NOTE: This is the new V2 version
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, 
-  Loader2, 
-  Send, 
-  User, 
-  AlignLeft, 
-  Paperclip, 
-  List, 
-  UploadCloud,
+import {
+  X,
+  Loader2,
+  Send,
+  Paperclip,
+  User,
+  AlertTriangle,
   CheckCircle,
   FileText,
   Clock,
-  AlertCircle,
-  AlertTriangle,
-  Calendar,
+  Eye,
+  List,
+  MessageCircle,
+  UploadCloud,
+  Check,
+  RefreshCw,
+  FileUp,
 } from 'lucide-react';
+import { FullAssignment, AssignmentStatus } from '../../lib/supabase/operations';
 
-// Helper to format date
+interface EmployeeAssignmentPanelV2Props {
+  assignment: FullAssignment | null;
+  onClose: () => void;
+  onUpdateStatus: (assignmentId: string, newStatus: AssignmentStatus, payload?: object) => void;
+  onPostComment: (comment: string) => void;
+  onUpdateMilestone: (milestoneId: string, newStatus: string) => void;
+  onUpdateProgress: (progress: number) => void;
+  onUploadDeliverable: (file: File, label: string) => void;
+  getSignedUrl: (bucket: 'deliverables' | 'briefs', filePath: string) => Promise<string>;
+  isLoading: boolean;
+}
+
 const formatDate = (dateString: string | null) => {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 };
 
-// Helper to get status colors (for consistent theming with Dashboard)
-const getStatusProps = (status: string) => {
-    switch (status) {
-      case 'completed': return { icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-100', label: 'Completed' };
-      case 'in_progress': return { icon: Clock, color: 'text-blue-500', bg: 'bg-blue-100', label: 'In Progress' };
-      case 'overdue': return { icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-100', label: 'Overdue' };
-      case 'pending': return { icon: List, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Pending' }; 
-      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-600', bg: 'bg-purple-100', label: 'Pending Review' }; 
-      default: return { icon: List, color: 'text-gray-600', bg: 'bg-gray-100', label: status };
-    }
+const getStatusPill = (status: AssignmentStatus) => {
+  switch (status) {
+    case 'Draft': return 'bg-gray-100 text-gray-600';
+    case 'Assigned': return 'bg-blue-100 text-blue-700';
+    case 'In_Progress': return 'bg-yellow-100 text-yellow-700';
+    case 'Submitted': return 'bg-purple-100 text-purple-700';
+    case 'Changes_Requested': return 'bg-red-100 text-red-700';
+    case 'Approved': return 'bg-green-100 text-green-700';
+    case 'Closed': return 'bg-gray-100 text-gray-600';
+    case 'Cancelled': return 'bg-red-100 text-red-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
 };
 
-// Panel component
-interface EmployeeAssignmentPanelProps {
-  assignment: any | null;
-  onClose: () => void;
-  onPostComment: (assignmentId: string, content: string) => void;
-  onUpdateStatus: (assignmentId: string, newStatus: string) => void;
-}
+const TABS = [
+  { name: 'Overview', icon: List },
+  { name: 'Deliverables', icon: FileText },
+  { name: 'Comments', icon: MessageCircle },
+];
 
-const EmployeeAssignmentPanel: React.FC<EmployeeAssignmentPanelProps> = ({
+const EmployeeAssignmentPanelV2: React.FC<EmployeeAssignmentPanelV2Props> = ({
   assignment,
   onClose,
-  onPostComment,
   onUpdateStatus,
+  onPostComment,
+  onUpdateMilestone,
+  onUpdateProgress,
+  onUploadDeliverable,
+  getSignedUrl,
+  isLoading,
 }) => {
-  const [newComment, setNewComment] = useState('');
+  const [comment, setComment] = useState('');
+  const [activeTab, setActiveTab] = useState('Overview');
   
-  // NEW STATE: Manages the 1-10 progress value. We assume a mapping from status or a default.
-  const [completionValue, setCompletionValue] = useState(1); 
-  
-  // Reset states when a new assignment is opened
+  const [deliverableFile, setDeliverableFile] = useState<File | null>(null);
+  const [deliverableLabel, setDeliverableLabel] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  // Reset tab when assignment changes
   useEffect(() => {
     if (assignment) {
-        setNewComment('');
-        // Simple mapping for UI default: 10 if completed/review, 5 if in progress, 1 otherwise.
-        if (assignment.status === 'completed' || assignment.status === 'pending_review') {
-            setCompletionValue(10);
-        } else if (assignment.status === 'in_progress') {
-            // NOTE: In a real app, this should fetch the actual percentage from the assignment object
-            setCompletionValue(5); 
-        } else {
-            setCompletionValue(1);
-        }
+      setActiveTab('Overview');
+      setDeliverableFile(null);
+      setDeliverableLabel('');
     }
   }, [assignment]);
 
-
-  const handlePostComment = () => {
-    if (!newComment.trim() || !assignment) return;
-    onPostComment(assignment.id, newComment.trim());
-    setNewComment('');
+  const handleCommentSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (comment.trim()) {
+      onPostComment(comment);
+      setComment('');
+    }
   };
   
-  // NEW HANDLER: Updates percentage and potentially the string status
-  const handleUpdateCompletion = (value: number) => {
-    if (!assignment) return;
-    setCompletionValue(value);
-    
-    // Auto-set status to 'in_progress' if employee starts tracking progress from pending/overdue
-    if (value > 1 && assignment.status !== 'in_progress' && assignment.status !== 'completed' && assignment.status !== 'pending_review') {
-        // This keeps the string status in line with the work being done.
-        onUpdateStatus(assignment.id, 'in_progress');
+  const handleMilestoneToggle = (milestone: Milestone) => {
+    const newStatus = milestone.status === 'Done' ? 'In_Progress' : 'Done';
+    onUpdateMilestone(milestone.id, newStatus);
+  };
+  
+  const handleStartWork = () => {
+    onUpdateStatus(assignment.id, 'In_Progress');
+  };
+  
+  const handleSubmitForReview = () => {
+    if (window.confirm('Are you sure you want to submit all deliverables for review?')) {
+      onUpdateStatus(assignment.id, 'Submitted');
     }
-    
-    // NOTE: In a complete application, this would call a new API function 
-    // to persist the percentage: onUpdatePercentage(assignment.id, value);
   };
 
+  const handleViewFile = async (bucket: 'briefs' | 'deliverables', path: string) => {
+    try {
+      const url = await getSignedUrl(bucket, path);
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Error getting signed URL', error);
+    }
+  };
+  
+  const handleUpload = async () => {
+    if (!deliverableFile || !deliverableLabel.trim()) {
+      alert('Please provide a label and select a file.');
+      return;
+    }
+    setIsUploading(true);
+    await onUploadDeliverable(deliverableFile, deliverableLabel);
+    setDeliverableFile(null);
+    setDeliverableLabel('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    setIsUploading(false);
+  };
 
   const renderContent = () => {
-    if (!assignment) return null;
-
-    // Show loading skeleton
-    if (assignment.loading) {
+    if (isLoading) {
       return (
-        <div className="p-8 space-y-8 animate-pulse">
-          <div className="h-6 bg-gray-200 rounded w-1/4"></div>
-          <div className="h-10 bg-gray-300 rounded w-full"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          <div className="mt-8 space-y-4">
-            <div className="h-40 bg-gray-100 rounded-xl"></div>
-            <div className="h-20 bg-gray-100 rounded-xl"></div>
-            <div className="h-40 bg-gray-100 rounded-xl"></div>
-          </div>
+        <div className="flex items-center justify-center h-full">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
         </div>
       );
     }
-    
-    const statusProps = getStatusProps(assignment.status);
-    const isProgressDisabled = assignment.status === 'completed' || assignment.status === 'pending_review';
+    if (!assignment) return null;
 
-    // Show full details
-    return (
-      <>
-        {/* Themed Header & Metadata Group */}
-        <div className="flex-shrink-0 p-6 border-b bg-white">
-          
-          <h3 className="text-3xl font-extrabold text-gray-900">{assignment.title}</h3>
-
-          {/* Consolidated Metadata */}
-          <div className="flex flex-wrap items-center gap-4 mt-2">
-            {/* Status Badge */}
-            <span className={`flex items-center text-xs font-bold gap-1.5 px-3 py-1.5 rounded-full ${statusProps.bg} ${statusProps.color}`}>
-              <statusProps.icon size={16} /> {statusProps.label}
-            </span>
-            
-            {/* Due Date */}
-            <p className="text-sm font-medium text-gray-600 flex items-center gap-1">
-                <Calendar size={14} className='text-gray-400' />
-                Due: <span className="font-bold text-[#FF5722]">{formatDate(assignment.due_date)}</span>
-            </p>
-
-            {/* Category */}
-            <p className="text-sm font-medium text-gray-600 hidden sm:block">
-                Category: <span className="font-medium text-gray-700">{assignment.category}</span>
-            </p>
-          </div>
-        </div>
-        
-        {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50">
-          
-          {/* --- 1. Primary Action Group (Progress & Review Submission) --- */}
+    switch (activeTab) {
+      case 'Overview':
+        return (
           <div className="space-y-4">
-              {/* Progress Tracker Card */}
-              <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><Clock size={18} className="text-[#FF5722]" /> Progress Tracker</h4>
-                
-                {/* Progress Selector */}
-                <label htmlFor="completion-select" className="text-sm font-semibold text-gray-700 block mb-2">Completion Value (1-10)</label>
-                <div className="flex items-center gap-4">
-                  <select
-                    id="completion-select"
-                    value={completionValue}
-                    onChange={(e) => handleUpdateCompletion(parseInt(e.target.value))}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 shadow-sm focus:border-[#FF5722] focus:ring focus:ring-[#FF5722]/50"
-                    disabled={isProgressDisabled}
-                  >
-                    {[...Array(10)].map((_, i) => (
-                      <option key={i + 1} value={i + 1}>{i + 1} ({i * 10 + 10}%)</option>
-                    ))}
-                  </select>
-                  
-                  {/* Submit for Review Button */}
-                  <button
-                    onClick={() => onUpdateStatus(assignment.id, 'pending_review')}
-                    disabled={isProgressDisabled}
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors shadow-md disabled:bg-gray-400"
-                  >
-                    <CheckCircle size={18} /> Submit for Review
-                  </button>
-                </div>
-                
-                {/* Status messages */}
-                {assignment.status === 'pending_review' && (
-                  <p className="text-xs text-purple-600 mt-2">The task is currently awaiting final approval from the admin.</p>
-                )}
-                {assignment.status === 'completed' && (
-                    <p className="text-xs text-green-600 mt-2">This task is complete and finalized.</p>
-                )}
-                
+            {assignment.status === 'Changes_Requested' && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h4 className="font-semibold text-red-700 flex items-center gap-2"><AlertTriangle size={16} /> Changes Requested</h4>
+                <p className="text-sm text-red-600 mt-1">
+                  Your admin requested changes. Please see the comments and upload new deliverables.
+                </p>
               </div>
-              
-              {/* Deliverables (Your Uploads) Card */}
-              <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-                <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><UploadCloud size={18} className="text-[#FF5722]" /> Submit Deliverables</h4>
-                <div className="mt-2 p-6 border-2 border-dashed border-gray-300 rounded-xl text-center bg-gray-50">
-                  <UploadCloud size={32} className="mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">Drag and drop files here, or <span className="text-[#FF5722] font-semibold cursor-pointer">browse</span>.</p>
-                  <p className="text-xs text-gray-500 mt-1">File upload not implemented yet.</p>
-                </div>
-              </div>
-          </div>
-          
-          {/* --- 2. Description Card --- */}
-          <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><AlignLeft size={18} className="text-[#FF5722]" /> Assignment Description</h4>
-            <div className="text-sm text-gray-700 mt-2 p-3 bg-gray-50 rounded-lg whitespace-pre-wrap border border-gray-100">
-                {assignment.description}
-            </div>
-          </div>
-          
-          {/* --- 3. Attachments from Admin Card --- */}
-          {assignment.attachments?.length > 0 && (
-            <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-              <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-3"><Paperclip size={18} className="text-[#FF5722]" /> Admin Attachments (Reference Files)</h4>
-              <div className="space-y-2">
-                {assignment.attachments.map(file => (
-                  <a key={file.file_name} href={file.file_url} target="_blank" rel="noopener noreferrer" className="p-3 bg-gray-50 rounded-lg flex items-center gap-3 text-sm text-blue-600 hover:bg-blue-100 transition-colors shadow-sm border border-gray-200">
-                    <FileText size={18} className="text-blue-500 flex-shrink-0" /> 
-                    <span className="truncate font-medium">{file.file_name}</span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* --- 4. Comments/Activity Card --- */}
-          <div className="p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-            <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2 mb-4"><List size={18} className="text-[#FF5722]" /> Activity Feed</h4>
-            <div className="space-y-4">
-              
-              {/* Comment List */}
-              {assignment.comments?.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-4">No comments yet. Start the conversation!</p>
+            )}
+            
+            <h3 className="text-lg font-semibold text-gray-900">Task Overview</h3>
+            <p className="text-sm text-gray-600 whitespace-pre-wrap">{assignment.description || 'No description provided.'}</p>
+            
+            {assignment.brief_url && (
+              <button
+                onClick={() => handleViewFile('briefs', assignment.brief_url.split('/briefs/')[1])}
+                className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:underline"
+              >
+                <Paperclip size={14} />
+                View Attached Brief
+              </button>
+            )}
+            
+            <h3 className="text-lg font-semibold text-gray-900 mt-4">Acceptance Criteria</h3>
+            <p className="text-sm text-gray-600 whitespace-pre-wrap">{assignment.acceptance_criteria || 'No criteria listed.'}</p>
+            
+            <h3 className="text-lg font-semibold text-gray-900 mt-4">My Milestones</h3>
+            <div className="space-y-2">
+              {assignment.milestones.length === 0 ? (
+                 <p className="text-sm text-gray-500">No milestones for this task.</p>
               ) : (
-                assignment.comments.slice().reverse().map(comment => (
-                  <div key={comment.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl shadow-sm border border-gray-100">
-                    <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
-                      <User size={16} className="text-gray-500" />
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-xs font-bold text-gray-800">
-                        {comment.profile?.first_name} {comment.profile?.last_name || 'Admin'}
-                        <span className="text-xs text-gray-400 font-normal ml-3">{formatDate(comment.created_at)}</span>
-                      </p>
-                      <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                assignment.milestones.map(m => (
+                  <button 
+                    key={m.id} 
+                    onClick={() => handleMilestoneToggle(m)}
+                    className="w-full flex items-center gap-3 p-3 bg-gray-50 rounded-lg border hover:bg-gray-100"
+                  >
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center border-2 ${m.status === 'Done' ? 'bg-[#FF5722] border-[#FF5722]' : 'border-gray-300'}`}>
+                      {m.status === 'Done' && <Check size={12} className="text-white" />}
                     </div>
-                  </div>
+                    <span className={`flex-1 text-sm text-left ${m.status === 'Done' ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+                      {m.title}
+                    </span>
+                  </button>
                 ))
               )}
-
-              {/* New Comment Form (Cleaned up) */}
-              <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-end gap-3">
-                    <span className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0 flex items-center justify-center border">
-                        <User size={16} className="text-gray-500" />
-                    </span>
-                    <div className="flex-1 relative">
-                        <textarea
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            placeholder="Add a comment or ask a question..."
-                            rows={3}
-                            className="w-full p-3 rounded-xl border border-gray-300 focus:border-[#FF5722] focus:ring-1 focus:ring-[#FF5722] resize-none"
-                        />
-                        <button 
-                            onClick={handlePostComment}
-                            disabled={!newComment.trim()}
-                            className="absolute right-2 bottom-2 p-2 rounded-full bg-[#FF5722] text-white hover:bg-[#E64A19] disabled:bg-gray-400 transition-colors"
-                        >
-                            <Send size={16} />
-                        </button>
-                    </div>
-                </div>
-              </div>
             </div>
           </div>
-          
-        </div>
-      </>
-    );
+        );
+      case 'Deliverables':
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-gray-900">Upload Deliverables</h3>
+            <div className="space-y-3 p-4 border border-gray-200 rounded-lg bg-gray-50">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">File Label *</label>
+                <input
+                  type="text"
+                  value={deliverableLabel}
+                  onChange={(e) => setDeliverableLabel(e.target.value)}
+                  placeholder="e.g., Social Post v1"
+                  className="mt-1 w-full p-2 border rounded-md"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">File *</label>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={(e) => setDeliverableFile(e.target.files ? e.target.files[0] : null)}
+                  className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+                />
+              </div>
+              <button
+                onClick={handleUpload}
+                disabled={isUploading || !deliverableFile || !deliverableLabel}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isUploading ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
+                {isUploading ? 'Uploading...' : 'Upload Deliverable'}
+              </button>
+            </div>
+            
+            <h3 className="text-lg font-semibold text-gray-900">Uploaded Files</h3>
+            {assignment.deliverables.length === 0 ? (
+              <p className="text-sm text-gray-500">No deliverables uploaded yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {assignment.deliverables.map(d => (
+                  <div key={d.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{d.label} (v{d.file_version})</p>
+                      <p className="text-xs text-gray-500">Uploaded {formatDate(d.created_at)}</p>
+                    </div>
+                    <button
+                      onClick={() => handleViewFile('deliverables', d.file_path)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-gray-300 hover:bg-gray-100"
+                    >
+                      <Eye size={14} /> View
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      case 'Comments':
+        return (
+          <div className="flex flex-col h-full">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Comments</h3>
+            <div className="flex-1 space-y-4 overflow-y-auto pr-2">
+              {assignment.comments.map(c => (
+                <div key={c.id} className="flex items-start gap-3">
+                  <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {c.author?.avatar_url ? (
+                      <img src={c.author.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      <User size={16} className="text-gray-500" />
+                    )}
+                  </span>
+                  <div className="flex-1 p-3 bg-gray-50 rounded-lg">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-semibold text-gray-800">{c.author?.first_name} {c.author?.last_name}</span>
+                      <span className="text-xs text-gray-400">{formatDate(c.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
   };
-  
+
   return (
     <AnimatePresence>
       {assignment && (
-        <motion.div
-          initial={{ x: '100%' }}
-          animate={{ x: 0 }}
-          exit={{ x: '100%' }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl flex flex-col z-40 border-l"
-        >
-          {/* Close Button (positioned outside the main header) */}
-          <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 z-50 text-gray-700">
-            <X size={24} />
-          </button>
-          
-          {renderContent()}
-          
-        </motion.div>
+        <div className="fixed inset-0 z-40 flex justify-end">
+          <motion.div
+            className="absolute inset-0 bg-black/50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.div
+            className="relative w-full max-w-xl h-full bg-white shadow-xl flex flex-col"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          >
+            {/* Header */}
+            <div className="flex-shrink-0 p-4 border-b">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-xl font-bold text-gray-900 truncate pr-10">{assignment.title}</h2>
+                <button onClick={onClose} className="p-2 rounded-full text-gray-500 hover:bg-gray-100 absolute top-3 right-3">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-3 py-1 text-sm font-semibold capitalize rounded-full ${getStatusPill(assignment.status)}`}>
+                  {assignment.status.replace("_", " ")}
+                </span>
+                <span className="text-sm text-gray-500">Due: {formatDate(assignment.due_date)}</span>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex-shrink-0 p-2 border-b">
+              <nav className="flex space-x-2">
+                {TABS.map(tab => (
+                  <button
+                    key={tab.name}
+                    onClick={() => setActiveTab(tab.name)}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium ${
+                      activeTab === tab.name
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                    }`}
+                  >
+                    <tab.icon size={16} />
+                    {tab.name}
+                  </button>
+                ))}
+              </nav>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {renderContent()}
+            </div>
+
+            {/* Footer / Actions */}
+            <div className="flex-shrink-0 p-4 border-t bg-gray-50 space-y-4">
+              {/* Employee Actions */}
+              {assignment.status === 'Assigned' && (
+                <button
+                  onClick={handleStartWork}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg hover:bg-yellow-600"
+                >
+                  <Clock size={16} />
+                  Start Work
+                </button>
+              )}
+              
+              {(assignment.status === 'In_Progress' || assignment.status === 'Changes_Requested') && (
+                <button
+                  onClick={handleSubmitForReview}
+                  disabled={assignment.deliverables.length === 0}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                >
+                  <CheckCircle size={16} />
+                  Submit for Review
+                </button>
+              )}
+              
+              {assignment.status === 'Submitted' && (
+                 <div className="w-full text-center px-4 py-2 bg-purple-100 text-purple-700 font-medium rounded-lg">
+                  Waiting for Admin review...
+                </div>
+              )}
+              
+              {assignment.status === 'Approved' && (
+                 <div className="w-full text-center px-4 py-2 bg-green-100 text-green-700 font-medium rounded-lg">
+                  🎉 This task has been approved!
+                </div>
+              )}
+
+
+              {/* Comment Box */}
+              {activeTab !== 'Comments' && (
+                <form onSubmit={handleCommentSubmit} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Add a comment or ask a question..."
+                    className="flex-1 w-full p-2 border rounded-md"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!comment.trim()}
+                    className="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-7Git00 disabled:opacity-50"
+                  >
+                    <Send size={16} />
+                  </button>
+                </form>
+              )}
+            </div>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );
 };
 
-export default EmployeeAssignmentPanel;
+export default EmployeeAssignmentPanelV2;
