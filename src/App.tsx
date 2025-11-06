@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 
 // --- CONTEXT & AUTH IMPORTS ---
 import { AuthProvider, ClientRoute, AdminRoute, EmployeeRoute, MyPage } from './features/auth';
-import { CartProvider } from './contexts/CartContext';
+import { CartProvider } from './contexts/CartContext'; 
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext'; // ADD THIS LINE
 
