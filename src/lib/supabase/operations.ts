@@ -3,7 +3,37 @@
 import { supabase } from './client';
 import type { Database } from './database.types';
 
-// --- START: NEW EFFICIENT FUNCTION ---
+// --- START: NEW V2 ASSIGNMENT TYPES ---
+export type AssignmentStatus =
+  | 'Draft'
+  | 'Assigned'
+  | 'In_Progress'
+  | 'Submitted'
+  | 'Changes_Requested'
+  | 'Approved'
+  | 'Closed'
+  | 'Cancelled';
+
+export type Assignment = Database['public']['Tables']['assignments']['Row'];
+export type Milestone = Database['public']['Tables']['assignment_milestones']['Row'];
+export type Deliverable = Database['public']['Tables']['assignment_deliverables']['Row'];
+export type Comment = Database['public']['Tables']['assignment_comments']['Row'];
+export type Event = Database['public']['Tables']['assignment_events']['Row'];
+
+// Profile type for join
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+
+// The fully-detailed assignment object for V2
+export interface FullAssignment extends Assignment {
+  milestones: Milestone[];
+  deliverables: Deliverable[];
+  comments: (Comment & { author: Profile | null })[];
+  events: (Event & { actor: Profile | null })[];
+  assignee: Profile | null;
+  created_by_profile: Profile | null;
+}
+// --- END: NEW V2 ASSIGNMENT TYPES ---
+
 
 /**
  * Fetches all essential data for the employee dashboard in one go.
@@ -12,7 +42,7 @@ export const getEmployeeDashboardData = async (userId: string) => {
   // We fetch the profile first, then concurrently fetch assignments and documents
   const [profileRes, assignmentsRes, documentsRes] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).single(),
-    getAssignmentsForEmployee(userId),
+    getEmployeeAssignments(userId), // <-- UPDATED to V2 function
     getEmployeeDocuments(userId)
   ]);
 
@@ -26,8 +56,6 @@ export const getEmployeeDashboardData = async (userId: string) => {
     documents: documentsRes.data,
   };
 };
-
-// --- END: NEW EFFICIENT FUNCTION ---
 
 
 // --- Type for Access Requests (ensure columns match your SQL) ---
@@ -145,194 +173,390 @@ export const onAccessRequestsChange = (callback: (payload: any) => void) => {
   return channel;
 };
 
-// --- START: NEW ASSIGNMENT FUNCTIONS ---
+// --- START: V2 ASSIGNMENT FUNCTIONS ---
 
-// Helper to get full profile data for assignees
-const getProfilesForAssignment = async (assignmentId: string) => {
-  const { data, error } = await supabase
-    .from('assignment_members')
-    .select('profile:profiles!inner(id, first_name, last_name, avatar_url)')
-    .eq('assignment_id', assignmentId);
-  if (error) return [];
-  return data.map(item => item.profile);
+/**
+ * Creates an activity event.
+ * This should be called *after* a main action (e.g., status change, comment).
+ */
+const createAssignmentEvent = async (
+  assignmentId: string,
+  actorId: string,
+  type: string,
+  payload: object = {}
+) => {
+  return supabase.from('assignment_events').insert({
+    assignment_id: assignmentId,
+    actor_id: actorId,
+    type: type,
+    payload: payload,
+  });
 };
 
-// Helper to get comments for an assignment
-const getCommentsForAssignment = async (assignmentId: string) => {
-   const { data, error } = await supabase
-    .from('assignment_messages')
-    .select(`
-      id, 
-      content, 
-      created_at,
-      profile:profiles!sender_id(first_name, last_name, avatar_url)
-    `)
-    .eq('assignment_id', assignmentId)
-    .order('created_at', { ascending: true });
-  if (error) return [];
-  return data;
-}
-
-// 1. GET ALL ASSIGNMENTS FOR A SPECIFIC EMPLOYEE (Optimized - list view only needs basic info)
-export const getAssignmentsForEmployee = async (employeeId: string) => {
+/**
+ * Fetches all assignments for the admin dashboard.
+ * Includes assignee and creator profile info.
+ */
+export const getAdminAssignments = async () => {
   const { data, error } = await supabase
-    .from('assignment_members')
+    .from('assignments')
     .select(`
-      assignment:assignments!inner(
-        id,
-        title,
-        status,
-        due_date,
-        instructions,
-        created_at
-      )
+      *,
+      assignee:profiles!assignee_id(id, first_name, last_name, avatar_url),
+      created_by_profile:profiles!created_by(id, first_name, last_name, avatar_url)
     `)
-    .eq('employee_id', employeeId);
+    .order('created_at', { ascending: false });
 
   if (error) throw error;
-  if (!data) return { data: [], error: null };
-
-  // For list view, we don't need assignees and comments - only load them when viewing details
-  const assignments = data.map((item) => {
-    const assignment = item.assignment;
-    return {
-      ...assignment,
-      description: assignment.instructions,
-      // These fields are for UI compatibility but won't be used in list view
-      milestones: [],
-      attachments: [],
-      deliverables: [],
-      supervisor: null,
-      category: 'Admin Task',
-      priority: 'medium',
-      assignees: [],
-      comments: [],
-    };
-  });
-
-  return { data: assignments, error: null };
+  return { data: data || [], error: null };
 };
 
-// 2. GET FULL DETAILS FOR ONE ASSIGNMENT (Optimized with proper joins)
-export const getFullAssignmentDetails = async (assignmentId: string) => {
-  // Fetch assignment first
-  const { data: assignment, error: assignmentError } = await supabase
+/**
+ * Fetches all assignments for a specific employee.
+ */
+export const getEmployeeAssignments = async (employeeId: string) => {
+  const { data, error } = await supabase
     .from('assignments')
-    .select('*')
-    .eq('id', assignmentId)
-    .single();
+    .select(`
+      *,
+      assignee:profiles!assignee_id(id, first_name, last_name, avatar_url),
+      created_by_profile:profiles!created_by(id, first_name, last_name, avatar_url)
+    `)
+    .eq('assignee_id', employeeId)
+    .order('due_date', { ascending: true });
+    
+  if (error) throw error;
+  return { data: data || [], error: null };
+};
 
-  if (assignmentError) throw assignmentError;
-
-  // Then fetch members and messages separately to avoid circular RLS issues
-  const [membersRes, messagesRes] = await Promise.all([
+/**
+ * Fetches all details for a single assignment (V2).
+ */
+export const getFullAssignmentDetailsV2 = async (assignmentId: string): Promise<{ data: FullAssignment | null, error: any }> => {
+  // Fetch all data in parallel
+  const [
+    assignmentRes,
+    milestonesRes,
+    deliverablesRes,
+    commentsRes,
+    eventsRes
+  ] = await Promise.all([
     supabase
-      .from('assignment_members')
-      .select('employee_id')
-      .eq('assignment_id', assignmentId),
+      .from('assignments')
+      .select(`
+        *,
+        assignee:profiles!assignee_id(id, first_name, last_name, avatar_url),
+        created_by_profile:profiles!created_by(id, first_name, last_name, avatar_url)
+      `)
+      .eq('id', assignmentId)
+      .single(),
     supabase
-      .from('assignment_messages')
-      .select('id, content, created_at, sender_id')
+      .from('assignment_milestones')
+      .select('*')
       .eq('assignment_id', assignmentId)
-      .order('created_at', { ascending: true })
+      .order('order_index', { ascending: true }),
+    supabase
+      .from('assignment_deliverables')
+      .select('*')
+      .eq('assignment_id', assignmentId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('assignment_comments')
+      .select(`
+        *,
+        author:profiles!author_id(id, first_name, last_name, avatar_url)
+      `)
+      .eq('assignment_id', assignmentId)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('assignment_events')
+      .select(`
+        *,
+        actor:profiles!actor_id(id, first_name, last_name, avatar_url)
+      `)
+      .eq('assignment_id', assignmentId)
+      .order('created_at', { ascending: false })
+      .limit(20)
   ]);
 
-  // Fetch employee profiles separately
-  const employeeIds = membersRes.data?.map(m => m.employee_id) || [];
-  const senderIds = [...new Set(messagesRes.data?.map(m => m.sender_id) || [])];
-  const allProfileIds = [...new Set([...employeeIds, ...senderIds])];
+  if (assignmentRes.error) return { data: null, error: assignmentRes.error };
 
-  let profiles = [];
-  if (allProfileIds.length > 0) {
-    const { data: profilesData } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name, avatar_url')
-      .in('id', allProfileIds);
-    profiles = profilesData || [];
-  }
-
-  // Build profile map for quick lookup
-  const profileMap = {};
-  profiles.forEach(p => {
-    profileMap[p.id] = p;
-  });
-
-  // Transform assignees
-  const assignees = employeeIds.map(id => profileMap[id]).filter(Boolean);
-
-  // Transform comments with sender info
-  const comments = (messagesRes.data || []).map(msg => ({
-    ...msg,
-    sender: profileMap[msg.sender_id] || null
-  }));
-
-  const fullAssignment = {
-    ...assignment,
-    description: assignment.instructions,
-    milestones: [],
-    attachments: [],
-    deliverables: [],
-    supervisor: null,
-    category: 'Admin Task',
-    priority: 'medium',
-    assignees: assignees,
-    comments: comments,
+  const fullAssignment: FullAssignment = {
+    ...assignmentRes.data,
+    milestones: milestonesRes.data || [],
+    deliverables: deliverablesRes.data || [],
+    comments: commentsRes.data || [],
+    events: eventsRes.data || [],
+    assignee: assignmentRes.data.assignee,
+    created_by_profile: assignmentRes.data.created_by_profile
   };
 
   return { data: fullAssignment, error: null };
 };
 
-// 3. CREATE A NEW ASSIGNMENT
-export const createAssignment = async (formData: any, adminId: string) => {
-  const { data: newAssignment, error } = await supabase
+/**
+ * Creates a new assignment (V2).
+ * This is a multi-step process:
+ * 1. Upload brief (if provided)
+ * 2. Create assignment record
+ * 3. Create milestone records
+ * 4. Create "Created" event
+ */
+export const createAssignmentV2 = async (
+  formData: {
+    title: string,
+    description: string,
+    assignee_id: string,
+    category: string,
+    priority: string,
+    due_date: string,
+    acceptance_criteria: string,
+    milestones: { title: string }[],
+    briefFile: File | null
+  },
+  adminId: string
+) => {
+  let briefUrl = null;
+
+  // 1. Upload brief
+  if (formData.briefFile) {
+    const filePath = `briefs/${adminId}/${formData.briefFile.name}`;
+    const { data: storageData, error: storageError } = await supabase.storage
+      .from('briefs')
+      .upload(filePath, formData.briefFile, { upsert: true });
+    
+    if (storageError) throw new Error(`Brief upload failed: ${storageError.message}`);
+    
+    const { data: urlData } = supabase.storage.from('briefs').getPublicUrl(storageData.path);
+    briefUrl = urlData.publicUrl;
+  }
+
+  // 2. Create assignment record
+  const { data: newAssignment, error: assignmentError } = await supabase
     .from('assignments')
     .insert({
       title: formData.title,
-      instructions: formData.description, // Map description to instructions
-      due_date: formData.dueDate || null,
-      status: 'pending',
+      description: formData.description,
+      assignee_id: formData.assignee_id,
+      category: formData.category,
+      priority: formData.priority,
+      due_date: formData.due_date || null,
+      acceptance_criteria: formData.acceptance_criteria,
+      brief_url: briefUrl,
       created_by: adminId,
+      status: 'Assigned', // Automatically set to Assigned
     })
     .select()
     .single();
 
-  if (error) return { error };
+  if (assignmentError) throw assignmentError;
 
-  // Add members
-  const memberInserts = formData.assignees.map((employeeId: string) => ({
-    assignment_id: newAssignment.id,
-    employee_id: employeeId,
-  }));
+  // 3. Create milestone records
+  if (formData.milestones && formData.milestones.length > 0) {
+    const milestoneInserts = formData.milestones.map((m, index) => ({
+      assignment_id: newAssignment.id,
+      title: m.title,
+      order_index: index,
+      status: 'Not_Started',
+    }));
+    
+    const { error: milestoneError } = await supabase
+      .from('assignment_milestones')
+      .insert(milestoneInserts);
+    
+    if (milestoneError) {
+      // Non-critical error, just log it
+      console.warn("Failed to create milestones:", milestoneError.message);
+    }
+  }
 
-  const { error: memberError } = await supabase
-    .from('assignment_members')
-    .insert(memberInserts);
+  // 4. Create events
+  await createAssignmentEvent(newAssignment.id, adminId, 'Created', { title: newAssignment.title });
+  await createAssignmentEvent(newAssignment.id, adminId, 'StatusChanged', { newStatus: 'Assigned' });
 
-  if (memberError) return { error: memberError };
-  
   return { data: newAssignment, error: null };
 };
 
-// 4. UPDATE ASSIGNMENT STATUS
-export const updateAssignmentStatus = async (assignmentId: string, status: string) => {
-  return supabase
+/**
+ * Updates an assignment's status (V2).
+ * Creates an event log for the status change.
+ */
+export const updateAssignmentStatusV2 = async (
+  assignmentId: string,
+  newStatus: AssignmentStatus,
+  actorId: string,
+  payload: object = {}
+) => {
+  const { data, error } = await supabase
     .from('assignments')
-    .update({ status: status })
-    .eq('id', assignmentId);
+    .update({ status: newStatus })
+    .eq('id', assignmentId)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  // Create event
+  await createAssignmentEvent(assignmentId, actorId, 'StatusChanged', { newStatus, ...payload });
+  
+  return { data, error: null };
 };
 
-// 5. POST A COMMENT
-export const postAssignmentComment = async (assignmentId: string, senderId: string, content: string) => {
-  return supabase
-    .from('assignment_messages')
+/**
+ * Updates an assignment's progress value (V2).
+ */
+export const updateAssignmentProgress = async (
+  assignmentId: string,
+  progressValue: number,
+  actorId: string
+) => {
+  const { data, error } = await supabase
+    .from('assignments')
+    .update({ progress_value: progressValue })
+    .eq('id', assignmentId)
+    .select()
+    .single();
+    
+  if (error) throw error;
+  
+  // Create event
+  await createAssignmentEvent(assignmentId, actorId, 'ProgressUpdated', { newProgress: progressValue });
+  
+  return { data, error: null };
+};
+
+/**
+ * Updates a milestone's status (V2).
+ */
+export const updateMilestoneStatus = async (
+  milestoneId: string,
+  newStatus: 'Not_Started' | 'In_Progress' | 'Done',
+  actorId: string
+) => {
+  const { data: milestone, error } = await supabase
+    .from('assignment_milestones')
+    .update({ status: newStatus })
+    .eq('id', milestoneId)
+    .select()
+    .single();
+    
+  if (error) throw error;
+  
+  // Create event
+  await createAssignmentEvent(milestone.assignment_id, actorId, 'MilestoneUpdated', {
+    milestone: milestone.title,
+    newStatus: newStatus
+  });
+  
+  return { data: milestone, error: null };
+};
+
+/**
+ * Posts a comment on an assignment (V2).
+ */
+export const postAssignmentCommentV2 = async (
+  assignmentId: string,
+  authorId: string,
+  body: string,
+  visibility: 'Internal' | 'AdminOnly' = 'Internal'
+) => {
+  const { data, error } = await supabase
+    .from('assignment_comments')
     .insert({
       assignment_id: assignmentId,
-      sender_id: senderId,
-      content: content,
-    });
+      author_id: authorId,
+      body: body,
+      visibility: visibility
+    })
+    .select()
+    .single();
+    
+  if (error) throw error;
+  
+  // Create event
+  await createAssignmentEvent(assignmentId, authorId, 'Commented', {
+    commentBody: body.substring(0, 50) + '...'
+  });
+  
+  return { data, error: null };
 };
 
-// --- END: NEW ASSIGNMENT FUNCTIONS ---
+/**
+ * Uploads a deliverable file to storage (V2).
+ * 1. Get next version number
+ * 2. Upload file to storage
+ * 3. Create deliverable record
+ * 4. Create event
+ */
+export const uploadAssignmentDeliverable = async (
+  assignmentId: string,
+  file: File,
+  label: string,
+  uploaderId: string
+) => {
+  
+  // 1. Get next version number
+  const { data: existing, error: versionError } = await supabase
+    .from('assignment_deliverables')
+    .select('file_version')
+    .eq('assignment_id', assignmentId)
+    .eq('label', label)
+    .order('file_version', { ascending: false })
+    .limit(1);
+    
+  if (versionError) throw versionError;
+  
+  const nextVersion = (existing?.[0]?.file_version || 0) + 1;
+  const fileExtension = file.name.split('.').pop();
+  const baseName = label.replace(/[^a-zA-Z0-9]/g, '_');
+  const newFileName = `${baseName}_v${nextVersion}.${fileExtension}`;
+  
+  // 2. Upload file to storage
+  const filePath = `deliverables/${assignmentId}/${newFileName}`;
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from('deliverables')
+    .upload(filePath, file);
+
+  if (storageError) throw new Error(`Deliverable upload failed: ${storageError.message}`);
+
+  // 3. Create deliverable record
+  const { data: deliverable, error: dbError } = await supabase
+    .from('assignment_deliverables')
+    .insert({
+      assignment_id: assignmentId,
+      label: label,
+      file_path: storageData.path, // Store the path, not the full URL
+      file_version: nextVersion,
+      uploaded_by: uploaderId,
+      notes: `Uploaded version ${nextVersion}`
+    })
+    .select()
+    .single();
+    
+  if (dbError) throw dbError;
+  
+  // 4. Create event
+  await createAssignmentEvent(assignmentId, uploaderId, 'FileUploaded', {
+    fileName: newFileName,
+    version: nextVersion
+  });
+  
+  return { data: deliverable, error: null };
+};
+
+/**
+ * Gets a temporary signed URL for a deliverable or brief.
+ */
+export const createStorageSignedUrl = async (bucket: 'deliverables' | 'briefs', filePath: string) => {
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .createSignedUrl(filePath, 3600); // Expires in 1 hour
+
+  if (error) throw error;
+  return data.signedUrl;
+};
+
+// --- END: V2 ASSIGNMENT FUNCTIONS ---
 
 // --- START: EMPLOYEE DOCUMENT FUNCTIONS ---
 export type EmployeeDocument = Database['public']['Tables']['employee_documents']['Row'];
