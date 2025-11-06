@@ -60,7 +60,8 @@ import {
 import { useToast } from '../../contexts/ToastContext';
 import { useTheme } from '../../contexts/ThemeContext';
 // --- 4. IMPORT NEW V2 PANEL ---
-import EmployeeAssignmentPanelV2 from './EmployeeAssignmentPanelV2';
+// --- FIX: Corrected file path to remove "V2" suffix ---
+import EmployeeAssignmentPanelV2 from './EmployeeAssignmentPanel';
 import EnhancedPdfViewer from '../../components/EnhancedPdfViewer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
