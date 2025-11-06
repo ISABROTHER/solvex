@@ -1,10 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-// --- THIS IS THE FIX ---
-// Removed /esm/ from the path to match your version
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-// --- END OF FIX ---
 import {
   Loader2,
   X,
@@ -18,8 +15,13 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabase/client'; 
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// --- THIS IS THE FIX ---
+// Instead of a CDN link, we import the worker file directly from the
+// installed 'react-pdf' package. Vite will handle bundling this.
+// We use the 'dist' (non-esm) entry point as the 'esm' one failed for CSS.
+import pdfjsWorker from 'react-pdf/dist/pdf.worker.entry';
+pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+// --- END OF FIX ---
 
 interface EnhancedPdfViewerProps {
   storagePath: string; 
