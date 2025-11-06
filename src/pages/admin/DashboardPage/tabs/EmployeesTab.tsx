@@ -443,7 +443,7 @@ const EmployeesTab: React.FC = () => {
       setNewDocRequiresSigning(false);
       setShowDocUpload(false);
       
-    } catch (err: any) {
+    } catch (err: any) { 
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
