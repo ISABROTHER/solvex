@@ -140,8 +140,8 @@ const getStatusPill = (status: AssignmentStatus) => {
 
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
-  // --- 1. GET signOut FROM useAuth ---
-  const { user, signOut } = useAuth();
+  // --- REMOVED signOut from useAuth ---
+  const { user } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,23 +329,31 @@ const EmployeesTab: React.FC = () => {
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isNewUser = !formData.id;
+
+    // --- 1. Get the admin's current session to restore it later ---
+    const { data: { session: adminSession } } = await supabase.auth.getSession();
     
     try {
       if (isNewUser) {
         // --- Create New Employee ---
+
+        // --- 2. Check if we have an admin session to restore ---
+        if (!adminSession) {
+          throw new Error("Admin session not found. Please log in again to create users.");
+        }
+
         if (!formData.email || !password) {
            addToast({ type: 'error', title: 'Error', message: 'Email and password are required for new employees.'});
            setIsSavingProfile(false);
            return;
         }
         
-        // --- FIX 1: Pass the 'employee' role in the options ---
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: password,
           options: {
             data: {
-              role: 'employee' // This tells the handle_new_user trigger to set the role correctly
+              role: 'employee' 
             }
           }
         });
@@ -353,7 +361,7 @@ const EmployeesTab: React.FC = () => {
         let userId = authData?.user?.id;
 
         if (authError && authError.message.includes('User already registered')) {
-            // --- This block handles users who already exist in AUTH ---
+            // This block handles users who already exist in AUTH
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -369,14 +377,15 @@ const EmployeesTab: React.FC = () => {
             }
 
             userId = existingProfile.id;
-            // --- FIX 2: Ensure this update also sets the role, just in case ---
             const { error: updateError } = await supabase
               .from('profiles')
-              .update({ ...formData, role: 'employee' }) // Ensure role is set
+              .update({ ...formData, role: 'employee' }) 
               .eq('id', userId);
 
             if (updateError) throw updateError;
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
+            
+            fetchEmployeeList(); // Refresh list after update
 
         } else if (authError) {
             // Other sign up error
@@ -386,27 +395,31 @@ const EmployeesTab: React.FC = () => {
             // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
             
-            // --- FIX 3: Change from INSERT to UPDATE ---
-            // The trigger (handle_new_user) has already created the profile row with the correct 'employee' role.
-            // We just need to UPDATE it with the full form data.
-            
-            // Remove 'id' and 'email' from formData for the update payload
             const { id, email, ...updateData } = formData;
             
             const { error: profileUpdateError } = await supabase
               .from('profiles')
-              .update(updateData) // Update the profile with the rest of the form data
+              .update(updateData) 
               .eq('id', userId);
               
             if (profileUpdateError) throw profileUpdateError;
             
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
-            addToast({ type: 'info', title: 'Admin Logout', message: 'You will be logged out and returned to the home page.' });
 
-            // --- 2. CALL signOut ---
-            // This logs out the *new employee* session and, per your AuthProvider,
-            // will navigate you back to the HomePage ('/')
-            await signOut();
+            // --- 3. This is the new session-restore logic ---
+            await supabase.auth.signOut(); // Logs out the new employee
+            
+            const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
+            
+            if (restoreError) {
+              addToast({ type: 'error', title: 'Admin Session Failed!', message: 'Your session could not be restored. Please log in again.' });
+              throw restoreError;
+            }
+            
+            addToast({ type: 'info', title: 'Session Restored', message: 'You are still logged in as admin.' });
+
+            // --- 4. Now we can safely refresh the list ---
+            fetchEmployeeList();
         }
 
       } else {
@@ -418,20 +431,14 @@ const EmployeesTab: React.FC = () => {
           
         if (updateError) throw updateError;
         addToast({ type: 'success', title: 'Employee Updated!' });
+        fetchEmployeeList(); // Refresh list after update
       }
       
-      // This code will now only run when *updating* an employee,
-      // because creating one calls signOut() and navigates away.
       setIsModalOpen(false);
       setEditingEmployee(null);
       
-      if (!isNewUser) {
-        fetchEmployeeList(); 
-      }
-      
     } catch (err: any) {
       console.error("Save employee error:", err);
-      // --- FIX 4: Check for duplicate key error specifically ---
       if (err.message && err.message.includes('duplicate key value violates unique constraint "profiles_pkey"')) {
           addToast({ type: 'error', title: 'Save Failed', message: 'A profile with this ID already exists. The trigger and app logic are conflicting.' });
       } else {
@@ -512,7 +519,7 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'success', title: 'Assignment Created!' });
       setIsCreateAssignModalOpen(false);
       fetchAllAssignments(); // Refresh the main list
-    } catch (err: any) {
+    } catch (err: any)
       addToast({ type: 'error', title: 'Creation Failed', message: err.message });
     } finally {
       setIsSavingAssignment(false);
@@ -541,7 +548,7 @@ const EmployeesTab: React.FC = () => {
     // Optimistic update
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
     setAllAssignments(prev =>
-      prev.map(a => a.id === assignmentId ? { ...a, status: newNIL } : a)
+      prev.map(a => a.id === assignmentId ? { ...a, status: newStatus } : a)
     );
     
     const { error } = await updateAssignmentStatusV2(assignmentId, newStatus, user.id, payload);
@@ -656,7 +663,7 @@ const EmployeesTab: React.FC = () => {
                         title={employee.role === 'blocked' ? 'Unblock Access' : 'Block Access'}
                         disabled={employee.role === 'admin'}
                     >
-                        {employee.role === 'blocked' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
+                        {employee.role === 'blocked' ? <ShieldCheck size={1Ch" /> : <AlertTriangle size={16} />}
                     </button>
 
                     <button 
