@@ -1,142 +1,114 @@
+// src/pages/PendingAccessPage.tsx
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../features/auth/AuthProvider';
 import { supabase } from '../lib/supabase/client';
+import { Loader2, Send, CheckCircle } from 'lucide-react';
 import { useToast } from '../contexts/ToastContext';
-import { useNavigate } from 'react-router-dom';
-import { Send, Clock, Mail } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const PendingAccessPage: React.FC = () => {
-  const { profile, user, logout, refreshUserProfile } = useAuth();
-  const { showToast } = useToast();
-  const navigate = useNavigate();
-  const [reason, setReason] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const { user, profile, logout } = useAuth();
+  const { addToast } = useToast();
 
+  const [reason, setReason] = useState(profile?.reason_for_access || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(!!profile?.reason_for_access);
+  const [error, setError] = useState('');
+
+  // Pre-fill reason if it was already submitted
   useEffect(() => {
-    if (profile) {
-      setReason(profile.reason_for_access || '');
-      if (profile.reason_for_access) {
-        setSubmitted(true);
-      }
+    if (profile?.reason_for_access) {
+      setReason(profile.reason_for_access);
+      setIsSubmitted(true);
     }
   }, [profile]);
 
-  const handleSubmitReason = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    setLoading(true);
+    if (!user || !reason.trim()) return;
 
-    const { error } = await supabase
-      .from('profiles')
-      .update({ reason_for_access: reason, approval_status: 'pending' }) // Ensure status is pending
-      .eq('id', user.id);
+    setIsSubmitting(true);
+    setError('');
 
-    if (error) {
-      showToast('Error', 'Could not submit reason: ' + error.message, 'error');
-    } else {
-      showToast('Success', 'Your request for access has been submitted.', 'success');
-      setSubmitted(true);
-      refreshUserProfile(); // Refresh profile to get new data
+    try {
+      const { error } = await (supabase
+        .from('profiles')
+        .update as any)({ reason_for_access: reason })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      setIsSubmitted(true);
+      addToast({ type: 'success', title: 'Message Sent!', message: 'We will review your request shortly.' });
+    } catch (err: any) {
+      setError('Failed to send message. Please try again.');
+      addToast({ type: 'error', title: 'Error', message: err.message });
+    } finally {
+      setIsSubmitting(false);
     }
-    setLoading(false);
   };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const status = profile?.approval_status || 'pending';
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-200px)] bg-gray-100 dark:bg-gray-900 px-4 py-12">
-      <div className="w-full max-w-lg p-8 space-y-6 bg-white rounded-lg shadow-xl dark:bg-gray-800">
-        <div className="flex justify-center">
-          <Clock className="w-16 h-16 text-yellow-500" />
-        </div>
-        <h1 className="text-3xl font-bold text-center text-gray-900 dark:text-white">
-          Access Pending
-        </h1>
-        
-        {status === 'rejected' && (
-          <div className="p-4 text-center text-red-800 bg-red-100 rounded-lg dark:bg-red-900 dark:text-red-200">
-            <p className="font-semibold">Your access request has been denied.</p>
-            <p className="text-sm">Please contact support if you believe this is an error.</p>
-          </div>
-        )}
-
-        {status === 'pending' && !submitted && (
-          <p className="text-center text-gray-600 dark:text-gray-300">
-            Your account has been created, but an administrator must approve it. 
-            Please provide a reason for access to speed up the process.
-          </p>
-        )}
-
-        {status === 'pending' && submitted && (
-          <div className="p-4 text-center text-green-800 bg-green-100 rounded-lg dark:bg-green-900 dark:text-green-200">
-            <p className="font-semibold">Your request is under review.</p>
-            <p className="text-sm">We will notify you by email once your account is approved.</p>
-          </div>
-        )}
-
-        {(status === 'pending' || status === 'rejected') && (
-          <form onSubmit={handleSubmitReason} className="space-y-4">
-            <div>
-              <label
-                htmlFor="reason"
-                className="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300"
-              >
-                {submitted ? 'Update your reason (optional):' : 'Reason for Access:'}
-              </label>
-              <textarea
-                id="reason"
-                rows={4}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="w-full px-3 py-2 text-gray-900 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white"
-                placeholder="e.g., I am a new client for the 'Project X'..."
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full px-4 py-2 text-base font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:ring-4 focus:ring-blue-300 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center justify-center dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800"
-            >
-              {loading ? (
-                <svg className="w-5 h-5 mr-3 -ml-1 text-white animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              ) : (
-                <Send className="w-5 h-5 mr-2" />
-              )}
-              {loading ? 'Submitting...' : (submitted ? 'Update Request' : 'Submit for Approval')}
-            </button>
-          </form>
-        )}
-
-        <div className="pt-4 text-sm text-center text-gray-600 border-t border-gray-200 dark:border-gray-700 dark:text-gray-400">
-          <p>
-            Wrong account?{' '}
-            <button
-              onClick={handleLogout}
-              className="font-medium text-blue-600 hover:underline dark:text-blue-500"
-            >
-              Sign Out
-            </button>
-          </p>
-          <p className="mt-2">
-            Need help?{' '}
-            <a
-              href="mailto:support@solvex.com"
-              className="font-medium text-blue-600 hover:underline dark:text-blue-500 inline-flex items-center"
-            >
-              <Mail className="w-4 h-4 mr-1" /> Contact Support
-            </a>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="max-w-lg w-full bg-white p-8 rounded-lg shadow-md relative">
+        <button
+          onClick={logout}
+          className="absolute top-4 right-4 text-sm text-gray-500 hover:text-red-600"
+        >
+          Logout
+        </button>
+        <div className="text-center">
+          <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Account Created!</h1>
+          <p className="text-lg text-gray-600 mb-6">
+            Your access is <span className="font-semibold text-yellow-600">pending approval</span> from the SolveX team.
           </p>
         </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="reason" className="block text-sm font-medium text-gray-700">
+              {isSubmitted
+                ? 'Your submitted message:'
+                : 'Please tell us who you are and why you need access:'}
+            </label>
+            <textarea
+              id="reason"
+              rows={4}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              readOnly={isSubmitted}
+              disabled={isSubmitting || isSubmitted}
+              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm ${
+                isSubmitted ? 'bg-gray-100 cursor-not-allowed' : 'focus:border-[#FF5722] focus:ring-[#FF5722]'
+              }`}
+              placeholder="e.g., I'm John from XYZ Corp, need to check on our Q4 branding project."
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={isSubmitting || isSubmitted || !reason.trim()}
+            className="w-full flex justify-center items-center gap-2 rounded-md bg-[#FF5722] px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#E64A19] disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isSubmitted ? (
+              <CheckCircle className="h-4 w-4" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {isSubmitting ? 'Submitting...' : isSubmitted ? 'Message Sent' : 'Submit Request'}
+          </button>
+        </form>
+        <p className="text-xs text-gray-500 text-center mt-4">
+          You will be notified by email once approved.
+          <Link to="/" className="ml-1 font-medium text-[#FF5722] hover:underline">
+            Back to Home
+          </Link>
+        </p>
       </div>
     </div>
   );
