@@ -982,7 +982,7 @@ export async function deleteEmployeeAccount(userId: string) {
     return { data: null, error: new Error(data.error) };
   }
 
-  // Success
+  // Success 
   return { data: data?.data, error: null };
 }
 
