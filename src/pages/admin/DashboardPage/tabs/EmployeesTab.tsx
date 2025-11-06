@@ -519,8 +519,10 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'success', title: 'Assignment Created!' });
       setIsCreateAssignModalOpen(false);
       fetchAllAssignments(); // Refresh the main list
-    } catch (err: any)
+    // --- THIS IS THE FIX ---
+    } catch (err: any) { 
       addToast({ type: 'error', title: 'Creation Failed', message: err.message });
+    // --- END OF FIX ---
     } finally {
       setIsSavingAssignment(false);
     }
@@ -663,7 +665,7 @@ const EmployeesTab: React.FC = () => {
                         title={employee.role === 'blocked' ? 'Unblock Access' : 'Block Access'}
                         disabled={employee.role === 'admin'}
                     >
-                        {employee.role === 'blocked' ? <ShieldCheck size={1Ch" /> : <AlertTriangle size={16} />}
+                        {employee.role === 'blocked' ? <ShieldCheck size={16} /> : <AlertTriangle size={16} />}
                     </button>
 
                     <button 
