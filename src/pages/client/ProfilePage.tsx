@@ -52,7 +52,8 @@ const ProfilePage: React.FC = () => {
     };
 
     try {
-      const { error }_ = await supabase.from('profiles').upsert(updates);
+      // --- THIS WAS BROKEN LINE 1 (FIXED) ---
+      const { error } = await supabase.from('profiles').upsert(updates);
       if (error) throw error;
 
       await refreshUserProfile(); // Refresh auth context
@@ -94,7 +95,8 @@ const ProfilePage: React.FC = () => {
       if (uploadError) throw uploadError;
 
       // 2. Update the 'avatar_url' in the profiles table
-      const { error: updateError }_ = await supabase
+      // --- THIS WAS BROKEN LINE 2 (FIXED) ---
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ avatar_url: filePath })
         .eq('id', user.id);
