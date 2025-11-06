@@ -11,7 +11,13 @@ import { Database } from '../../lib/supabase/database.types';
 type ClientTask = Database['public']['Tables']['client_tasks']['Row'];
 type ClientProject = Database['public']['Tables']['client_projects']['Row'];
 
-interface ProjectWithTasks extends ClientProject {
+interface ProjectWithTasks {
+  id: string;
+  client_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  created_at: string | null;
   client_tasks: ClientTask[];
 }
 

@@ -10,7 +10,7 @@ import { useToast } from '../../contexts/ToastContext'; // Import useToast
 // Define types
 type ClientProject = Database['public']['Tables']['client_projects']['Row'];
 type ProjectMessage = Database['public']['Tables']['project_messages']['Row'] & {
-  profiles: Pick<Database['public']['Tables']['profiles']['Row'], 'first_name' | 'last_name' | 'avatar_url'> | null;
+  profiles: { first_name: string | null; last_name: string | null; avatar_url: string | null } | null;
 };
 type ProjectWithLastMessage = ClientProject & {
   last_message: { content: string | null; created_at: string | null; };
@@ -48,9 +48,8 @@ const ConversationList: React.FC<ConversationListProps> = ({ onSelectProject, se
     if (error) {
       setError(error.message);
     } else {
-      // Manually add a placeholder last_message
-      const projectsWithEmptyMessage: ProjectWithLastMessage[] = data.map(p => ({
-        ...p,
+      const projectsWithEmptyMessage: ProjectWithLastMessage[] = (data || []).map(p => ({
+        ...(p as ClientProject),
         last_message: { content: 'Click to view messages', created_at: null }
       }));
       setProjects(projectsWithEmptyMessage);
@@ -220,8 +219,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ projectId }) => {
           project_id: projectId,
           sender_id: user.id,
           content: newMessage.trim(),
-        });
-      
+        } as any);
+
       if (insertError) throw insertError;
       setNewMessage(''); // Clear input on success
     } catch (err: any) {

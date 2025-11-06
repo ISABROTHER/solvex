@@ -58,6 +58,20 @@ export interface Database {
           company: string | null
           updated_at: string
           created_at: string
+          avatar_url: string | null
+          employee_number: string | null
+          birth_date: string | null
+          national_id: string | null
+          position: string | null
+          start_date: string | null
+          end_date: string | null
+          home_address: string | null
+          salary: number | null
+          payday: string | null
+          bank_account: string | null
+          bank_name: string | null
+          approval_status: string
+          reason_for_access: string | null
         }
         Insert: {
           id: string
@@ -69,6 +83,20 @@ export interface Database {
           company?: string | null
           updated_at?: string
           created_at?: string
+          avatar_url?: string | null
+          employee_number?: string | null
+          birth_date?: string | null
+          national_id?: string | null
+          position?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          home_address?: string | null
+          salary?: number | null
+          payday?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          approval_status?: string
+          reason_for_access?: string | null
         }
         Update: {
           id?: string
@@ -80,6 +108,20 @@ export interface Database {
           company?: string | null
           updated_at?: string
           created_at?: string
+          avatar_url?: string | null
+          employee_number?: string | null
+          birth_date?: string | null
+          national_id?: string | null
+          position?: string | null
+          start_date?: string | null
+          end_date?: string | null
+          home_address?: string | null
+          salary?: number | null
+          payday?: string | null
+          bank_account?: string | null
+          bank_name?: string | null
+          approval_status?: string
+          reason_for_access?: string | null
         }
       }
       services: {
@@ -341,6 +383,119 @@ export interface Database {
           status?: string
           created_at?: string
           updated_at?: string
+        }
+      }
+      client_projects: {
+        Row: {
+          id: string
+          client_id: string | null
+          title: string
+          description: string | null
+          status: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          client_id?: string | null
+          title: string
+          description?: string | null
+          status?: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          client_id?: string | null
+          title?: string
+          description?: string | null
+          status?: string
+          created_at?: string | null
+        }
+      }
+      client_tasks: {
+        Row: {
+          id: string
+          project_id: string
+          title: string
+          description: string | null
+          status: string
+          due_date: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          title: string
+          description?: string | null
+          status?: string
+          due_date?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          title?: string
+          description?: string | null
+          status?: string
+          due_date?: string | null
+          created_at?: string | null
+        }
+      }
+      project_messages: {
+        Row: {
+          id: string
+          project_id: string
+          sender_id: string | null
+          content: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          project_id: string
+          sender_id?: string | null
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          sender_id?: string | null
+          content?: string
+          created_at?: string
+        }
+      }
+      invoices: {
+        Row: {
+          id: string
+          client_id: string
+          project_id: string | null
+          invoice_number: string
+          amount: number
+          status: string
+          due_date: string | null
+          pdf_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          project_id?: string | null
+          invoice_number: string
+          amount: number
+          status?: string
+          due_date?: string | null
+          pdf_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          project_id?: string | null
+          invoice_number?: string
+          amount?: number
+          status?: string
+          due_date?: string | null
+          pdf_url?: string | null
+          created_at?: string
         }
       }
     }

@@ -107,18 +107,22 @@ const ClientSidebar: React.FC<ClientSidebarProps> = ({ sidebarOpen, setSidebarOp
                         `
                       }
                     >
-                      <item.icon
-                        className={`
-                          ${
-                            isActive
-                              ? 'text-[#FF5722]'
-                              : 'text-gray-400 group-hover:text-gray-500'
-                          }
-                          mr-4 h-6 w-6 flex-shrink-0
-                          `}
-                        aria-hidden="true"
-                      />
-                      {item.name}
+                      {({ isActive }) => (
+                        <>
+                          <item.icon
+                            className={`
+                              ${
+                                isActive
+                                  ? 'text-[#FF5722]'
+                                  : 'text-gray-400 group-hover:text-gray-500'
+                              }
+                              mr-4 h-6 w-6 flex-shrink-0
+                              `}
+                            aria-hidden="true"
+                          />
+                          {item.name}
+                        </>
+                      )}
                     </NavLink>
                   ))}
                 </nav>

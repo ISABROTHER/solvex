@@ -61,18 +61,22 @@ const ClientLayout: React.FC = () => {
                     `
                   }
                 >
-                  <item.icon
-                    className={`
-                      ${
-                        isActive
-                          ? 'text-[#FF5722]'
-                          : 'text-gray-400 group-hover:text-gray-500'
-                      }
-                      mr-3 h-5 w-5 flex-shrink-0
-                      `}
-                    aria-hidden="true"
-                  />
-                  {item.name}
+                  {({ isActive }) => (
+                    <>
+                      <item.icon
+                        className={`
+                          ${
+                            isActive
+                              ? 'text-[#FF5722]'
+                              : 'text-gray-400 group-hover:text-gray-500'
+                          }
+                          mr-3 h-5 w-5 flex-shrink-0
+                          `}
+                        aria-hidden="true"
+                      />
+                      {item.name}
+                    </>
+                  )}
                 </NavLink>
               ))}
             </nav>
