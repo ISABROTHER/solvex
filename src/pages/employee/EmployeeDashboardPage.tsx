@@ -10,6 +10,7 @@ import {
   getAssignmentsForEmployee,
   getEmployeeDocuments,
   getFullAssignmentDetails,
+  uploadSignedEmployeeDocument, // <-- 1. IMPORT NEW FUNCTION
   EmployeeDocument
 } from '../../lib/supabase/operations';
 import {
@@ -42,6 +43,7 @@ import {
   Filter,
   ArrowDownWideNarrow,
   Eye,
+  FileUp, // <-- 2. IMPORT NEW ICON
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -229,6 +231,70 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   );
 };
 
+// --- 3. NEW MODAL COMPONENT FOR SIGNED UPLOAD ---
+const SignedDocUploadModal = ({ isOpen, onClose, doc, onUpload, isSigning }) => {
+  const [signedFile, setSignedFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSignedFile(null);
+    }
+  }, [isOpen]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSignedFile(e.target.files?.[0] || null);
+  };
+
+  const handleSubmit = () => {
+    if (signedFile) {
+      onUpload(doc, signedFile);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <motion.div className="absolute inset-0 bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden"
+      >
+        <div className="p-6 border-b flex justify-between items-center">
+          <h3 className="text-xl font-bold text-gray-900">Upload Signed Document</h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200"><X size={20} /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-gray-600">
+            Please upload the signed version of: <strong className="text-gray-800">{doc.document_name}</strong>
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Signed File (PDF, PNG, JPG)</label>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              accept=".pdf,.png,.jpg,.jpeg"
+              className="mt-1 w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[#FF5722]/10 file:text-[#FF5722] hover:file:bg-[#FF5722]/20"
+            />
+          </div>
+        </div>
+        <div className="p-6 border-t flex justify-end">
+          <button 
+            onClick={handleSubmit} 
+            disabled={isSigning || !signedFile} 
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            {isSigning ? <Loader2 size={16} className="animate-spin" /> : <FileUp size={16} />}
+            {isSigning ? 'Uploading...' : 'Submit Signed Document'}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 
 // --- Main Employee Dashboard Page ---
 const EmployeeDashboardPage: React.FC = () => {
@@ -249,6 +315,11 @@ const EmployeeDashboardPage: React.FC = () => {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
+  // --- 4. ADD NEW STATE FOR SIGNING MODAL ---
+  const [uploadingSignedDoc, setUploadingSignedDoc] = useState<EmployeeDocument | null>(null);
+  const [isSigning, setIsSigning] = useState(false);
+  // ---
+  
   const [assignmentPage, setAssignmentPage] = useState(0); 
   const ASSIGNMENTS_PER_PAGE = 7;
   
@@ -256,6 +327,32 @@ const EmployeeDashboardPage: React.FC = () => {
   
   const [filterStatus, setFilterStatus] = useState('all_active'); 
   const [sortType, setSortType] = useState('due_date'); // Default to due date
+
+  // --- 5. ADD DATA FETCH FUNCTION (for refreshing list) ---
+  const fetchAllData = async () => {
+      if (!user) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const [assignmentResult, documentResult] = await Promise.all([
+          getAssignmentsForEmployee(user.id),
+          getEmployeeDocuments(user.id)
+        ]);
+
+        if (assignmentResult.error) throw assignmentResult.error;
+        if (documentResult.error) throw documentResult.error;
+
+        setAssignments(assignmentResult.data || []);
+        setDocuments(documentResult.data || []);
+
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch data.');
+        addToast({ type: 'error', title: 'Loading Failed', message: err.message });
+      } finally {
+        setLoading(false);
+      }
+  };
+  // ---
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -375,30 +472,8 @@ const EmployeeDashboardPage: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const [assignmentResult, documentResult] = await Promise.all([
-          getAssignmentsForEmployee(user.id),
-          getEmployeeDocuments(user.id)
-        ]);
-
-        if (assignmentResult.error) throw assignmentResult.error;
-        if (documentResult.error) throw documentResult.error;
-
-        setAssignments(assignmentResult.data || []);
-        setDocuments(documentResult.data || []);
-
-      } catch (err: any) {
-        setError(err.message || 'Failed to fetch data.');
-        addToast({ type: 'error', title: 'Loading Failed', message: err.message });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    // Use the new fetchAllData function
+    fetchAllData();
 
     const channel = supabase
       .channel(`employee_dashboard:${user.id}`)
@@ -476,6 +551,27 @@ const EmployeeDashboardPage: React.FC = () => {
       setViewingPdfTitle('');
     }
   };
+
+  // --- 6. NEW HANDLER FOR UPLOADING SIGNED DOC ---
+  const handleSignedDocUpload = async (doc: EmployeeDocument, file: File) => {
+    setIsSigning(true);
+    try {
+      const updatedDoc = await uploadSignedEmployeeDocument(doc, file);
+      
+      // Update local state
+      setDocuments(prevDocs => 
+        prevDocs.map(d => d.id === updatedDoc.id ? updatedDoc : d)
+      );
+      
+      addToast({ type: 'success', title: 'Upload Successful!', message: `${doc.document_name} has been signed.` });
+      setUploadingSignedDoc(null);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Upload Failed', message: err.message });
+    } finally {
+      setIsSigning(false);
+    }
+  };
+  // ---
 
   const handleSignDocument = async () => {
     addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
@@ -715,22 +811,37 @@ const EmployeeDashboardPage: React.FC = () => {
                       <div key={doc.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center border">
                         <div>
                           <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
+                          {/* --- 7. UPDATE DOCUMENT STATUS LOGIC --- */}
                           {doc.requires_signing && !doc.signed_at && (
                             <span className="text-xs text-yellow-600 font-medium flex items-center gap-1 mt-0.5"><AlertTriangle size={12} /> Pending Signature</span>
                           )}
                           {doc.signed_at && (
-                            <span className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5"><CheckCircle size={12} /> Signed</span>
+                            <span className="text-xs text-green-600 font-medium flex items-center gap-1 mt-0.5"><CheckCircle size={12} /> Signed on {formatDate(doc.signed_at)}</span>
                           )}
                           {!doc.requires_signing && (
                             <span className="text-xs text-blue-600 font-medium mt-0.5">Reference Document</span>
                           )}
                         </div>
-                        <button 
-                          onClick={() => handleViewDocument(doc)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] transition-colors"
-                        >
-                          <Eye size={14} /> View
-                        </button>
+                        
+                        {/* --- 8. UPDATE BUTTONS --- */}
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => handleViewDocument(doc)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#FF5722] text-white hover:bg-[#E64A19] transition-colors"
+                          >
+                            <Eye size={14} /> View
+                          </button>
+                          
+                          {/* Show "Sign & Upload" if it's required and NOT already signed */}
+                          {doc.requires_signing && !doc.signed_at && (
+                            <button 
+                              onClick={() => setUploadingSignedDoc(doc)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors"
+                            >
+                              <FileUp size={14} /> Sign & Upload
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -833,6 +944,15 @@ const EmployeeDashboardPage: React.FC = () => {
         profile={profile}
         onSave={handleSaveProfile}
         isSaving={isSavingProfile}
+      />
+
+      {/* --- 9. RENDER THE NEW SIGNED DOC UPLOAD MODAL --- */}
+      <SignedDocUploadModal
+        isOpen={!!uploadingSignedDoc}
+        onClose={() => setUploadingSignedDoc(null)}
+        doc={uploadingSignedDoc}
+        onUpload={handleSignedDocUpload}
+        isSigning={isSigning}
       />
     </div>
   );
