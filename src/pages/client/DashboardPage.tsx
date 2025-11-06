@@ -1,188 +1,94 @@
-// @ts-nocheck
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { PlusCircle, FileText, CheckCircle, Clock, XCircle, Loader2 } from 'lucide-react';
-import { useAuth } from '../../features/auth/AuthProvider'; // <-- CORRECTED IMPORT
-// Assuming you have functions to fetch client-specific data
-// import { getClientRequests, getClientProfile } from '../../lib/supabase/operations'; // Example imports
+// src/pages/client/DashboardPage.tsx
+import React from 'react';
+import { useAuth } from '../../features/auth/AuthProvider'; // Corrected import
+import { ArrowRight, BarChart, CheckSquare, Clock } from 'lucide-react';
 
-// Mock data (replace with actual data fetching)
-import { useClientMock } from './useClientMock'; // Using mock hook for now
-import StatusBadge from './StatusBadge';
-import { ServiceRequestStatus } from '../../types/client-sync.types'; // Assuming type exists
+// Example Stat Card
+interface StatCardProps {
+  title: string;
+  value: string;
+  icon: React.ElementType;
+  color: string;
+}
 
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color }) => (
+  <div className="bg-white shadow-sm rounded-lg p-5 flex items-center space-x-4">
+    <div className={`flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full ${color}`}>
+      <Icon className="h-6 w-6 text-white" />
+    </div>
+    <div>
+      <p className="text-sm font-medium text-gray-500 truncate">{title}</p>
+      <p className="text-2xl font-semibold text-gray-900">{value}</p>
+    </div>
+  </div>
+);
 
-// Type for dashboard requests (simplified)
-type DashboardRequest = {
-  id: string;
-  project_title: string;
-  service_key: string;
-  status: ServiceRequestStatus;
-  requested_at: string;
-};
-
-const DashboardPage: React.FC = () => {
-  const { user } = useAuth(); // Get user info
-  // const [requests, setRequests] = useState<DashboardRequest[]>([]);
-  // const [loading, setLoading] = useState(true);
-  // const [error, setError] = useState<string | null>(null);
-
-  // --- Using Mock Data ---
-  const { requests, loading, error, clientName } = useClientMock(); // Replace with real fetching
-  // --- End Mock Data ---
-
-  /*
-  // --- Example Real Data Fetching (implement in operations.ts) ---
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user?.id) return; // Wait for user info
-
-      setLoading(true);
-      setError(null);
-      try {
-        // Fetch client requests (implement getClientRequests in operations.ts)
-        const { data: requestData, error: requestError } = await getClientRequests(user.id);
-        if (requestError) throw requestError;
-        setRequests(requestData || []);
-
-        // Fetch client name (implement getClientProfile in operations.ts)
-        // const { data: profileData, error: profileError } = await getClientProfile(user.id);
-        // if (profileError) throw profileError;
-        // setClientName(profileData?.first_name || user.email);
-
-      } catch (err: any) {
-        console.error("Error fetching client dashboard data:", err);
-        setError(err.message || "Failed to load data.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [user]); // Refetch if user changes
-  */
-  // --- End Real Data Fetching Example ---
-
-
-  const recentRequests = useMemo(() => {
-    return requests
-      .sort((a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime())
-      .slice(0, 5); // Show latest 5
-  }, [requests]);
-
-  const requestStats = useMemo(() => {
-    return requests.reduce((acc, req) => {
-      acc[req.status] = (acc[req.status] || 0) + 1;
-      return acc;
-    }, {} as Record<ServiceRequestStatus, number>);
-  }, [requests]);
-
-  const getIconForStatus = (status: ServiceRequestStatus) => {
-    switch (status) {
-      case 'completed': return <CheckCircle className="text-green-500" size={18} />;
-      case 'in_progress':
-      case 'confirmed': return <Clock className="text-blue-500" size={18} />;
-      case 'cancelled': return <XCircle className="text-red-500" size={18} />;
-      case 'requested':
-      default: return <FileText className="text-amber-500" size={18} />;
-    }
-  };
-
+const ClientDashboard: React.FC = () => {
+  const { profile } = useAuth();
+  
+  const firstName = profile?.first_name || 'Client';
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto">
       {/* Welcome Header */}
-      <div className="mb-8 p-6 bg-gradient-to-r from-[#ff8a65] to-[#FF5722] rounded-lg shadow text-white">
-        <h1 className="text-3xl font-bold mb-1">Welcome back, {clientName || user?.email}!</h1>
-        <p className="text-orange-100">Here's a quick overview of your recent activity.</p>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 mb-1">
+          Welcome back, {firstName}!
+        </h1>
+        <p className="text-lg text-gray-600">
+          Here's a quick overview of your account.
+        </p>
       </div>
 
-       {/* Loading and Error States */}
-       {loading && (
-         <div className="flex justify-center items-center py-20">
-             <Loader2 className="h-10 w-10 animate-spin text-gray-400" />
-         </div>
-       )}
-       {error && !loading && (
-         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
-             <strong className="font-bold">Error:</strong>
-             <span className="block sm:inline ml-2">{error}</span>
-         </div>
-       )}
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 mb-6">
+        <StatCard title="Active Projects" value="2" icon={Clock} color="bg-blue-500" />
+        <StatCard title="Tasks Completed" value="14" icon={CheckSquare} color="bg-green-500" />
+        <StatCard title="Pending Invoices" value="1" icon={BarChart} color="bg-yellow-500" />
+      </div>
 
-
-      {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-          {/* Left Column: Quick Stats & New Request */}
-          <div className="md:col-span-1 space-y-6">
-            {/* Quick Stats */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold mb-4 text-gray-700">Request Summary</h2>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Requested:</span>
-                  <span className="font-medium text-amber-600">{requestStats.requested || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Confirmed/In Progress:</span>
-                  <span className="font-medium text-blue-600">{(requestStats.confirmed || 0) + (requestStats.in_progress || 0)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Completed:</span>
-                  <span className="font-medium text-green-600">{requestStats.completed || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Cancelled:</span>
-                  <span className="font-medium text-red-600">{requestStats.cancelled || 0}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* New Request Button */}
-            <Link
-              to="/client/requests/new"
-              className="block w-full text-center bg-[#FF5722] text-white font-semibold py-3 px-4 rounded-lg shadow hover:bg-[#E64A19] transition-colors flex items-center justify-center gap-2"
-            >
-              <PlusCircle size={20} />
-              Submit New Request
-            </Link>
+      {/* Main Content Sections */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activity */}
+        <div className="lg:col-span-2 bg-white shadow-sm rounded-lg">
+          <div className="p-5 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
           </div>
+          <ul className="divide-y divide-gray-200">
+            {[
+              { text: 'New designs for Project Alpha uploaded.', time: '2h ago' },
+              { text: 'Invoice #INV-007 was paid.', time: '1d ago' },
+              { text: 'Comment received on "Brand Logo" task.', time: '1d ago' },
+              { text: 'Project Delta was marked as "Completed".', time: '3d ago' },
+            ].map((item, index) => (
+              <li key={index} className="p-5 flex justify-between items-center hover:bg-gray-50">
+                <p className="text-sm text-gray-700">{item.text}</p>
+                <p className="text-sm text-gray-400">{item.time}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
 
-          {/* Right Column: Recent Requests */}
-          <div className="md:col-span-2 bg-white p-6 rounded-lg shadow">
-            <div className="flex justify-between items-center mb-4">
-               <h2 className="text-lg font-semibold text-gray-700">Recent Requests</h2>
-               <Link to="/client/requests" className="text-sm text-[#FF5722] hover:underline">View All</Link>
-            </div>
-
-            {recentRequests.length > 0 ? (
-                <ul className="divide-y divide-gray-200">
-                {recentRequests.map((req) => (
-                  <li key={req.id} className="py-3 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                       {getIconForStatus(req.status)}
-                      <div>
-                        <Link to={`/client/requests/${req.id}`} className="text-sm font-medium text-gray-800 hover:text-[#FF5722] hover:underline block truncate max-w-xs">
-                          {req.project_title || req.service_key.replace(/_/g, ' ')}
-                        </Link>
-                        <p className="text-xs text-gray-500">
-                          Requested on {new Date(req.requested_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <StatusBadge status={req.status} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-                <p className="text-center text-gray-500 py-8">You haven't submitted any requests yet.</p>
-            )}
-
+        {/* Quick Actions */}
+        <div className="bg-white shadow-sm rounded-lg">
+          <div className="p-5 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+          </div>
+          <div className="p-5 space-y-3">
+            <button className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-md text-sm font-medium text-gray-700">
+              View All Projects <ArrowRight className="h-4 w-4" />
+            </button>
+            <button className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-md text-sm font-medium text-gray-700">
+              Check Messages <ArrowRight className="h-4 w-4" />
+            </button>
+            <button className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-md text-sm font-medium text-gray-700">
+              Pay Invoices <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
 
-export default DashboardPage;
+export default ClientDashboard;
