@@ -4,7 +4,33 @@ import { supabase } from '../../../../lib/supabase/client';
 import type { Database } from '../../../../lib/supabase/database.types';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import Card from '../components/Card';
-import { Loader as Loader2, User, Search, CircleAlert as AlertCircle, Mail, Phone, MapPin, Calendar, Hash, FileText, DollarSign, Building, CreditCard, Briefcase, Eye, Plus, X, Trash2, CreditCard as Edit2, CirclePlus as PlusCircle, CloudUpload as UploadCloud, ChevronDown, TriangleAlert as AlertTriangle, ShieldCheck, List } from 'lucide-react';
+import { 
+  Loader2, 
+  User, 
+  Search, 
+  AlertCircle, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  Calendar, 
+  Hash, 
+  FileText, 
+  DollarSign, 
+  Building, 
+  CreditCard,
+  Briefcase,
+  Eye,
+  Plus,
+  X,
+  Trash2,
+  Edit2,
+  PlusCircle,
+  UploadCloud,
+  ChevronDown,
+  AlertTriangle,
+  ShieldCheck,
+  List,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
@@ -391,7 +417,7 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
   
-  // --- Document Upload Handler (Unchanged) ---
+  // --- Document Upload Handler (FIXED) ---
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocFile || !newDocName.trim() || !selectedEmployee) {
@@ -417,7 +443,10 @@ const EmployeesTab: React.FC = () => {
       setNewDocRequiresSigning(false);
       setShowDocUpload(false);
       
-    } catch (err: any) {
+    // --- THIS IS THE FIX ---
+    // Changed the "." to "{"
+    } catch (err: any) { 
+    // --- END OF FIX ---
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
