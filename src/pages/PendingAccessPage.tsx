@@ -31,7 +31,8 @@ const PendingAccessPage: React.FC = () => {
     setError('');
 
     try {
-      const { error }_ = await supabase
+      // --- THIS WAS THE BROKEN LINE ---
+      const { error } = await supabase
         .from('profiles')
         .update({ reason_for_access: reason })
         .eq('id', user.id);
