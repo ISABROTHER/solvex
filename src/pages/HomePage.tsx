@@ -463,7 +463,7 @@ const HomePage = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                 <div className="relative h-64 p-4 flex flex-col justify-end text-white">
                   <h3 className="text-base font-bold">{rental.name}</h3>
-                </div> 
+                </div>
               </Link>
             ))}
           </div>
