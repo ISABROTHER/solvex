@@ -958,30 +958,31 @@ export const restoreTeam = async (id: string) => {
     .single();
 };
 
-// --- START: NEW (FIXED) EMPLOYEE MANAGEMENT FUNCTIONS ---
+// --- START: ***FIXED*** EMPLOYEE MANAGEMENT FUNCTIONS ---
 
 /**
  * Deletes a user from the auth.users table and cascadingly deletes their profile.
  * This is now handled by an Edge Function for security.
  */
 export async function deleteEmployeeAccount(userId: string) {
+  // This invokes the 'manage-employee' Supabase Function
   const { data, error } = await supabase.functions.invoke('manage-employee', {
     body: { action: 'delete', userId },
   });
 
   if (error) {
     console.error("deleteEmployeeAccount Error:", error.message);
+    // Return an error object that matches what the component expects
     return { data: null, error: new Error(error.message) };
   }
   
-  // The 'data' from the function response is nested
-  // { data: { data: { user: ... } } }
-  // We check for the function's *internal* error property first
+  // The 'data' from the function response might contain its own error
   if (data?.error) {
     console.error("deleteEmployeeAccount Function Error:", data.error);
     return { data: null, error: new Error(data.error) };
   }
 
+  // Success
   return { data: data?.data, error: null };
 }
 
@@ -990,6 +991,7 @@ export async function deleteEmployeeAccount(userId: string) {
  * This is now handled by an Edge Function for security and to bypass RLS.
  */
 export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 'blocked') {
+  // This invokes the 'manage-employee' Supabase Function
   const { data, error } = await supabase.functions.invoke('manage-employee', {
     body: { action: 'block', userId, newRole },
   });
@@ -1005,7 +1007,8 @@ export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 
     return { data: null, error: new Error(data.error) };
   }
 
+  // Success
   return { data: data?.data, error: null };
 }
 
-// --- END: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
+// --- END: ***FIXED*** EMPLOYEE MANAGEMENT FUNCTIONS ---
