@@ -391,6 +391,54 @@ export const uploadEmployeeDocument = async (
   return dbData;
 };
 
+// --- START: NEW FUNCTION ---
+/**
+ * Uploads a SIGNED document from an employee and updates the existing record.
+ */
+export const uploadSignedEmployeeDocument = async (
+  originalDocument: EmployeeDocument,
+  signedFile: File
+) => {
+  // 1. Create a new file name for the signed version
+  const fileExtension = signedFile.name.split('.').pop();
+  const baseName = originalDocument.document_name.replace(/\.[^/.]+$/, ""); // Remove original extension
+  const newFileName = `${baseName}_SIGNED.${fileExtension}`;
+  const filePath = `${originalDocument.profile_id}/${newFileName}`;
+
+  // 2. Upload the signed file to storage
+  const { data: storageData, error: storageError } = await supabase.storage
+    .from('employee_documents') // Use the same bucket
+    .upload(filePath, signedFile, {
+      cacheControl: '3600',
+      upsert: true, // Overwrite if it already exists
+    });
+
+  if (storageError) throw storageError;
+
+  // 3. Get the public URL for the new signed file
+  const { data: urlData } = supabase.storage
+    .from('employee_documents')
+    .getPublicUrl(storageData.path);
+  
+  const signedPublicUrl = urlData.publicUrl;
+
+  // 4. Update the ORIGINAL database record
+  const { data: dbData, error: dbError } = await supabase
+    .from('employee_documents')
+    .update({
+      signed_storage_url: signedPublicUrl, // Set the signed URL
+      signed_at: new Date().toISOString()   // Set the signed timestamp
+    })
+    .eq('id', originalDocument.id) // Match the original document ID
+    .select()
+    .single();
+
+  if (dbError) throw dbError;
+  return dbData;
+};
+// --- END: NEW FUNCTION ---
+
+
 /**
  * Deletes an employee document from both storage and database.
  */
