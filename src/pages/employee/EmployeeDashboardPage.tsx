@@ -10,7 +10,7 @@ import {
   getAssignmentsForEmployee,
   getEmployeeDocuments,
   getFullAssignmentDetails,
-  uploadSignedEmployeeDocument, // <-- 1. IMPORT NEW FUNCTION
+  uploadSignedEmployeeDocument,
   EmployeeDocument
 } from '../../lib/supabase/operations';
 import {
@@ -43,7 +43,7 @@ import {
   Filter,
   ArrowDownWideNarrow,
   Eye,
-  FileUp, // <-- 2. IMPORT NEW ICON
+  FileUp,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
@@ -231,7 +231,8 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
   );
 };
 
-// --- 3. NEW MODAL COMPONENT FOR SIGNED UPLOAD ---
+
+// --- NEW MODAL COMPONENT FOR SIGNED UPLOAD ---
 const SignedDocUploadModal = ({ isOpen, onClose, doc, onUpload, isSigning }) => {
   const [signedFile, setSignedFile] = useState<File | null>(null);
 
@@ -315,10 +316,8 @@ const EmployeeDashboardPage: React.FC = () => {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   
-  // --- 4. ADD NEW STATE FOR SIGNING MODAL ---
   const [uploadingSignedDoc, setUploadingSignedDoc] = useState<EmployeeDocument | null>(null);
   const [isSigning, setIsSigning] = useState(false);
-  // ---
   
   const [assignmentPage, setAssignmentPage] = useState(0); 
   const ASSIGNMENTS_PER_PAGE = 7;
@@ -328,7 +327,6 @@ const EmployeeDashboardPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('all_active'); 
   const [sortType, setSortType] = useState('due_date'); // Default to due date
 
-  // --- 5. ADD DATA FETCH FUNCTION (for refreshing list) ---
   const fetchAllData = async () => {
       if (!user) return;
       setLoading(true);
@@ -352,7 +350,6 @@ const EmployeeDashboardPage: React.FC = () => {
         setLoading(false);
       }
   };
-  // ---
 
   const handleSaveProfile = async (formData: any, avatarFile: File | null) => {
     if (!user) return;
@@ -552,7 +549,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  // --- 6. NEW HANDLER FOR UPLOADING SIGNED DOC ---
   const handleSignedDocUpload = async (doc: EmployeeDocument, file: File) => {
     setIsSigning(true);
     try {
@@ -571,7 +567,6 @@ const EmployeeDashboardPage: React.FC = () => {
       setIsSigning(false);
     }
   };
-  // ---
 
   const handleSignDocument = async () => {
     addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
@@ -811,7 +806,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       <div key={doc.id} className="p-4 bg-gray-50 rounded-lg flex justify-between items-center border">
                         <div>
                           <p className="font-semibold text-gray-800 truncate">{doc.document_name}</p>
-                          {/* --- 7. UPDATE DOCUMENT STATUS LOGIC --- */}
                           {doc.requires_signing && !doc.signed_at && (
                             <span className="text-xs text-yellow-600 font-medium flex items-center gap-1 mt-0.5"><AlertTriangle size={12} /> Pending Signature</span>
                           )}
@@ -823,7 +817,6 @@ const EmployeeDashboardPage: React.FC = () => {
                           )}
                         </div>
                         
-                        {/* --- 8. UPDATE BUTTONS --- */}
                         <div className="flex gap-2">
                           <button 
                             onClick={() => handleViewDocument(doc)}
@@ -832,7 +825,6 @@ const EmployeeDashboardPage: React.FC = () => {
                             <Eye size={14} /> View
                           </button>
                           
-                          {/* Show "Sign & Upload" if it's required and NOT already signed */}
                           {doc.requires_signing && !doc.signed_at && (
                             <button 
                               onClick={() => setUploadingSignedDoc(doc)}
@@ -905,14 +897,17 @@ const EmployeeDashboardPage: React.FC = () => {
                               className="overflow-hidden"
                               id="employment-details-content"
                           >
+                              {/* --- MODIFICATION HERE --- */}
                               <div className="p-6 pt-0 space-y-2">
                                   <InfoRow icon={Briefcase} label="Position" value={profile.position} />
                                   <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
                                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
+                                  <InfoRow icon={Calendar} label="End Date" value={formatDate(profile.end_date)} />
                                   <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
                                   <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
                                   <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
                               </div>
+                              {/* --- END MODIFICATION --- */}
                           </motion.div>
                       ) : null}
                   </AnimatePresence>
@@ -945,8 +940,8 @@ const EmployeeDashboardPage: React.FC = () => {
         onSave={handleSaveProfile}
         isSaving={isSavingProfile}
       />
-
-      {/* --- 9. RENDER THE NEW SIGNED DOC UPLOAD MODAL --- */}
+      
+      {/* Signed Doc Upload Modal */}
       <SignedDocUploadModal
         isOpen={!!uploadingSignedDoc}
         onClose={() => setUploadingSignedDoc(null)}
