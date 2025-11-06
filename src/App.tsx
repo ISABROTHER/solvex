@@ -5,7 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, ClientRoute, AdminRoute, EmployeeRoute, MyPage } from './features/auth';
 import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider } from './contexts/ToastContext'; // ADD THIS LINE
 
 // --- LAYOUT IMPORTS ---
 import PublicLayout from './app/layout/PublicLayout';
@@ -25,17 +25,13 @@ import CartPage from './pages/CartPage';
 import SuccessPage from './pages/SuccessPage';
 import CareersPage from './pages/CareersPage';
 import ContactPage from './pages/ContactPage';
-import PendingAccessPage from './pages/PendingAccessPage';
-import AccessDeniedPage from './pages/AccessDeniedPage';
+import RequestAccessPage from './pages/RequestAccessPage';
 import DashboardPage from './pages/admin/DashboardPage';
 import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
-// --- NEW CLIENT PAGES ---
-import ProjectsPage from './pages/client/ProjectsPage';
-import ProjectDetailPage from './pages/client/ProjectDetailPage';
-import MessagesPage from './pages/client/MessagesPage';
-import BillingPage from './pages/client/BillingPage';
-// --- (Old client pages removed) ---
+import RequestsPage from './pages/client/RequestsPage';
+import RequestDetailPage from './pages/client/RequestDetailPage';
+import NewRequestPage from './pages/client/NewRequestPage';
 import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
 
 
@@ -53,18 +49,16 @@ function App() {
       <ThemeProvider>
         <AuthProvider>
           <CartProvider>
-            <ToastProvider>
+            <ToastProvider> {/* WRAP WITH TOAST PROVIDER */}
               <Routes>
                 {/* Authentication Pages */}
                 <Route path="/my-page" element={<MyPage />} />
-                <Route path="/pending-access" element={<PendingAccessPage />} />
-                <Route path="/access-denied" element={<AccessDeniedPage />} />
+                <Route path="/request-access" element={<RequestAccessPage />} />
 
                 {/* Public-Facing Pages */}
                 <Route element={<MainLayout><PublicLayout /></MainLayout>}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/services" element={<ServicesPage />} />
-                  {/* --- THIS WAS THE BROKEN LINE --- */}
                   <Route path="/rentals" element={<RentalsPage />} />
                   <Route path="/rentals/:slug" element={<RentalDetailPage />} />
                   <Route path="/cart" element={<CartPage />} />
@@ -81,21 +75,16 @@ function App() {
                   </Route>
                 </Route>
 
-                {/* Client-Only Pages (Now checks for approval status) */}
+                {/* Client-Only Pages */}
                 <Route element={<ClientRoute />}>
                   <Route element={<ClientLayout />}>
                     <Route path="/client" element={<ClientDashboard />} />
                     <Route path="/client/dashboard" element={<ClientDashboard />} />
                     <Route path="/client/profile" element={<ProfilePage />} />
-                    
-                    {/* --- UPDATED ROUTES --- */}
-                    <Route path="/client/projects" element={<ProjectsPage />} />
-                    <Route path="/client/projects/:id" element={<ProjectDetailPage />} />
-                    <Route path="/client/messages" element={<MessagesPage />} />
-                    <Route path="/client/billing" element={<BillingPage />} />
-                    
-                    {/* --- REMOVED OLD REQUESTS ROUTES --- */}
-                    
+                    <Route path="/client/requests" element={<RequestsPage />} />
+                    <Route path="/client/requests/new" element={<NewRequestPage />} />
+                    <Route path="/client/new" element={<NewRequestPage />} />
+                    <Route path="/client/requests/:id" element={<RequestDetailPage />} />
                   </Route>
                 </Route>
 
@@ -107,7 +96,7 @@ function App() {
                 {/* Fallback Redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
-            </ToastProvider>
+            </ToastProvider> {/* WRAP WITH TOAST PROVIDER */}
           </CartProvider>
         </AuthProvider>
       </ThemeProvider>
