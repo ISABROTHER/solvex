@@ -1,5 +1,5 @@
 // src/lib/supabase/operations.ts
-// @ts-nocheck
+// @ts-nocheck 
 import { supabase } from './client';
 import type { Database } from './database.types';
 

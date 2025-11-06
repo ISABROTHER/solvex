@@ -879,7 +879,7 @@ const EmployeesTab: React.FC = () => {
         onApproveDeliverable={handleApprove}
         onRequestEdits={handleRequestEdits}
       />
-    </div>
+    </div> 
   );
 };
 
