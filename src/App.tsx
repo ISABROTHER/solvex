@@ -25,7 +25,9 @@ import CartPage from './pages/CartPage';
 import SuccessPage from './pages/SuccessPage';
 import CareersPage from './pages/CareersPage';
 import ContactPage from './pages/ContactPage';
-import RequestAccessPage from './pages/RequestAccessPage';
+// import RequestAccessPage from './pages/RequestAccessPage'; // --- REMOVED
+import PendingAccessPage from './pages/PendingAccessPage'; // --- ADDED
+import AccessDeniedPage from './pages/AccessDeniedPage'; // --- ADDED
 import DashboardPage from './pages/admin/DashboardPage';
 import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
@@ -53,7 +55,9 @@ function App() {
               <Routes>
                 {/* Authentication Pages */}
                 <Route path="/my-page" element={<MyPage />} />
-                <Route path="/request-access" element={<RequestAccessPage />} />
+                {/* <Route path="/request-access" element={<RequestAccessPage />} /> */} {/* --- REMOVED --- */}
+                <Route path="/pending-access" element={<PendingAccessPage />} /> {/* --- ADDED --- */}
+                <Route path="/access-denied" element={<AccessDeniedPage />} /> {/* --- ADDED --- */}
 
                 {/* Public-Facing Pages */}
                 <Route element={<MainLayout><PublicLayout /></MainLayout>}>
@@ -75,7 +79,7 @@ function App() {
                   </Route>
                 </Route>
 
-                {/* Client-Only Pages */}
+                {/* Client-Only Pages (Now checks for approval status) */}
                 <Route element={<ClientRoute />}>
                   <Route element={<ClientLayout />}>
                     <Route path="/client" element={<ClientDashboard />} />
