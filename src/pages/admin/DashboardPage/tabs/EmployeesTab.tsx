@@ -8,7 +8,7 @@ import {
   Loader2, 
   User, 
   Search, 
-  AlertCircle, 
+  AlertCircle,  
   Mail, 
   Phone, 
   MapPin, 
@@ -43,6 +43,7 @@ import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 
+// --- 1. IMPORT NEW FUNCTIONS ---
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
 import {
   getAssignmentsForEmployee,
@@ -53,16 +54,19 @@ import {
   getEmployeeDocuments,
   uploadEmployeeDocument,
   deleteEmployeeDocument,
-  createDocumentSignedUrl, // This is still useful if you want to add a "Download" button
-  EmployeeDocument, // <-- 1. Keep this import
+  createDocumentSignedUrl,
+  EmployeeDocument, 
+  // --- IMPORTED NEW MANAGEMENT FUNCTIONS ---
   deleteEmployeeAccount, 
   blockEmployeeAccess 
 } from '../../../../lib/supabase/operations';
-import EnhancedPdfViewer from '../../../../components/EnhancedPdfViewer';
 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
+// --- 2. REMOVE MOCK DOCUMENTS ---
+// const MOCK_DOCUMENTS: EmployeeDocument[] = [ ... ];
+
 
 // --- Helper Function ---
 const formatDate = (dateString: string | null) => {
@@ -70,19 +74,6 @@ const formatDate = (dateString: string | null) => {
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-};
-
-// --- Helper to extract storage path from URL ---
-const getStoragePathFromUrl = (url: string | null): string => {
-  if (!url) return '';
-  try {
-    // Splits the URL and returns the part after 'employee_documents/'
-    // e.g., 'userid/filename.pdf'
-    return url.split('/employee_documents/')[1];
-  } catch (e) {
-    console.error('Could not parse storage path:', e);
-    return '';
-  }
 };
 
 
@@ -101,6 +92,42 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
+// --- Reusable PDF Viewer (Unchanged) ---
+const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => void }> = ({ pdfUrl, title, onClose }) => (
+  <AnimatePresence>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-labelledby="pdf-title" role="dialog" aria-modal="true">
+      <motion.div
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="relative w-full max-w-4xl h-[90vh] bg-gray-800 rounded-lg shadow-2xl flex flex-col"
+      >
+        <div className="flex-shrink-0 p-3 flex justify-between items-center border-b border-gray-700">
+          <h3 id="pdf-title" className="text-white font-semibold truncate pl-2">{title}</h3>
+          <button onClick={onClose} className="p-2 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white" aria-label="Close document viewer">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="flex-1 p-2">
+           {/* Use Google Docs viewer as a fallback for universal compatibility */}
+          <iframe 
+            src={`https://docs.google.com/gview?url=${encodeURIComponent(pdfUrl)}&embedded=true`} 
+            className="w-full h-full border-0 rounded-b-lg" 
+            title="PDF Viewer" 
+          />
+        </div>
+      </motion.div>
+    </div>
+  </AnimatePresence>
+);
+
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
@@ -116,7 +143,7 @@ const EmployeesTab: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- Document States ---
+  // --- Document States (Unchanged) ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -126,9 +153,9 @@ const EmployeesTab: React.FC = () => {
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
 
-  // --- 2. Change PDF Viewer State ---
-  const [viewingDoc, setViewingDoc] = useState<EmployeeDocument | null>(null);
-  const [viewingDocIsSigned, setViewingDocIsSigned] = useState(false);
+  // PDF Viewer
+  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
+  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
   // --- State for Assignments (Unchanged) ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -143,6 +170,7 @@ const EmployeesTab: React.FC = () => {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
+        // --- FIX: Query for employee, admin, AND blocked users ---
         .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
       if (employeesError) throw employeesError;
@@ -159,7 +187,7 @@ const EmployeesTab: React.FC = () => {
     fetchData(); 
   }, [fetchData]);
 
-  // --- Management Handlers (Unchanged) ---
+  // --- Management Handlers (NEW) ---
   const handleBlockAccess = async (employee: Profile) => {
     if (employee.role === 'admin') {
       addToast({ type: 'error', title: 'Action Denied', message: 'Cannot block an Admin through this panel.' });
@@ -297,6 +325,8 @@ const EmployeesTab: React.FC = () => {
         let userId = authData.user?.id;
 
         if (authError && authError.message.includes('User already registered')) {
+            // --- THIS IS THE FIX ---
+            // The user exists in auth. Let's try to find their profile and update it.
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -306,11 +336,15 @@ const EmployeesTab: React.FC = () => {
               .single();
 
             if (profileFindError || !existingProfile) {
+                // This is the "ghost" user problem.
+                // Auth user is deleted, identity is not. Profile is (maybe) deleted.
+                // We can't create a new auth user, and we can't find a profile to update.
                 addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please try again in 24 hours, or use a different email.' });
                 setIsSavingProfile(false);
                 return;
             }
 
+            // We found their profile. Let's update it.
             userId = existingProfile.id;
             const { error: updateError } = await supabase
               .from('profiles')
@@ -321,14 +355,16 @@ const EmployeesTab: React.FC = () => {
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
 
         } else if (authError) {
+            // A different, unexpected auth error
             throw authError;
         
         } else {
+            // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
             
             const profileData = {
               ...formData,
-              id: userId,
+              id: userId, // Link profile to auth user
               role: 'employee',
             };
             
@@ -364,24 +400,11 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- 3. Update Document View Handler ---
-  const handleViewDocument = (doc: EmployeeDocument, isSignedVersion: boolean = false) => {
-    
-    const urlToUse = isSignedVersion ? doc.signed_storage_url : doc.storage_url;
-    if (!urlToUse) {
-      addToast({ type: 'error', title: 'File not found', message: 'The document URL is missing.' });
-      return;
-    }
-    
-    // Check if path can be extracted
-    const storagePath = getStoragePathFromUrl(urlToUse);
-    if (!storagePath) {
-      addToast({ type: 'error', title: 'Invalid File Path', message: 'Could not determine the file path for download.' });
-      return;
-    }
-    
-    setViewingDoc(doc);
-    setViewingDocIsSigned(isSignedVersion);
+  // --- Document Handlers (Unchanged) ---
+  const handleViewPdf = (url: string, title: string) => {
+    // For admin, just use the public URL
+    setViewingPdf(url);
+    setViewingPdfTitle(title);
   };
   
   // --- Document Upload Handler (Unchanged) ---
@@ -455,6 +478,7 @@ const EmployeesTab: React.FC = () => {
   const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedAssignment) return;
     
+    // Optimistic update
     const oldAssignment = selectedAssignment;
     const oldList = assignments;
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
@@ -462,6 +486,7 @@ const EmployeesTab: React.FC = () => {
       prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
     );
     
+    // Real update
     const { error } = await updateAssignmentStatus(selectedAssignment.id, newStatus);
     if (error) {
       addToast({ type: 'error', title: 'Status Update Failed' });
@@ -479,6 +504,7 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'error', title: 'Comment Failed to Send' });
     } else {
       addToast({ type: 'success', title: 'Comment Posted!' });
+      // Refetch details to show new comment
       handleAssignmentClick(selectedAssignment);
     }
   };
@@ -511,7 +537,7 @@ const EmployeesTab: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* --- Column 1: Employee List (Unchanged) --- */}
+      {/* --- Column 1: Employee List --- */}
       <Card className="lg:col-span-1 flex flex-col" title="Employees">
         <button
           onClick={handleAddNewEmployee}
@@ -552,6 +578,7 @@ const EmployeesTab: React.FC = () => {
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
                     <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
+                    {/* NEW: Role Badge for quick status check */}
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full mt-0.5 ${
                         employee.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 
                         employee.role === 'blocked' ? 'bg-red-100 text-red-800' : 
@@ -561,6 +588,7 @@ const EmployeesTab: React.FC = () => {
                     </span>
                   </div>
                 </div>
+                {/* NEW: Management Actions Dropdown/Menu for Mobile/Compact View (Optional alternative to a dedicated column) */}
                 <div className="flex space-x-2 flex-shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleEditEmployee(e, employee); }}
@@ -630,7 +658,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* Documents Card (Unchanged logic, but onClick handlers are updated) */}
+              {/* Documents Card (Unchanged) */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -670,14 +698,14 @@ const EmployeesTab: React.FC = () => {
                               {/* Right Side: Buttons */}
                               <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
                                 <button
-                                  onClick={() => handleViewDocument(doc, false)}
+                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
                                   className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                                 >
                                   <Eye size={14} /> View
                                 </button>
                                 {isSigned && (
                                   <button
-                                    onClick={() => handleViewDocument(doc, true)}
+                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
                                   >
                                     <Eye size={14} /> View Signed
@@ -697,7 +725,7 @@ const EmployeesTab: React.FC = () => {
                     </div>
                   )}
 
-                  {/* --- Upload Form (Unchanged) --- */}
+                  {/* --- Upload Form Toggle Button --- */}
                   <div className="border-t pt-4">
                     <button
                       onClick={() => setShowDocUpload(!showDocUpload)}
@@ -710,6 +738,8 @@ const EmployeesTab: React.FC = () => {
                       <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
+
+                  {/* --- Collapsible Upload Form --- */}
                   <AnimatePresence>
                     {showDocUpload && (
                       <motion.form
@@ -769,7 +799,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- ASSIGNMENTS CARD (Unchanged) --- */}
+              {/* --- ASSIGNMENTS CARD (Live) --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -817,20 +847,11 @@ const EmployeesTab: React.FC = () => {
         )}
       </div>
 
-      {/* --- 4. Update Modal Rendering --- */}
+      {/* --- Modals & Panels (Unchanged) --- */}
       <AnimatePresence>
-        {viewingDoc && (
-          <EnhancedPdfViewer
-            title={viewingDocIsSigned ? `(SIGNED) ${viewingDoc.document_name}` : viewingDoc.document_name}
-            storagePath={getStoragePathFromUrl(
-              viewingDocIsSigned ? viewingDoc.signed_storage_url : viewingDoc.storage_url
-            )}
-            onClose={() => setViewingDoc(null)}
-          />
-        )}
+        {viewingPdf && <PdfViewerModal pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
       
-      {/* --- Other Modals (Unchanged) --- */}
       <EmployeeEditModal
         isOpen={isModalOpen}
         onClose={() => {
