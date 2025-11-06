@@ -4,13 +4,16 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase/client';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { Loader2, XCircle, CheckCircle, Clock, ArrowLeft, Package, Calendar, Info } from 'lucide-react';
+// Note: We'll define types locally in case the main 'database.types.ts' isn't updated yet
 import { Database } from '../../lib/supabase/database.types';
 
-// Define types based on our new tables
-type Task = Database['public']['Tables']['tasks']['Row'];
-type Project = Database['public']['Tables']['projects']['Row'] & {
-  tasks: Task[];
-};
+// Use correct types if available, otherwise 'any'
+type ClientTask = Database['public']['Tables']['client_tasks']['Row'];
+type ClientProject = Database['public']['Tables']['client_projects']['Row'];
+
+interface ProjectWithTasks extends ClientProject {
+  client_tasks: ClientTask[];
+}
 
 // --- New Status Badge Component ---
 const StatusBadge: React.FC<{ status: string | null; type: 'project' | 'task' }> = ({ status, type }) => {
@@ -52,7 +55,7 @@ const StatusBadge: React.FC<{ status: string | null; type: 'project' | 'task' }>
 };
 
 // --- New Task Item Component ---
-const TaskItem: React.FC<{ task: Task }> = ({ task }) => {
+const TaskItem: React.FC<{ task: ClientTask }> = ({ task }) => {
   const Icon = task.status === 'completed' ? CheckCircle : task.status === 'in_progress' ? Clock : Info;
   const iconColor = task.status === 'completed' ? 'text-green-500' : task.status === 'in_progress' ? 'text-blue-500' : 'text-yellow-500';
 
@@ -83,7 +86,7 @@ const TaskItem: React.FC<{ task: Task }> = ({ task }) => {
 const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<ProjectWithTasks | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -98,10 +101,10 @@ const ProjectDetailPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch the project and its related tasks in one go
+        // --- UPDATED: Fetch from 'client_projects' and select 'client_tasks' ---
         const { data, error: fetchError } = await supabase
-          .from('projects')
-          .select('*, tasks(*)') // Use RPC 'tasks' or related table 'tasks'
+          .from('client_projects')
+          .select('*, client_tasks(*)') // <-- UPDATED
           .eq('id', id)
           .eq('client_id', user.id) // Security check
           .single();
@@ -109,7 +112,7 @@ const ProjectDetailPage: React.FC = () => {
         if (fetchError) throw fetchError;
         if (!data) throw new Error('Project not found or access denied.');
 
-        setProject(data as Project);
+        setProject(data as ProjectWithTasks);
       } catch (err: any) {
         setError(err.message);
       } finally {
@@ -189,10 +192,11 @@ const ProjectDetailPage: React.FC = () => {
       {/* Tasks Section */}
       <div>
         <h2 className="text-2xl font-semibold text-gray-800 mb-4">Project Tasks</h2>
-        {project.tasks && project.tasks.length > 0 ? (
+        {/* --- UPDATED: Check 'client_tasks' --- */}
+        {project.client_tasks && project.client_tasks.length > 0 ? (
           <div className="bg-white shadow-sm rounded-lg overflow-hidden">
             <ul className="divide-y divide-gray-200 space-y-2 p-4">
-              {project.tasks.sort((a, b) => new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime()).map(task => (
+              {project.client_tasks.sort((a, b) => new Date(a.created_at!).getTime() - new Date(b.created_at!).getTime()).map(task => (
                 <TaskItem key={task.id} task={task} />
               ))}
             </ul>
