@@ -2,53 +2,53 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // --- CONTEXT & AUTH IMPORTS ---
-import { AuthProvider } from './features/auth'; // Cleaned import
-import { CartProvider } from './contexts/CartContext';
-import { ThemeProvider } from './contexts/ThemeContext';
-import { ToastProvider } from './contexts/ToastContext';
+import { AuthProvider } from '@/features/auth'; // Cleaned import
+import { CartProvider } from '@/contexts/CartContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ToastProvider } from '@/contexts/ToastContext';
 
 // --- NEW AUTH COMPONENTS ---
-import RoleGate from './components/auth/RoleGate';
-import PendingPageGate from './components/auth/PendingPageGate';
+import RoleGate from '@/components/auth/RoleGate';
+import PendingPageGate from '@/components/auth/PendingPageGate';
 
 // --- LAYOUT IMPORTS ---
-import PublicLayout from './app/layout/PublicLayout';
-import AdminLayout from './app/layout/AdminLayout';
-import ClientLayout from './app/layout/ClientLayout';
+import PublicLayout from '@/app/layout/PublicLayout';
+import AdminLayout from '@/app/layout/AdminLayout';
+import ClientLayout from '@/app/layout/ClientLayout';
 
 // --- UI COMPONENT IMPORTS ---
-import CartFAB from './contexts/CartFAB';
-import CartDrawer from './contexts/CartDrawer';
+import CartFAB from '@/contexts/CartFAB';
+import CartDrawer from '@/contexts/CartDrawer';
 
 // --- PAGE IMPORTS ---
-import HomePage from './pages/HomePage';
-import ServicesPage from './pages/ServicesPage';
-import RentalsPage from './pages/RentalsPage';
-import RentalDetailPage from './pages/RentalDetailPage';
-import CartPage from './pages/CartPage';
-import SuccessPage from './pages/SuccessPage';
-import CareersPage from './pages/CareersPage';
-import ContactPage from './pages/ContactPage';
+import HomePage from '@/pages/HomePage';
+import ServicesPage from '@/pages/ServicesPage';
+import RentalsPage from '@/pages/RentalsPage';
+import RentalDetailPage from '@/pages/RentalDetailPage';
+import CartPage from '@/pages/CartPage';
+import SuccessPage from '@/pages/SuccessPage';
+import CareersPage from '@/pages/CareersPage';
+import ContactPage from '@/pages/ContactPage';
 
 // --- AUTH & STATUS PAGES ---
-import LoginPage from './pages/auth/LoginPage'; // New
-import SignupPage from './pages/auth/SignupPage'; // New
-import PendingAccessPage from './pages/PendingAccessPage';
-import AccessDeniedPage from './pages/AccessDeniedPage'; // You may want to remove this or use it
+import LoginPage from '@/pages/auth/LoginPage'; // New
+import SignupPage from '@/pages/auth/SignupPage'; // New
+import PendingAccessPage from '@/pages/PendingAccessPage';
+import AccessDeniedPage from '@/pages/AccessDeniedPage'; // You may want to remove this or use it
 
 // --- ADMIN PAGES ---
-import DashboardPage from './pages/admin/DashboardPage';
+import DashboardPage from '@/pages/admin/DashboardPage';
 
 // --- CLIENT PAGES ---
-import ClientDashboard from './pages/client/DashboardPage';
-import ProfilePage from './pages/client/ProfilePage';
-import ProjectsPage from './pages/client/ProjectsPage';
-import ProjectDetailPage from './pages/client/ProjectDetailPage';
-import MessagesPage from './pages/client/MessagesPage';
-import BillingPage from './pages/client/BillingPage';
+import ClientDashboard from '@/pages/client/DashboardPage';
+import ProfilePage from '@/pages/client/ProfilePage';
+import ProjectsPage from '@/pages/client/ProjectsPage';
+import ProjectDetailPage from '@/pages/client/ProjectDetailPage';
+import MessagesPage from '@/pages/client/MessagesPage'; // Corrected typo
+import BillingPage from '@/pages/client/BillingPage';
 
 // --- EMPLOYEE PAGES ---
-import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
+import EmployeeDashboardPage from '@/pages/employee/EmployeeDashboardPage';
 
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (
