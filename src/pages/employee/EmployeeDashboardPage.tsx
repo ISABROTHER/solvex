@@ -14,7 +14,7 @@ import {
 } from '../../lib/supabase/operations';
 import {
   Loader2,
-  List, 
+  List,
   FileText,
   CheckCircle,
   Clock,
