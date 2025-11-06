@@ -34,9 +34,11 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
+// --- 1. IMPORT V2 COMPONENTS (with correct paths) ---
 import CreateAssignmentModalV2 from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanelV2 from '../components/AssignmentDetailPanel';
 import {
+  // --- 2. IMPORT NEW V2 ASSIGNMENT FUNCTIONS ---
   getAdminAssignments,
   getFullAssignmentDetailsV2,
   createAssignmentV2,
@@ -44,6 +46,7 @@ import {
   postAssignmentCommentV2,
   updateMilestoneStatus,
   createStorageSignedUrl,
+  // --- Other functions ---
   getEmployeeDocuments,
   uploadEmployeeDocument,
   deleteEmployeeDocument,
@@ -51,6 +54,7 @@ import {
   EmployeeDocument, 
   deleteEmployeeAccount, 
   blockEmployeeAccess,
+  // --- 3. IMPORT NEW V2 TYPES ---
   Assignment,
   FullAssignment,
   AssignmentStatus,
@@ -118,7 +122,7 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
-// --- NEW V2: Status Pill Component ---
+// --- 4. NEW V2: Status Pill Component ---
 const getStatusPill = (status: AssignmentStatus) => {
   switch (status) {
     case 'Draft': return 'bg-gray-100 text-gray-600';
@@ -162,7 +166,7 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- NEW V2: State for Assignments ---
+  // --- 5. NEW V2: State for Assignments ---
   const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
@@ -176,7 +180,7 @@ const EmployeesTab: React.FC = () => {
     try {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
-        .select('*') 
+        .select('*') // This query is now fixed by the new RLS policy
         .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
         
@@ -192,7 +196,7 @@ const EmployeesTab: React.FC = () => {
     }
   }, [addToast]);
 
-  // --- NEW V2: Function to fetch all assignments ---
+  // --- 6. NEW V2: Function to fetch all assignments ---
   const fetchAllAssignments = useCallback(async () => {
     setLoadingAssignments(true);
     try {
@@ -258,7 +262,7 @@ const EmployeesTab: React.FC = () => {
   };
   // --- End Management Handlers ---
 
-  // --- NEW V2: Assignments for selected employee ---
+  // --- 7. NEW V2: Assignments for selected employee ---
   const employeeAssignments = useMemo(() => {
     if (!selectedEmployee) return [];
     return allAssignments.filter(a => a.assignee_id === selectedEmployee.id);
@@ -443,7 +447,7 @@ const EmployeesTab: React.FC = () => {
       setNewDocRequiresSigning(false);
       setShowDocUpload(false);
       
-    } catch (err: any) { 
+    } catch (err: any) {
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
