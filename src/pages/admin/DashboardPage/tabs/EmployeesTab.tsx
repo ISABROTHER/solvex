@@ -30,7 +30,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   List,
-  CheckCircle, // Added CheckCircle for signed documents
+  CheckCircle, // Added CheckCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
@@ -140,8 +140,8 @@ const getStatusPill = (status: AssignmentStatus) => {
 
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
-  // --- REMOVED signOut from useAuth ---
-  const { user } = useAuth();
+  // --- 1. GET setRestoring AND session ---
+  const { user, session: adminSession, setRestoring } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -329,25 +329,22 @@ const EmployeesTab: React.FC = () => {
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isNewUser = !formData.id;
-
-    // --- 1. Get the admin's current session to restore it later ---
-    const { data: { session: adminSession } } = await supabase.auth.getSession();
     
     try {
       if (isNewUser) {
         // --- Create New Employee ---
-
-        // --- 2. Check if we have an admin session to restore ---
         if (!adminSession) {
           throw new Error("Admin session not found. Please log in again to create users.");
         }
-
         if (!formData.email || !password) {
            addToast({ type: 'error', title: 'Error', message: 'Email and password are required for new employees.'});
            setIsSavingProfile(false);
            return;
         }
-        
+
+        // --- 2. SET RESTORING FLAG ---
+        setRestoring(true);
+
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: password,
@@ -361,7 +358,6 @@ const EmployeesTab: React.FC = () => {
         let userId = authData?.user?.id;
 
         if (authError && authError.message.includes('User already registered')) {
-            // This block handles users who already exist in AUTH
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -371,6 +367,7 @@ const EmployeesTab: React.FC = () => {
               .single();
 
             if (profileFindError || !existingProfile) {
+                setRestoring(false); // Reset on error
                 addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please contact support.' });
                 setIsSavingProfile(false);
                 return;
@@ -385,11 +382,11 @@ const EmployeesTab: React.FC = () => {
             if (updateError) throw updateError;
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
             
+            setRestoring(false); // Reset on this path
             fetchEmployeeList(); // Refresh list after update
 
         } else if (authError) {
-            // Other sign up error
-            throw authError;
+            throw authError; // Caught by catch block
         
         } else {
             // --- Sign Up was successful (this is the normal path) ---
@@ -406,7 +403,7 @@ const EmployeesTab: React.FC = () => {
             
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
-            // --- 3. This is the new session-restore logic ---
+            // --- 3. THE SESSION-RESTORE LOGIC ---
             await supabase.auth.signOut(); // Logs out the new employee
             
             const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
@@ -419,6 +416,7 @@ const EmployeesTab: React.FC = () => {
             addToast({ type: 'info', title: 'Session Restored', message: 'You are still logged in as admin.' });
 
             // --- 4. Now we can safely refresh the list ---
+            // The AuthProvider will setRestoring(false) when it processes the adminSession
             fetchEmployeeList();
         }
 
@@ -439,6 +437,7 @@ const EmployeesTab: React.FC = () => {
       
     } catch (err: any) {
       console.error("Save employee error:", err);
+      setRestoring(false); // --- 5. RESET FLAG ON ANY ERROR ---
       if (err.message && err.message.includes('duplicate key value violates unique constraint "profiles_pkey"')) {
           addToast({ type: 'error', title: 'Save Failed', message: 'A profile with this ID already exists. The trigger and app logic are conflicting.' });
       } else {
@@ -446,6 +445,7 @@ const EmployeesTab: React.FC = () => {
       }
     } finally {
       setIsSavingProfile(false);
+      // AuthProvider handles resetting the flag on success
     }
   };
   // --- *** END OF UPDATED FUNCTION *** ---
@@ -519,10 +519,8 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'success', title: 'Assignment Created!' });
       setIsCreateAssignModalOpen(false);
       fetchAllAssignments(); // Refresh the main list
-    // --- THIS IS THE FIX ---
-    } catch (err: any) { 
+    } catch (err: any) {
       addToast({ type: 'error', title: 'Creation Failed', message: err.message });
-    // --- END OF FIX ---
     } finally {
       setIsSavingAssignment(false);
     }
