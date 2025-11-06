@@ -1,7 +1,8 @@
 import React, { createContext, useState, useEffect, ReactNode, useContext } from 'react';
-import { supabase } from '../../lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // Corrected import path
 import type { Session, User }  from '@supabase/supabase-js';
 
+// --- TYPES (Unchanged from your file) ---
 type UserRole = 'client' | 'admin' | 'employee' | null;
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | null;
 
@@ -33,13 +34,11 @@ interface AuthState {
   isLoading: boolean;
 }
 
-type LoginResult = { success: boolean; role: UserRole; approval_status: ApprovalStatus };
+// --- MODIFIED AuthContextType ---
+// Removed clientLogin, adminLogin, and login
 type SignupResult = { success: boolean; error: string | null };
 
 interface AuthContextType extends AuthState {
-  clientLogin: (email: string, password: string) => Promise<LoginResult>;
-  adminLogin: (email: string, password: string) => Promise<LoginResult>;
-  login: (email: string, password: string) => Promise<LoginResult>;
   signup: (email: string, password: string, userData: { first_name: string, last_name: string }) => Promise<SignupResult>;
   logout: () => Promise<void>;
   error: string | null;
@@ -75,10 +74,9 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const fetchProfile = async (userId: string): Promise<{ profile: Profile | null, role: UserRole, status: ApprovalStatus, error: string | null }> => {
     try {
       console.log(`[fetchProfile] Attempting to fetch full profile for ID: ${userId}`);
-      // --- THIS WAS THE BROKEN LINE ---
       const { data: profile, error: profileError, status } = await supabase
         .from('profiles')
-        .select('*, approval_status, reason_for_access')
+        .select('*, approval_status, reason_for_access') // Your existing select
         .eq('id', userId)
         .maybeSingle();
 
@@ -105,7 +103,8 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
       
       console.warn(`[fetchProfile] No profile found for user ${userId}`);
-      return { profile: null, role: null, status: null, error: "Your user profile could not be found." };
+      // This is not an error, it just means the profile needs to be created
+      return { profile: null, role: null, status: null, error: null }; 
 
     } catch (err: any) {
       console.error("[fetchProfile] Unexpected error:", err);
@@ -113,7 +112,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const updateUserState = async (session: Session | null): Promise<LoginResult> => {
+  const updateUserState = async (session: Session | null): Promise<void> => {
     console.log("[updateUserState] Start. Session available:", !!session);
     
     if (session?.user?.id) {
@@ -140,14 +139,13 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
       
       console.log("[updateUserState] Auth state updated:", { role: role, approval: status, isAuthenticated: true });
-      return { success: true, role: role, approval_status: status };
 
     } else {
       console.log("[updateUserState] No active session.");
       
       if (isRestoring) {
         console.log("[updateUserState] Restoring session, ignoring null session.");
-        return { success: true, role: authState.role, approval_status: authState.approval_status }; // Keep current state
+        return; // Keep current state
       }
       
       console.log("[updateUserState] Clearing auth state.");
@@ -162,7 +160,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       });
       
       console.log(`[updateUserState] Finished. Returning nulls.`);
-      return { success: true, role: null, approval_status: null };
     }
   };
   
@@ -178,7 +175,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setError(null);
       }
       
-      // Update state with new profile info
       setAuthState(prev => ({
         ...prev,
         profile: profile,
@@ -192,12 +188,46 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // --- MODIFIED useEffect ---
+  // Added logic to create a profile on first sign-in if it doesn't exist
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       updateUserState(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      
+      // --- NEW LOGIC TO CREATE PROFILE ON SIGNUP (Step 6) ---
+      if (_event === 'SIGNED_IN' && session?.user) {
+        // Check if profile exists
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (!profile) {
+          // Profile doesn't exist, create it
+          console.log(`[onAuthStateChange] No profile found for ${session.user.id}. Creating new profile.`);
+          const { error: createError } = await supabase.from('profiles').insert({
+            id: session.user.id,
+            email: session.user.email,
+            first_name: session.user.user_metadata?.first_name || '',
+            last_name: session.user.user_metadata?.last_name || '',
+            // Per your instructions:
+            role: 'client',
+            approval_status: 'pending'
+          });
+          if (createError) {
+            console.error("Error creating profile:", createError);
+            setError("Failed to create your user profile.");
+          } else {
+             console.log(`[onAuthStateChange] Profile created for ${session.user.id}.`);
+          }
+        }
+      }
+      // --- END OF NEW LOGIC ---
+
       updateUserState(session);
     });
 
@@ -205,44 +235,11 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   }, []); // Only run on mount
 
 
-  const login = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[login] Attempting login for email: ${email}`);
-    setError(null);
-    setAuthState(prev => ({ ...prev, isLoading: true }));
+  // --- login, clientLogin, and adminLogin functions are REMOVED ---
+  // This is now handled by the new LoginPage.tsx component
 
-    try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
 
-      if (signInError) {
-        console.error("[login] Sign-in error:", signInError);
-        setError(signInError.message);
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, role: null, approval_status: null };
-      }
-
-      if (!data.session) {
-        console.error("[login] No session returned after sign-in");
-        setError("Login failed. No session created.");
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-        return { success: false, role: null, approval_status: null };
-      }
-
-      console.log("[login] Sign-in successful. Fetching role...");
-      const result = await updateUserState(data.session);
-      console.log(`[login] Role/Status fetched: ${result.role}, ${result.approval_status}`);
-
-      return result;
-    } catch (err: any) {
-      console.error("[login] Unexpected error:", err);
-      setError(err.message || 'An unexpected error occurred during login.');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-      return { success: false, role: null, approval_status: null };
-    }
-  };
-
+  // --- signup function (Unchanged from your file) ---
   const signup = async (email: string, password: string, userData: { first_name: string, last_name: string }): Promise<SignupResult> => {
     console.log(`[signup] Attempting signup for email: ${email}`);
     setError(null);
@@ -255,7 +252,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         options: {
           data: {
             ...userData,
-            role: 'client'
+            // role: 'client' // Role is now set during profile creation
           },
         },
       });
@@ -276,6 +273,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
       console.log("[signup] Sign-up successful. User must confirm email.");
       setAuthState(prev => ({ ...prev, isLoading: false }));
+      // The onAuthStateChange listener will handle profile creation
       return { success: true, error: null };
 
     } catch (err: any) {
@@ -286,16 +284,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  const clientLogin = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[clientLogin] Calling login for client portal`);
-    return login(email, password);
-  };
-
-  const adminLogin = async (email: string, password: string): Promise<LoginResult> => {
-    console.log(`[adminLogin] Calling login for admin portal`);
-    return login(email, password);
-  };
-
+  // --- logout function (Unchanged from your file) ---
   const logout = async () => {
     console.log("[logout] Logging out user");
     setError(null);
@@ -331,11 +320,10 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // --- MODIFIED value ---
+  // Removed login functions
   const value: AuthContextType = {
     ...authState,
-    clientLogin,
-    adminLogin,
-    login,
     signup,
     logout,
     error,
