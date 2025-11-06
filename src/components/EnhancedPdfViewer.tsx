@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
-import 'react-pdf/dist/esm/Page/TextLayer.css';
+// --- THIS IS THE FIX ---
+// Removed /esm/ from the path to match your version
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
+// --- END OF FIX ---
 import {
   Loader2,
   X,
@@ -13,13 +16,13 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { supabase } from '../lib/supabase/client'; // --- 1. Import Supabase client ---
+import { supabase } from '../lib/supabase/client'; 
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 interface EnhancedPdfViewerProps {
-  storagePath: string; // --- 2. Change prop from pdfUrl to storagePath ---
+  storagePath: string; 
   title: string;
   onClose: () => void;
 }
@@ -29,7 +32,6 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
   title,
   onClose,
 }) => {
-  // --- 3. Add state for loading, error, and file blob ---
   const [file, setFile] = useState<Blob | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +40,6 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
 
-  // --- 4. Add useEffect to download the file blob ---
   useEffect(() => {
     if (!storagePath) {
       setError('No file path provided.');
@@ -93,7 +94,6 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
   const zoomIn = () => setScale((prev) => prev + 0.1);
   const zoomOut = () => setScale((prev) => (prev > 0.5 ? prev - 0.1 : prev));
 
-  // --- 5. Add download handler for the blob ---
   const handleDownload = () => {
     if (file) {
       const url = URL.createObjectURL(file);
@@ -108,7 +108,6 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
   };
 
   const renderContent = () => {
-    // --- 6. Update render logic for new state ---
     if (isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-white">
@@ -133,7 +132,7 @@ const EnhancedPdfViewer: React.FC<EnhancedPdfViewerProps> = ({
         <div className="flex-1 overflow-auto p-4 md:p-8 w-full flex justify-center">
           <div className="relative" style={{ transform: `scale(${scale})` }}>
             <Document
-              file={file} // --- 7. Pass the file blob to the Document component ---
+              file={file} 
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={(err) => {
                 console.error('React-PDF load error:', err);
