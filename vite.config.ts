@@ -1,0 +1,15 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  root: '.',
+  plugins: [react()],
+  optimizeDeps: {
+    include: ['pdfjs-dist'],
+  },
+  build: {
+    commonjsOptions: {
+      include: [/pdfjs-dist/, /node_modules/],
+    },
+  },
+});
