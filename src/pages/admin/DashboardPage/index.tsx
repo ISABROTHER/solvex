@@ -1,93 +1,86 @@
-import React, { useState, useEffect } from "react";
-import Sidebar from "./components/SideBar";
+import React, { useState } from 'react';
+import { supabase } from '../../../lib/supabase/client';
+import SideBar from './components/SideBar';
+import Topbar from './components/Topbar';
 
-import Topbar from "./components/Topbar"; 
+// Import Tab Components
+import HomeTab from './tabs/HomeTab';
+import ClientsTab from './tabs/ClientsTab';
+import EmployeesTab from './tabs/EmployeesTab';
+import ProjectsTab from './tabs/ProjectsTab';
+import ServicesTab from './tabs/ServicesTab';
+import EquipmentTab from './tabs/EquipmentTab';
+import JobsTab from './tabs/JobsTab';
+import ApplicationsTab from './tabs/ApplicationsTab';
+// import AccessRequestsTab from './tabs/AccessRequestsTab'; // --- REMOVED
+import PartnersTab from './tabs/PartnersTab';
+import TeamsTab from './tabs/TeamsTab';
+import SettingsTab from './tabs/SettingsTab';
+import { Database } from '../../../lib/supabase/database.types';
 
-import HomeTab from "./tabs/HomeTab";
-import ClientsTab from "./tabs/ClientsTab";
-import ProjectsTab from "./tabs/ProjectsTab";
-import TeamsTab from "./tabs/TeamsTab";
-import EquipmentTab from "./tabs/EquipmentTab";
-import PartnersTab from "./tabs/PartnersTab";
-import SettingsTab from "./tabs/SettingsTab";
-import ApplicationsTab from "./tabs/ApplicationsTab";
-import JobsTab from "./tabs/JobsTab";
-import ServicesTab from "./tabs/ServicesTab";
-import EmployeesTab from "./tabs/EmployeesTab"; // <-- 1. IMPORT NEW TAB
+// Define the type for a tab
+export interface Tab {
+  id: string;
+  name: string;
+  component: React.FC;
+}
 
-export type TabKey =
-  | "home"
-  | "clients"
-  | "projects"
-  | "access_requests"
-  | "partners"
-  | "applications"
-  | "employees" // <-- 2. ADD TAB KEY
-  | "settings";
+// Define the available tabs
+const tabs: Tab[] = [
+  { id: 'home', name: 'Home', component: HomeTab },
+  { id: 'clients', name: 'Clients', component: ClientsTab },
+  { id: 'employees', name: 'Employees', component: EmployeesTab },
+  { id: 'projects', name: 'Projects', component: ProjectsTab },
+  { id: 'services', name: 'Services', component: ServicesTab },
+  { id: 'equipment', name: 'Equipment', component: EquipmentTab },
+  { id: 'jobs', name: 'Jobs', component: JobsTab },
+  { id: 'applications', name: 'Applications', component: ApplicationsTab },
+  // { id: 'access', name: 'Access Requests', component: AccessRequestsTab }, // --- REMOVED
+  { id: 'partners', name: 'Partners', component: PartnersTab },
+  { id: 'teams', name: 'Teams', component: TeamsTab },
+  { id: 'settings', name: 'Settings', component: SettingsTab },
+];
+
+export type Profile = Database['public']['Tables']['profiles']['Row'];
+export type Service = Database['public']['Tables']['services']['Row'];
+export type RentalGear = Database['public']['Tables']['rental_gear']['Row'];
+export type JobPosition = Database['public']['Tables']['job_positions']['Row'];
+export type JobApplication = Database['public']['Tables']['job_applications']['Row'];
+export type AccessRequest = Database['public']['Tables']['access_requests']['Row'];
 
 const DashboardPage: React.FC = () => {
-  const [tab, setTab] = useState<TabKey>("home");
-  const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(tabs[0].id);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  useEffect(() => {
-    if (mobileOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [mobileOpen]);
-
-  const handleSelect = (k: TabKey) => {
-    setTab(k);
-    if (mobileOpen) {
-      setMobileOpen(false);
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Error signing out:', error);
     }
   };
 
-  return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50"
-      style={{ background: 'linear-gradient(to bottom right, #f9fafb, #fff5f2)' }}>
-      <div
-        className={`hidden sm:block h-full transition-all duration-300 ease-in-out ${
-          isSidebarOpen ? "w-72" : "w-0"
-        } overflow-hidden flex-shrink-0`}
-      >
-        <div className="w-72 h-full">
-          <Sidebar active={tab} onSelect={handleSelect} />
-        </div>
-      </div>
+  const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component || HomeTab;
 
+  return (
+    <div className="flex h-screen bg-gray-100">
+      {/* Sidebar */}
+      <SideBar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        tabs={tabs}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        handleSignOut={handleSignOut}
+      />
+
+      {/* Main content area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Topbar
-          onMenuClick={() => setMobileOpen(true)}
-          onDesktopMenuClick={() => setSidebarOpen(!isSidebarOpen)}
-        />
-        <Sidebar
-          active={tab}
-          onSelect={handleSelect}
-          isMobile
-          isOpenMobile={mobileOpen}
-          onCloseMobile={() => setMobileOpen(false)}
-        />
-        <main className="flex-1 overflow-auto p-4 sm:p-5">
-          {tab === "home" && <HomeTab />}
-          {tab === "clients" && <ClientsTab />}
-          {tab === "projects" && <ProjectsTab />}
-          {tab === "partners" && <PartnersTab />}
-          {tab === "applications" && <ApplicationsTab />}
-          {tab === "employees" && <EmployeesTab />} {/* <-- 3. RENDER NEW TAB */}
-          {tab === "settings" && (
-            <SettingsTab 
-              jobsTab={<JobsTab />}
-              teamsTab={<TeamsTab />}
-              servicesTab={<ServicesTab />}
-              equipmentTab={<EquipmentTab />}
-            />
-          )}
+        {/* Topbar */}
+        <Topbar setSidebarOpen={setSidebarOpen} handleSignOut={handleSignOut} />
+
+        {/* Main content */}
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100 p-6">
+          <ActiveTabComponent />
         </main>
       </div>
     </div>
