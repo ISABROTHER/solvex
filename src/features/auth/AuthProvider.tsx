@@ -2,7 +2,7 @@ import React, { createContext, useState, useEffect, ReactNode, useContext } from
 import { supabase } from '../../lib/supabase/client';
 import type { Session, User }  from '@supabase/supabase-js';
 
-// --- UPDATED: Added approval_status ---
+// --- No changes to types ---
 type UserRole = 'client' | 'admin' | 'employee' | null;
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | null;
 
@@ -19,35 +19,36 @@ interface Profile {
   employee_number?: string;
   start_date?: string;
   avatar_url?: string;
-  approval_status: ApprovalStatus; // <-- NEW
-  reason_for_access: string | null; // <-- NEW
+  approval_status: ApprovalStatus;
+  reason_for_access: string | null;
   [key: string]: any;
 }
 
 interface AuthState {
   isAuthenticated: boolean;
   role: UserRole;
-  approval_status: ApprovalStatus; // <-- NEW
+  approval_status: ApprovalStatus;
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   isLoading: boolean;
 }
 
-// --- UPDATED: Return types for login/signup ---
 type LoginResult = { success: boolean; role: UserRole; approval_status: ApprovalStatus };
 type SignupResult = { success: boolean; error: string | null };
 
+// --- ADDED refreshUserProfile ---
 interface AuthContextType extends AuthState {
   clientLogin: (email: string, password: string) => Promise<LoginResult>;
   adminLogin: (email: string, password: string) => Promise<LoginResult>;
   login: (email: string, password: string) => Promise<LoginResult>;
-  signup: (email: string, password: string, userData: { first_name: string, last_name: string }) => Promise<SignupResult>; // <-- UPDATED
+  signup: (email: string, password: string, userData: { first_name: string, last_name: string }) => Promise<SignupResult>;
   logout: () => Promise<void>;
   error: string | null;
   setError: (error: string | null) => void;
   isRestoring: boolean;
   setRestoring: (isRestoring: boolean) => void;
+  refreshUserProfile: () => Promise<void>; // <-- NEW
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -64,7 +65,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     role: null,
-    approval_status: null, // <-- NEW
+    approval_status: null,
     user: null,
     session: null,
     profile: null,
@@ -73,74 +74,67 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      updateUserState(session);
-    });
+  // --- NEW FUNCTION: fetchProfile ---
+  // We extract this logic so it can be re-used
+  const fetchProfile = async (userId: string): Promise<{ profile: Profile | null, role: UserRole, status: ApprovalStatus, error: string | null }> => {
+    try {
+      console.log(`[fetchProfile] Attempting to fetch full profile for ID: ${userId}`);
+      const { data: profile, error: profileError, status }_ = await supabase
+        .from('profiles')
+        .select('*, approval_status, reason_for_access')
+        .eq('id', userId)
+        .maybeSingle();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      updateUserState(session);
-    });
+      console.log(`[fetchProfile] Profile fetch response: Status=${status}`);
 
-    return () => subscription.unsubscribe();
-  }, []);
+      if (profileError) {
+        console.error("[fetchProfile] Database error:", profileError);
+        return { profile: null, role: null, status: null, error: `Error fetching profile: ${profileError.message}` };
+      }
+      
+      if (profile) {
+        const profileData = profile as Profile;
+        const approvalStatus: ApprovalStatus = profileData.approval_status || 'pending';
+        console.log(`[fetchProfile] Profile data received. Approval: ${approvalStatus}`);
+        
+        const fetchedRole = profileData.role;
+        if (fetchedRole === 'admin' || fetchedRole === 'client' || fetchedRole === 'employee') {
+          console.log(`[fetchProfile] Role successfully verified as: ${fetchedRole}`);
+          return { profile: profileData, role: fetchedRole, status: approvalStatus, error: null };
+        } else {
+          console.error(`[fetchProfile] User ${userId} profile has invalid role value: '${fetchedRole}'.`);
+          return { profile: profileData, role: null, status: approvalStatus, error: "Your account has an invalid role configuration." };
+        }
+      }
+      
+      console.warn(`[fetchProfile] No profile found for user ${userId}`);
+      return { profile: null, role: null, status: null, error: "Your user profile could not be found." };
+
+    } catch (err: any) {
+      console.error("[fetchProfile] Unexpected error:", err);
+      return { profile: null, role: null, status: null, error: "A system error occurred while verifying your role." };
+    }
+  };
 
   const updateUserState = async (session: Session | null): Promise<LoginResult> => {
     console.log("[updateUserState] Start. Session available:", !!session);
-    let userRole: UserRole = null;
-    let profileData: Profile | null = null;
-    let approvalStatus: ApprovalStatus = null; // <-- NEW
-
+    
     if (session?.user?.id) {
-      const userId = session.user.id;
-      console.log(`[updateUserState] Processing user ID: ${userId}`);
-      setError(null);
-
-      try {
-        console.log(`[updateUserState] Attempting to fetch full profile for ID: ${userId}`);
-        // --- UPDATED: Fetch new columns ---
-        const { data: profile, error: profileError, status } = await supabase
-          .from('profiles')
-          .select('*, approval_status, reason_for_access') // <-- UPDATED SELECT
-          .eq('id', userId)
-          .maybeSingle();
-
-        console.log(`[updateUserState] Profile fetch response: Status=${status}`);
-
-        if (profileError) {
-          console.error("[updateUserState] Database error during profile fetch:", profileError);
-          setError(`Error fetching profile: ${profileError.message}`);
-        } else if (profile) {
-          profileData = profile as Profile;
-          approvalStatus = profileData.approval_status || 'pending'; // <-- SET STATUS (default to pending)
-          console.log(`[updateUserState] Profile data received. Approval: ${approvalStatus}`);
-          const fetchedRole = profileData.role;
-
-          if (fetchedRole === 'admin' || fetchedRole === 'client' || fetchedRole === 'employee') {
-            userRole = fetchedRole;
-            console.log(`[updateUserState] Role successfully verified as: ${userRole}`);
-            setError(null);
-          } else {
-            console.error(`[updateUserState] User ${userId} profile has invalid role value: '${fetchedRole}'.`);
-            setError("Your account has an invalid role configuration. Please contact support.");
-          }
-        } else if (!profile) {
-          console.warn(`[updateUserState] No profile found for user ${userId}`);
-          setError("Your user profile could not be found. Please contact support.");
-        }
-      } catch (err: any) {
-        console.error("[updateUserState] Unexpected error during role fetch:", err);
-        setError("A system error occurred while verifying your role.");
-        userRole = null;
+      const { profile, role, status, error: profileError } = await fetchProfile(session.user.id);
+      
+      if (profileError) {
+        setError(profileError);
+      } else {
+        setError(null);
       }
 
       setAuthState({
         isAuthenticated: true,
-        role: userRole,
-        approval_status: approvalStatus, // <-- NEW
+        role: role,
+        approval_status: status,
         user: session.user,
         session: session,
-        profile: profileData,
+        profile: profile,
         isLoading: false,
       });
       
@@ -148,7 +142,9 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         setIsRestoring(false);
       }
       
-      console.log("[updateUserState] Auth state updated:", { role: userRole, approval: approvalStatus, isAuthenticated: true });
+      console.log("[updateUserState] Auth state updated:", { role: role, approval: status, isAuthenticated: true });
+      return { success: true, role: role, approval_status: status };
+
     } else {
       console.log("[updateUserState] No active session.");
       
@@ -161,17 +157,57 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setAuthState({
         isAuthenticated: false,
         role: null,
-        approval_status: null, // <-- NEW
+        approval_status: null,
         user: null,
         session: null,
         profile: null,
         isLoading: false,
       });
+      
+      console.log(`[updateUserState] Finished. Returning nulls.`);
+      return { success: true, role: null, approval_status: null };
     }
-
-    console.log(`[updateUserState] Finished. Returning role: ${userRole}, status: ${approvalStatus}`);
-    return { success: true, role: userRole, approval_status: approvalStatus };
   };
+  
+  // --- NEW: Function to manually refresh profile data ---
+  const refreshUserProfile = async () => {
+    console.log("[refreshUserProfile] Manual refresh triggered.");
+    if (authState.user?.id) {
+      setAuthState(prev => ({ ...prev, isLoading: true })); // Set loading
+      const { profile, role, status, error: profileError } = await fetchProfile(authState.user.id);
+      
+      if (profileError) {
+        setError(profileError);
+      } else {
+        setError(null);
+      }
+      
+      // Update state with new profile info
+      setAuthState(prev => ({
+        ...prev,
+        profile: profile,
+        role: role,
+        approval_status: status,
+        isLoading: false,
+      }));
+      console.log("[refreshUserProfile] Profile data refreshed.");
+    } else {
+      console.warn("[refreshUserProfile] No user ID found, cannot refresh.");
+    }
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      updateUserState(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      updateUserState(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []); // Only run on mount
+
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     console.log(`[login] Attempting login for email: ${email}`);
@@ -199,7 +235,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
 
       console.log("[login] Sign-in successful. Fetching role...");
-      // --- UPDATED: updateUserState now returns the full result object ---
       const result = await updateUserState(data.session);
       console.log(`[login] Role/Status fetched: ${result.role}, ${result.approval_status}`);
 
@@ -212,7 +247,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  // --- UPDATED: Signup function ---
   const signup = async (email: string, password: string, userData: { first_name: string, last_name: string }): Promise<SignupResult> => {
     console.log(`[signup] Attempting signup for email: ${email}`);
     setError(null);
@@ -225,7 +259,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
         options: {
           data: {
             ...userData,
-            role: 'client' // Force role to 'client' on sign-up
+            role: 'client'
           },
         },
       });
@@ -245,9 +279,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       }
 
       console.log("[signup] Sign-up successful. User must confirm email.");
-      // NOTE: We do NOT call updateUserState here.
-      // The onAuthStateChange listener will fire AFTER the user confirms their email.
-      // Or, if auto-confirm is on, it will fire immediately.
       setAuthState(prev => ({ ...prev, isLoading: false }));
       return { success: true, error: null };
 
@@ -291,7 +322,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
       setAuthState({
         isAuthenticated: false,
         role: null,
-        approval_status: null, // <-- NEW
+        approval_status: null,
         user: null,
         session: null,
         profile: null,
@@ -304,6 +335,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
+  // --- ADDED refreshUserProfile to value ---
   const value: AuthContextType = {
     ...authState,
     clientLogin,
@@ -315,6 +347,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     setError,
     isRestoring,
     setRestoring: setIsRestoring,
+    refreshUserProfile, // <-- NEW
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
