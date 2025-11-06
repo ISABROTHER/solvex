@@ -200,7 +200,7 @@ const HomePage = () => {
           className="absolute top-0 left-0 w-full h-full object-cover z-0"
         >
           <source
-            src="https://videos.pexels.com/video-files/3254008/3254008-hd_1920_1080_25fps.mp4"
+            src="https://videos.pexels.com/video-files/7821854/7821854-hd_1920_1080_30fps.mp4"
             type="video/mp4"
           />
         </video>
@@ -463,7 +463,7 @@ const HomePage = () => {
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent"></div>
                 <div className="relative h-64 p-4 flex flex-col justify-end text-white">
                   <h3 className="text-base font-bold">{rental.name}</h3>
-                </div>
+                </div> 
               </Link>
             ))}
           </div>
