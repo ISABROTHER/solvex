@@ -958,41 +958,54 @@ export const restoreTeam = async (id: string) => {
     .single();
 };
 
-// --- START: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
+// --- START: NEW (FIXED) EMPLOYEE MANAGEMENT FUNCTIONS ---
 
 /**
  * Deletes a user from the auth.users table and cascadingly deletes their profile.
- * NOTE: This relies on Admin Auth privileges (e.g., service_role key or an Edge Function).
- * Calling this from the client requires RLS to be bypassed, which is usually unsafe.
+ * This is now handled by an Edge Function for security.
  */
 export async function deleteEmployeeAccount(userId: string) {
-  // We rely on the Supabase client being configured with admin access 
-  // (e.g., in a non-browser environment) or proper RLS/Admin configuration.
-  const { data: authUser, error: authError } = await supabase.auth.admin.deleteUser(userId);
+  const { data, error } = await supabase.functions.invoke('manage-employee', {
+    body: { action: 'delete', userId },
+  });
 
-  if (authError) {
-    console.error("Supabase Auth Delete Error:", authError);
-    return { error: new Error(`Failed to delete user in Auth: ${authError.message}`) };
+  if (error) {
+    console.error("deleteEmployeeAccount Error:", error.message);
+    return { data: null, error: new Error(error.message) };
   }
   
-  // The deletion of the public.profiles row relies on the ON DELETE CASCADE foreign key.
-  return { data: authUser, error: null };
+  // The 'data' from the function response is nested
+  // { data: { data: { user: ... } } }
+  // We check for the function's *internal* error property first
+  if (data?.error) {
+    console.error("deleteEmployeeAccount Function Error:", data.error);
+    return { data: null, error: new Error(data.error) };
+  }
+
+  return { data: data?.data, error: null };
 }
 
 /**
  * Updates an employee's role in the public.profiles table to block/unblock access.
+ * This is now handled by an Edge Function for security and to bypass RLS.
  */
 export async function blockEmployeeAccess(userId: string, newRole: 'employee' | 'blocked') {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ role: newRole, updated_at: new Date().toISOString() })
-    .eq('id', userId);
+  const { data, error } = await supabase.functions.invoke('manage-employee', {
+    body: { action: 'block', userId, newRole },
+  });
 
   if (error) {
-    return { error };
+    console.error("blockEmployeeAccess Error:", error.message);
+    return { data: null, error: new Error(error.message) };
+  }
+  
+  // Check for the function's *internal* error property
+  if (data?.error) {
+    console.error("blockEmployeeAccess Function Error:", data.error);
+    return { data: null, error: new Error(data.error) };
   }
 
-  return { data, error: null };
+  return { data: data?.data, error: null };
 }
 
 // --- END: NEW EMPLOYEE MANAGEMENT FUNCTIONS ---
