@@ -43,7 +43,6 @@ import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
 
-// --- 1. IMPORT NEW FUNCTIONS ---
 import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
 import {
   getAssignmentsForEmployee,
@@ -54,20 +53,16 @@ import {
   getEmployeeDocuments,
   uploadEmployeeDocument,
   deleteEmployeeDocument,
-  createDocumentSignedUrl, // <-- This function is key
-  EmployeeDocument, 
-  // --- IMPORTED NEW MANAGEMENT FUNCTIONS ---
+  createDocumentSignedUrl, // This is still useful if you want to add a "Download" button
+  EmployeeDocument, // <-- 1. Keep this import
   deleteEmployeeAccount, 
   blockEmployeeAccess 
 } from '../../../../lib/supabase/operations';
-import EnhancedPdfViewer from '../../../../components/EnhancedPdfViewer'; // <-- Use the correct viewer
+import EnhancedPdfViewer from '../../../../components/EnhancedPdfViewer';
 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
-// --- 2. REMOVE MOCK DOCUMENTS ---
-// const MOCK_DOCUMENTS: EmployeeDocument[] = [ ... ];
-
 
 // --- Helper Function ---
 const formatDate = (dateString: string | null) => {
@@ -75,6 +70,19 @@ const formatDate = (dateString: string | null) => {
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return 'N/A';
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
+// --- Helper to extract storage path from URL ---
+const getStoragePathFromUrl = (url: string | null): string => {
+  if (!url) return '';
+  try {
+    // Splits the URL and returns the part after 'employee_documents/'
+    // e.g., 'userid/filename.pdf'
+    return url.split('/employee_documents/')[1];
+  } catch (e) {
+    console.error('Could not parse storage path:', e);
+    return '';
+  }
 };
 
 
@@ -108,7 +116,7 @@ const EmployeesTab: React.FC = () => {
   
   const [searchQuery, setSearchQuery] = useState('');
 
-  // --- Document States (Unchanged) ---
+  // --- Document States ---
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -118,9 +126,9 @@ const EmployeesTab: React.FC = () => {
   const [docUploadError, setDocUploadError] = useState<string | null>(null);
   const [showDocUpload, setShowDocUpload] = useState(false);
 
-  // PDF Viewer
-  const [viewingPdf, setViewingPdf] = useState<string | null>(null);
-  const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
+  // --- 2. Change PDF Viewer State ---
+  const [viewingDoc, setViewingDoc] = useState<EmployeeDocument | null>(null);
+  const [viewingDocIsSigned, setViewingDocIsSigned] = useState(false);
 
   // --- State for Assignments (Unchanged) ---
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -135,7 +143,6 @@ const EmployeesTab: React.FC = () => {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
         .select('*')
-        // --- FIX: Query for employee, admin, AND blocked users ---
         .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
       if (employeesError) throw employeesError;
@@ -152,7 +159,7 @@ const EmployeesTab: React.FC = () => {
     fetchData(); 
   }, [fetchData]);
 
-  // --- Management Handlers (NEW) ---
+  // --- Management Handlers (Unchanged) ---
   const handleBlockAccess = async (employee: Profile) => {
     if (employee.role === 'admin') {
       addToast({ type: 'error', title: 'Action Denied', message: 'Cannot block an Admin through this panel.' });
@@ -290,8 +297,6 @@ const EmployeesTab: React.FC = () => {
         let userId = authData.user?.id;
 
         if (authError && authError.message.includes('User already registered')) {
-            // --- THIS IS THE FIX ---
-            // The user exists in auth. Let's try to find their profile and update it.
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -301,15 +306,11 @@ const EmployeesTab: React.FC = () => {
               .single();
 
             if (profileFindError || !existingProfile) {
-                // This is the "ghost" user problem.
-                // Auth user is deleted, identity is not. Profile is (maybe) deleted.
-                // We can't create a new auth user, and we can't find a profile to update.
                 addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please try again in 24 hours, or use a different email.' });
                 setIsSavingProfile(false);
                 return;
             }
 
-            // We found their profile. Let's update it.
             userId = existingProfile.id;
             const { error: updateError } = await supabase
               .from('profiles')
@@ -320,16 +321,14 @@ const EmployeesTab: React.FC = () => {
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
 
         } else if (authError) {
-            // A different, unexpected auth error
             throw authError;
         
         } else {
-            // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
             
             const profileData = {
               ...formData,
-              id: userId, // Link profile to auth user
+              id: userId,
               role: 'employee',
             };
             
@@ -365,35 +364,24 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Document Handlers (CHANGED) ---
-  const handleViewDocument = async (doc: EmployeeDocument, isSignedVersion: boolean = false) => {
-    // 1. Determine which URL to use
-    let urlToUse = isSignedVersion ? doc.signed_storage_url : doc.storage_url;
-    let title = isSignedVersion ? `(SIGNED) ${doc.document_name}` : doc.document_name;
-
+  // --- 3. Update Document View Handler ---
+  const handleViewDocument = (doc: EmployeeDocument, isSignedVersion: boolean = false) => {
+    
+    const urlToUse = isSignedVersion ? doc.signed_storage_url : doc.storage_url;
     if (!urlToUse) {
-      addToast({ type: 'error', title: 'File not found' });
+      addToast({ type: 'error', title: 'File not found', message: 'The document URL is missing.' });
       return;
     }
     
-    // 2. Check if it's a public URL or needs signing
-    if (urlToUse.includes('/public/')) {
-      // It's a public URL, but we still need to create a signed URL
-      // because the RLS policies are blocking anonymous access.
-      setViewingPdf(null); // Clear previous
-      setViewingPdfTitle(title);
-      try {
-        // Use the createDocumentSignedUrl function which correctly builds the file path
-        const signedUrl = await createDocumentSignedUrl(doc);
-        setViewingPdf(signedUrl);
-      } catch (err: any) {
-        addToast({ type: 'error', title: 'Could not load document', message: 'Failed to create signed URL.' });
-        setViewingPdfTitle('');
-      }
-    } else {
-      // It's not a public URL (this shouldn't happen with your current upload logic, but good to handle)
-      addToast({ type: 'error', title: 'Invalid URL', message: 'Cannot view this file.' });
+    // Check if path can be extracted
+    const storagePath = getStoragePathFromUrl(urlToUse);
+    if (!storagePath) {
+      addToast({ type: 'error', title: 'Invalid File Path', message: 'Could not determine the file path for download.' });
+      return;
     }
+    
+    setViewingDoc(doc);
+    setViewingDocIsSigned(isSignedVersion);
   };
   
   // --- Document Upload Handler (Unchanged) ---
@@ -467,7 +455,6 @@ const EmployeesTab: React.FC = () => {
   const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedAssignment) return;
     
-    // Optimistic update
     const oldAssignment = selectedAssignment;
     const oldList = assignments;
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
@@ -475,7 +462,6 @@ const EmployeesTab: React.FC = () => {
       prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
     );
     
-    // Real update
     const { error } = await updateAssignmentStatus(selectedAssignment.id, newStatus);
     if (error) {
       addToast({ type: 'error', title: 'Status Update Failed' });
@@ -493,7 +479,6 @@ const EmployeesTab: React.FC = () => {
       addToast({ type: 'error', title: 'Comment Failed to Send' });
     } else {
       addToast({ type: 'success', title: 'Comment Posted!' });
-      // Refetch details to show new comment
       handleAssignmentClick(selectedAssignment);
     }
   };
@@ -526,7 +511,7 @@ const EmployeesTab: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-      {/* --- Column 1: Employee List --- */}
+      {/* --- Column 1: Employee List (Unchanged) --- */}
       <Card className="lg:col-span-1 flex flex-col" title="Employees">
         <button
           onClick={handleAddNewEmployee}
@@ -567,7 +552,6 @@ const EmployeesTab: React.FC = () => {
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{employee.first_name} {employee.last_name}</p>
                     <p className="text-sm text-gray-500 truncate">{employee.position || 'No position'}</p>
-                    {/* NEW: Role Badge for quick status check */}
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full mt-0.5 ${
                         employee.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 
                         employee.role === 'blocked' ? 'bg-red-100 text-red-800' : 
@@ -577,7 +561,6 @@ const EmployeesTab: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                {/* NEW: Management Actions Dropdown/Menu for Mobile/Compact View (Optional alternative to a dedicated column) */}
                 <div className="flex space-x-2 flex-shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleEditEmployee(e, employee); }}
@@ -647,7 +630,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* Documents Card (CHANGED) */}
+              {/* Documents Card (Unchanged logic, but onClick handlers are updated) */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -714,7 +697,7 @@ const EmployeesTab: React.FC = () => {
                     </div>
                   )}
 
-                  {/* --- Upload Form Toggle Button --- */}
+                  {/* --- Upload Form (Unchanged) --- */}
                   <div className="border-t pt-4">
                     <button
                       onClick={() => setShowDocUpload(!showDocUpload)}
@@ -727,8 +710,6 @@ const EmployeesTab: React.FC = () => {
                       <ChevronDown size={18} className={`transition-transform ${showDocUpload ? 'rotate-180' : ''}`} />
                     </button>
                   </div>
-
-                  {/* --- Collapsible Upload Form --- */}
                   <AnimatePresence>
                     {showDocUpload && (
                       <motion.form
@@ -788,7 +769,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- ASSIGNMENTS CARD (Live) --- */}
+              {/* --- ASSIGNMENTS CARD (Unchanged) --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -836,11 +817,20 @@ const EmployeesTab: React.FC = () => {
         )}
       </div>
 
-      {/* --- Modals & Panels (Unchanged) --- */}
+      {/* --- 4. Update Modal Rendering --- */}
       <AnimatePresence>
-        {viewingPdf && <EnhancedPdfViewer pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
+        {viewingDoc && (
+          <EnhancedPdfViewer
+            title={viewingDocIsSigned ? `(SIGNED) ${viewingDoc.document_name}` : viewingDoc.document_name}
+            storagePath={getStoragePathFromUrl(
+              viewingDocIsSigned ? viewingDoc.signed_storage_url : viewingDoc.storage_url
+            )}
+            onClose={() => setViewingDoc(null)}
+          />
+        )}
       </AnimatePresence>
       
+      {/* --- Other Modals (Unchanged) --- */}
       <EmployeeEditModal
         isOpen={isModalOpen}
         onClose={() => {
