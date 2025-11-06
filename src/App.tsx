@@ -32,7 +32,7 @@ import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
 // --- NEW CLIENT PAGES ---
 import ProjectsPage from './pages/client/ProjectsPage';
-import ProjectDetailPage from './pages/client/ProjectDetailPage'; // --- ADDED
+import ProjectDetailPage from './pages/client/ProjectDetailPage';
 import MessagesPage from './pages/client/MessagesPage';
 import BillingPage from './pages/client/BillingPage';
 // --- (Old client pages removed) ---
@@ -64,7 +64,8 @@ function App() {
                 <Route element={<MainLayout><PublicLayout /></MainLayout>}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/rentals"..." />
+                  {/* --- THIS WAS THE BROKEN LINE --- */}
+                  <Route path="/rentals" element={<RentalsPage />} />
                   <Route path="/rentals/:slug" element={<RentalDetailPage />} />
                   <Route path="/cart" element={<CartPage />} />
                   <Route path="/success" element={<SuccessPage />} />
@@ -89,7 +90,7 @@ function App() {
                     
                     {/* --- UPDATED ROUTES --- */}
                     <Route path="/client/projects" element={<ProjectsPage />} />
-                    <Route path="/client/projects/:id" element={<ProjectDetailPage />} /> {/* --- ADDED */}
+                    <Route path="/client/projects/:id" element={<ProjectDetailPage />} />
                     <Route path="/client/messages" element={<MessagesPage />} />
                     <Route path="/client/billing" element={<BillingPage />} />
                     
