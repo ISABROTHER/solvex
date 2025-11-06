@@ -245,7 +245,7 @@ const EmployeesTab: React.FC = () => {
 
     const employeeName = `${employee.first_name} ${employee.last_name}`;
 
-    if (window.confirm(`WARNING: Are you absolutely sure you want to PERMANENTLY DELETE ${employeeName}? This action is irreversible and will delete their AUTH account and all associated PROFILE data.`)) {
+    if (window.confirm(`WARNING: Are you absolutely sure you want to PERMANENTLY DELETE ${employeeName}? This action is irreversible and will delete their AUTH account and all associated PROFILE data. This will FAIL if not run from an Edge Function.`)) {
       
       const { error } = await deleteEmployeeAccount(employee.id);
       
@@ -323,7 +323,7 @@ const EmployeesTab: React.FC = () => {
     setIsModalOpen(true);
   };
   
-  // --- Employee Save/Create Handler (Unchanged) ---
+  // --- *** UPDATED Employee Save/Create Handler *** ---
   const handleSaveEmployee = async (formData: Partial<Profile>, password?: string) => {
     setIsSavingProfile(true);
     const isNewUser = !formData.id;
@@ -337,15 +337,21 @@ const EmployeesTab: React.FC = () => {
            return;
         }
         
+        // --- FIX 1: Pass the 'employee' role in the options ---
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: formData.email,
           password: password,
+          options: {
+            data: {
+              role: 'employee' // This tells the handle_new_user trigger to set the role correctly
+            }
+          }
         });
         
-        let userId = authData.user?.id;
+        let userId = authData?.user?.id;
 
         if (authError && authError.message.includes('User already registered')) {
-            // --- THIS IS THE FIX ---
+            // --- This block handles users who already exist in AUTH ---
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -355,12 +361,13 @@ const EmployeesTab: React.FC = () => {
               .single();
 
             if (profileFindError || !existingProfile) {
-                addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please try again in 24 hours, or use a different email.' });
+                addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please contact support.' });
                 setIsSavingProfile(false);
                 return;
             }
 
             userId = existingProfile.id;
+            // --- FIX 2: Ensure this update also sets the role, just in case ---
             const { error: updateError } = await supabase
               .from('profiles')
               .update({ ...formData, role: 'employee' }) // Ensure role is set
@@ -370,25 +377,29 @@ const EmployeesTab: React.FC = () => {
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
 
         } else if (authError) {
+            // Other sign up error
             throw authError;
         
         } else {
             // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
             
-            const profileData = {
-              ...formData,
-              id: userId, // Link profile to auth user
-              role: 'employee',
-            };
+            // --- FIX 3: Change from INSERT to UPDATE ---
+            // The trigger (handle_new_user) has already created the profile row with the correct 'employee' role.
+            // We just need to UPDATE it with the full form data.
             
-            const { error: profileError } = await supabase
+            // Remove 'id' and 'email' from formData for the update payload
+            const { id, email, ...updateData } = formData;
+            
+            const { error: profileUpdateError } = await supabase
               .from('profiles')
-              .insert(profileData);
+              .update(updateData) // Update the profile with the rest of the form data
+              .eq('id', userId);
               
-            if (profileError) throw profileError;
+            if (profileUpdateError) throw profileUpdateError;
             
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
+            addToast({ type: 'warning', title: 'Admin Logout', message: 'You have been logged out. Please log in again.' });
         }
 
       } else {
@@ -404,15 +415,26 @@ const EmployeesTab: React.FC = () => {
       
       setIsModalOpen(false);
       setEditingEmployee(null);
-      fetchEmployeeList(); // Refetch employee list
+      
+      // Only fetch list if not creating a new user (which logs admin out)
+      if (!isNewUser) {
+        fetchEmployeeList(); 
+      }
       
     } catch (err: any) {
       console.error("Save employee error:", err);
-      addToast({ type: 'error', title: 'Save Failed', message: err.message });
+      // --- FIX 4: Check for duplicate key error specifically ---
+      if (err.message && err.message.includes('duplicate key value violates unique constraint "profiles_pkey"')) {
+          addToast({ type: 'error', title: 'Save Failed', message: 'A profile with this ID already exists. The trigger and app logic are conflicting.' });
+      } else {
+          addToast({ type: 'error', title: 'Save Failed', message: err.message });
+      }
     } finally {
       setIsSavingProfile(false);
     }
   };
+  // --- *** END OF UPDATED FUNCTION *** ---
+  
   
   // --- Document Handlers (Unchanged) ---
   const handleViewPdf = (url: string, title: string) => {
@@ -632,7 +654,7 @@ const EmployeesTab: React.FC = () => {
                     <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(employee); }}
                         className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                        title="Delete Employee"
+                        title="Delete Employee (Requires Edge Function)"
                     >
                         <Trash2 size={16} />
                     </button>
