@@ -60,6 +60,7 @@ const BillingPage: React.FC = () => {
 
       setIsLoading(true);
       setError(null);
+      // --- THIS WAS THE BROKEN BLOCK ---
       try {
         const { data, error: fetchError } = await supabase
           .from('invoices')
@@ -69,11 +70,12 @@ const BillingPage: React.FC = () => {
 
         if (fetchError) throw fetchError;
         setInvoices(data as Invoice[]);
-      } catch (err: any)
+      } catch (err: any) {
         setError(err.message);
       } finally {
         setIsLoading(false);
       }
+      // --- END OF BROKEN BLOCK ---
     };
 
     fetchInvoices();
