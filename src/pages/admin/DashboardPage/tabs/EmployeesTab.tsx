@@ -8,7 +8,7 @@ import {
   Loader2, 
   User, 
   Search, 
-  AlertCircle,  
+  AlertCircle, 
   Mail, 
   Phone, 
   MapPin, 
@@ -879,7 +879,7 @@ const EmployeesTab: React.FC = () => {
         onApproveDeliverable={handleApprove}
         onRequestEdits={handleRequestEdits}
       />
-    </div> 
+    </div>
   );
 };
 
