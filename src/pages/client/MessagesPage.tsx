@@ -5,6 +5,7 @@ import { useAuth } from '../../features/auth/AuthProvider';
 import { Loader2, Send, MessageSquare, XCircle, Package, ArrowLeft } from 'lucide-react';
 import { Database } from '../../lib/supabase/database.types';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { useToast } from '../../contexts/ToastContext'; // Import useToast
 
 // Define types
 type ClientProject = Database['public']['Tables']['client_projects']['Row'];
@@ -37,7 +38,8 @@ const ConversationList: React.FC<ConversationListProps> = ({ onSelectProject, se
     // TODO: Create RPC `get_projects_with_last_message`
     
     // Simple fetch:
-    const { data, error }_ = await supabase
+    // --- THIS WAS THE BROKEN LINE ---
+    const { data, error } = await supabase
       .from('client_projects')
       .select('*')
       .eq('client_id', user.id)
@@ -113,6 +115,7 @@ interface ChatWindowProps {
 
 const ChatWindow: React.FC<ChatWindowProps> = ({ projectId }) => {
   const { user, profile } = useAuth();
+  const { addToast } = useToast(); // Get addToast
   const [messages, setMessages] = useState<ProjectMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -227,8 +230,6 @@ const ChatWindow: React.FC<ChatWindowProps> = ({ projectId }) => {
     } finally {
       setIsSending(false);
     }
-    // Note: We don't manually add the message here.
-    // The real-time subscription will catch our own message and add it.
   };
   
   const getInitials = (firstName?: string, lastName?: string) => {
