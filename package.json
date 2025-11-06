@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "@hookform/resolvers": "^5.2.2",
     "@supabase/supabase-js": "^2.74.0",
     "@types/react-beautiful-dnd": "^13.1.8",
