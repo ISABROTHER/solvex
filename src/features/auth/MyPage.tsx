@@ -1,37 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthProvider'; // <-- CORRECTED IMPORT
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, Loader2 } from 'lucide-react';
+import { Home, Loader2, CheckCircle } from 'lucide-react'; // <-- ADDED CheckCircle
 import Alert from '../../components/Alert'; // Import Alert component
 
 const MyPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   // Get functions and state from AuthProvider via useAuth
-  const { clientLogin, adminLogin, login, isLoading, error: authError, setError: setAuthError } = useAuth();
+  const { clientLogin, adminLogin, login, signup, isLoading, error: authError, setError: setAuthError } = useAuth();
   // State for the active tab (client, admin, or employee)
   const [activeTab, setActiveTab] = useState<'client' | 'admin' | 'employee'>(location.state?.defaultTab || 'client');
+  // --- NEW: State for login vs signup ---
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   // State for form inputs
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // --- NEW: State for signup fields ---
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [signupSuccess, setSignupSuccess] = useState(false); // For "Check email" message
+  
+  // --- NEW: Get denied error from location state ---
+  const [deniedError, setDeniedError] = useState(location.state?.error || null);
 
    // Effect to clear any existing authentication errors when inputs change or tab switches
    useEffect(() => {
      setAuthError(null);
-   }, [email, password, activeTab, setAuthError]);
+     setDeniedError(null); // Clear denied error on switch
+   }, [email, password, activeTab, setAuthError, mode, firstName, lastName]);
 
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); // Prevent default form submission
-    setAuthError(null); // Clear previous errors before attempting login
-    let targetRole: 'client' | 'admin' | 'employee' = activeTab; // Role user is trying to log in as
+    setAuthError(null); // Clear previous errors
+    setDeniedError(null);
+    setSignupSuccess(false);
 
-    console.log(`Attempting login for ${targetRole} with email: ${email}`);
+    // --- SIGN UP LOGIC ---
+    if (mode === 'signup') {
+      if (!firstName || !lastName) {
+        setAuthError("First and Last name are required to sign up.");
+        return;
+      }
+      
+      const { success, error } = await signup(email, password, {
+        first_name: firstName,
+        last_name: lastName,
+      });
 
+      if (success) {
+        setSignupSuccess(true); // Show "Check your email"
+        setEmail('');
+        setPassword('');
+        setFirstName('');
+        setLastName('');
+      } else {
+        setAuthError(error || 'Sign up failed. Please try again.');
+      }
+      return; // Stop here for signup
+    }
+
+    // --- LOGIN LOGIC ---
     try {
-      // Call the appropriate login function from AuthProvider
-      // result will be { success: boolean, role: UserRole }
       let result;
+      const targetRole = activeTab;
+
+      console.log(`Attempting login for ${targetRole} with email: ${email}`);
 
       if (targetRole === 'client') {
         result = await clientLogin(email, password);
@@ -43,30 +78,26 @@ const MyPage: React.FC = () => {
 
       console.log("Login result:", result);
 
-      // Process the login result
-      if (result.success && result.role === targetRole) {
-        // SUCCESS: Login successful AND role matches the portal tab
-        console.log(`Login successful as ${targetRole}. Navigating...`);
-        const dashboardPath = targetRole === 'admin' ? '/admin' : targetRole === 'employee' ? '/employee/dashboard' : '/client';
-        navigate(dashboardPath); // Navigate to dashboard
-      } else if (result.success && result.role !== targetRole) {
-        // SUCCESS, BUT WRONG ROLE: Login credentials were valid, but the fetched role doesn't match
-        console.warn(`Login successful but role mismatch. Expected ${targetRole}, got ${result.role}`);
-        // Display specific error about role mismatch
-        // Use a more informative message if the role was null (profile fetch failed)
-        if (result.role === null) {
-            // Use the error already set by AuthProvider if available
-            setAuthError(authError || "Login successful, but failed to verify account role. Please contact support.");
-        } else {
-            setAuthError(`Login successful, but your account role ('${result.role}') does not grant access to the ${targetRole} portal.`);
+      // Process the login result (this logic is now handled by ClientRoute/AdminRoute)
+      if (result.success) {
+        // AuthProvider's onAuthStateChange will fire,
+        // and the protected routes will handle the redirect.
+        console.log(`Login successful as ${result.role}. Letting route handle redirect...`);
+        
+        // --- NEW: Manually navigate based on role ---
+        // ClientRoute/AdminRoute only work *after* this.
+        if (result.role === 'admin') {
+            navigate('/admin');
+        } else if (result.role === 'employee') {
+            navigate('/employee/dashboard');
+        } else if (result.role === 'client') {
+            // The ClientRoute will catch this and check approval status
+            navigate('/client');
         }
-        // DO NOT NAVIGATE
-      } else if (!result.success && authError) {
-          // FAILED with specific error from AuthProvider (e.g., "Invalid login credentials", "Profile not found")
+        
+      } else if (authError) {
           console.log("Login failed with error from AuthProvider:", authError);
-          // Error is already set by AuthProvider, Alert component will display it. No need to call setAuthError again.
-      } else if (!result.success) {
-         // FAILED without a specific error message (generic failure)
+      } else {
          console.warn("Login failed without specific error message.");
          setAuthError('Login failed. Please check your email and password.');
       }
@@ -76,43 +107,64 @@ const MyPage: React.FC = () => {
       console.error("Unexpected error during login submission:", err);
       setAuthError(err.message || 'An unexpected error occurred.');
     }
-    // isLoading state is managed by AuthProvider and reflected in UI via useAuth()
   };
 
   // Switch between client/admin/employee tabs
   const handleTabClick = (tab: 'client' | 'admin' | 'employee') => {
       setActiveTab(tab);
       setAuthError(null); // Clear errors on tab switch
+      setDeniedError(null);
+      setMode('login'); // Default to login when switching tabs
+      setSignupSuccess(false);
   };
+  
+  const isClientTab = activeTab === 'client';
 
   // --- Render Functions for Forms ---
   const renderClientForm = () => (
     <>
-      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">Client Login</h2>
-      <p className="text-center text-gray-500 mb-6 text-sm">Access your project portal.</p>
-      {/* Display Auth Error if present using Alert component */}
+      <h2 className="text-2xl font-bold text-center text-gray-800 mb-1">
+        {mode === 'login' ? 'Client Login' : 'Client Sign Up'}
+      </h2>
+      <p className="text-center text-gray-500 mb-6 text-sm">
+        {mode === 'login' ? 'Access your project portal.' : 'Create your client account.'}
+      </p>
+      
+      {/* Display Errors */}
       {authError && <Alert type="error" message={authError} className="mb-4" />}
+      {deniedError && <Alert type="error" title="Access Denied" message={deniedError} className="mb-4" />}
+      {signupSuccess && <Alert type="success" title="Check Your Email!" message="Please check your inbox to confirm your email address and activate your account." className="mb-4" />}
+
+      {/* --- NEW: Signup Fields --- */}
+      {mode === 'signup' && (
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="firstName">First Name *</label>
+            <input type="text" id="firstName" value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required disabled={isLoading} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="lastName">Last Name *</label>
+            <input type="text" id="lastName" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required disabled={isLoading} />
+          </div>
+        </div>
+      )}
+
       {/* Email Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="email">Email</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="email">Email *</label>
         <input type="email" id="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required autoComplete="email" disabled={isLoading} />
       </div>
       {/* Password Input */}
       <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="password">Password</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="password">Password *</label>
         <input type="password" id="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-[#FF5722]" required autoComplete="current-password" disabled={isLoading} />
       </div>
-      {/* Login Button */}
+      {/* Login/Signup Button */}
       <button type="submit" disabled={isLoading} className="w-full flex justify-center items-center gap-2 bg-[#FF5722] text-white font-bold py-2 px-4 rounded-md hover:bg-[#E64A19] transition-colors disabled:opacity-50 disabled:cursor-wait">
-        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Login'}
+        {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : (mode === 'login' ? 'Login' : 'Create Account')}
       </button>
-      {/* Request Access Link */}
-      <div className="text-center mt-6 border-t pt-6">
-        <p className="text-sm text-gray-600 mb-2">Don't have access yet?</p>
-        <Link to="/request-access" className={`w-full block bg-gray-100 text-gray-800 font-bold py-2 px-4 rounded-md hover:bg-gray-200 transition-colors ${isLoading ? 'pointer-events-none opacity-50' : ''}`}>
-          Request Access
-        </Link>
-      </div>
+
+      {/* --- REMOVED: Request Access Button --- */}
     </>
   );
 
@@ -186,6 +238,21 @@ const MyPage: React.FC = () => {
             {/* Render the correct form based on the active tab */}
             {activeTab === 'admin' ? renderAdminForm() : activeTab === 'employee' ? renderEmployeeForm() : renderClientForm()}
           </form>
+          
+          {/* --- NEW: Login/Signup Toggle for Client Tab --- */}
+          {isClientTab && !signupSuccess && (
+            <div className="text-center mt-6 border-t pt-6">
+              <button
+                onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+                className="text-sm text-gray-600 hover:text-[#FF5722] font-medium"
+                disabled={isLoading}
+              >
+                {mode === 'login'
+                  ? "Don't have an account? Sign Up"
+                  : 'Already have an account? Login'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
