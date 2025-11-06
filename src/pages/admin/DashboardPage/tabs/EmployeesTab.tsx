@@ -4,33 +4,7 @@ import { supabase } from '../../../../lib/supabase/client';
 import type { Database } from '../../../../lib/supabase/database.types';
 import { useAuth } from '../../../../features/auth/AuthProvider';
 import Card from '../components/Card';
-import { 
-  Loader2, 
-  User, 
-  Search, 
-  AlertCircle, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Calendar, 
-  Hash, 
-  FileText, 
-  DollarSign, 
-  Building, 
-  CreditCard,
-  Briefcase,
-  Eye,
-  Plus,
-  X,
-  Trash2,
-  Edit2,
-  PlusCircle,
-  UploadCloud,
-  ChevronDown,
-  AlertTriangle,
-  ShieldCheck,
-  List,
-} from 'lucide-react';
+import { Loader as Loader2, User, Search, CircleAlert as AlertCircle, Mail, Phone, MapPin, Calendar, Hash, FileText, DollarSign, Building, CreditCard, Briefcase, Eye, Plus, X, Trash2, CreditCard as Edit2, CirclePlus as PlusCircle, CloudUpload as UploadCloud, ChevronDown, TriangleAlert as AlertTriangle, ShieldCheck, List } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
