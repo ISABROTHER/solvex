@@ -53,8 +53,8 @@ import {
   deleteEmployeeDocument,
   createDocumentSignedUrl,
   EmployeeDocument, 
-  deleteEmployeeAccount, // <-- This is now the FIXED function
-  blockEmployeeAccess,   // <-- This is now the FIXED function
+  deleteEmployeeAccount, 
+  blockEmployeeAccess,
   // --- 3. IMPORT NEW V2 TYPES ---
   Assignment,
   FullAssignment,
@@ -217,7 +217,7 @@ const EmployeesTab: React.FC = () => {
     fetchAllAssignments();
   }, [fetchEmployeeList, fetchAllAssignments]);
 
-  // --- Management Handlers (NOW FIXED) ---
+  // --- Management Handlers (Unchanged) ---
   const handleBlockAccess = async (employee: Profile) => {
     if (employee.role === 'admin') {
       addToast({ type: 'error', title: 'Action Denied', message: 'Cannot block an Admin through this panel.' });
@@ -228,7 +228,6 @@ const EmployeesTab: React.FC = () => {
     const action = newRole === 'blocked' ? 'BLOCK' : 'UNBLOCK';
     
     if (window.confirm(`Are you sure you want to ${action} access for ${employee.first_name} ${employee.last_name}?`)) {
-      // --- THIS NOW CALLS THE EDGE FUNCTION ---
       const { error } = await blockEmployeeAccess(employee.id, newRole);
       if (error) {
         addToast({ type: 'error', title: 'Action Failed', message: error.message });
@@ -248,10 +247,8 @@ const EmployeesTab: React.FC = () => {
 
     const employeeName = `${employee.first_name} ${employee.last_name}`;
 
-    // --- UPDATED: Removed the "This will FAIL" warning ---
-    if (window.confirm(`WARNING: Are you absolutely sure you want to PERMANENTLY DELETE ${employeeName}? This action is irreversible and will delete their AUTH account and all associated PROFILE data.`)) {
+    if (window.confirm(`WARNING: Are you absolutely sure you want to PERMANENTLY DELETE ${employeeName}? This action is irreversible and will delete their AUTH account and all associated PROFILE data. This will FAIL if not run from an Edge Function.`)) {
       
-      // --- THIS NOW CALLS THE EDGE FUNCTION ---
       const { error } = await deleteEmployeeAccount(employee.id);
       
       if (error) {
@@ -394,42 +391,35 @@ const EmployeesTab: React.FC = () => {
         } else {
             // --- Sign Up was successful (this is the normal path) ---
             if (!userId) throw new Error('Could not get user ID after sign up.');
-            
+
             const { id, email, ...updateData } = formData;
-            
+
             const { error: profileUpdateError } = await supabase
               .from('profiles')
-              .update(updateData) 
+              .update(updateData)
               .eq('id', userId);
-              
+
             if (profileUpdateError) throw profileUpdateError;
-            
-            await supabase.auth.signOut(); // Logs out the new employee
-            
-            // --- 3. THE SILENT SESSION-RESTORE LOGIC ---
-            const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
-            
-            // --- 4. THIS IS THE FIX ---
-            // If restoreError exists, the onAuthStateChange listener will NOT fire.
-            // This means AuthProvider will never set isRestoring=false, hanging the app.
-            // We MUST set it to false manually if an error occurs here.
-            if (restoreError) {
-              console.error("Failed to restore admin session:", restoreError);
-              addToast({ type: 'error', title: 'Admin Session Failed!', message: 'Your session could not be restored. Please log in again.' });
-              setRestoring(false); // <-- Manually reset the flag
-              
-              // We must also exit the loading/saving states
-              setIsSavingProfile(false);
-              setIsModalOpen(false);
-              setEditingEmployee(null);
-              return; // Exit function
-            }
-            
+
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
+            // --- 3. THE SILENT SESSION-RESTORE LOGIC ---
+            await supabase.auth.signOut(); // Logs out the new employee
+
+            const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
+
+            if (restoreError) {
+              // Log the error for debugging but don't bother the user
+              console.error("Admin session restore failed:", restoreError);
+              setRestoring(false); // Reset on error
+            }
+
+            // Wait a bit for the session to be fully restored
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // --- 4. Now we can safely refresh the list ---
+            setRestoring(false); // Reset the flag
             fetchEmployeeList();
-            // On success, AuthProvider will call setRestoring(false) when the 
-            // onAuthStateChange event is processed. This is the normal flow.
         }
 
       } else {
@@ -449,7 +439,7 @@ const EmployeesTab: React.FC = () => {
       
     } catch (err: any) {
       console.error("Save employee error:", err);
-      setRestoring(false); // --- 5. RESET FLAG ON ANY THROWN ERROR ---
+      setRestoring(false); // --- 5. RESET FLAG ON ANY ERROR ---
       if (err.message && err.message.includes('duplicate key value violates unique constraint "profiles_pkey"')) {
           addToast({ type: 'error', title: 'Save Failed', message: 'A profile with this ID already exists. The trigger and app logic are conflicting.' });
       } else {
@@ -457,8 +447,7 @@ const EmployeesTab: React.FC = () => {
       }
     } finally {
       setIsSavingProfile(false);
-      // On success, AuthProvider handles resetting the flag.
-      // On error, the catch or if(restoreError) block handles it.
+      // AuthProvider handles resetting the flag on success
     }
   };
   // --- *** END OF UPDATED FUNCTION *** ---
@@ -682,7 +671,7 @@ const EmployeesTab: React.FC = () => {
                     <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteEmployee(employee); }}
                         className="p-2 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-                        title="Delete Employee" // <-- REMOVED "Requires Edge Function"
+                        title="Delete Employee (Requires Edge Function)"
                     >
                         <Trash2 size={16} />
                     </button>
