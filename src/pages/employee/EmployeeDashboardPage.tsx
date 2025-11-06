@@ -1,17 +1,27 @@
 // src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // Added useCallback
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
+  // --- 1. IMPORT NEW V2 ASSIGNMENT FUNCTIONS ---
+  getEmployeeAssignments,
+  getFullAssignmentDetailsV2,
+  updateAssignmentStatusV2,
+  postAssignmentCommentV2,
+  updateMilestoneStatus,
+  uploadAssignmentDeliverable,
+  updateAssignmentProgress,
+  createStorageSignedUrl,
+  // --- Other functions ---
   createDocumentSignedUrl,
-  updateAssignmentStatus,
-  postAssignmentComment,
-  getAssignmentsForEmployee,
   getEmployeeDocuments,
-  getFullAssignmentDetails,
   uploadSignedEmployeeDocument,
-  EmployeeDocument
+  EmployeeDocument,
+  // --- 3. IMPORT NEW V2 TYPES ---
+  Assignment,
+  FullAssignment,
+  AssignmentStatus
 } from '../../lib/supabase/operations';
 import {
   Loader2,
@@ -44,12 +54,13 @@ import {
   ArrowDownWideNarrow,
   Eye,
   FileUp,
-  Moon, // <-- NEW IMPORT
-  Sun,  // <-- NEW IMPORT
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
-import { useTheme } from '../../contexts/ThemeContext'; // <-- NEW IMPORT
-import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
+import { useTheme } from '../../contexts/ThemeContext';
+// --- 4. IMPORT NEW V2 PANEL ---
+import EmployeeAssignmentPanelV2 from './EmployeeAssignmentPanelV2';
 import EnhancedPdfViewer from '../../components/EnhancedPdfViewer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
@@ -94,6 +105,22 @@ const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType
     </div>
   </div>
 );
+
+// --- 5. NEW V2: Status Pill Component ---
+const getStatusPill = (status: AssignmentStatus) => {
+  switch (status) {
+    case 'Draft': return 'bg-gray-100 text-gray-600';
+    case 'Assigned': return 'bg-blue-100 text-blue-700';
+    case 'In_Progress': return 'bg-yellow-100 text-yellow-700';
+    case 'Submitted': return 'bg-purple-100 text-purple-700';
+    case 'Changes_Requested': return 'bg-red-100 text-red-700';
+    case 'Approved': return 'bg-green-100 text-green-700';
+    case 'Closed': return 'bg-gray-100 text-gray-600';
+    case 'Cancelled': return 'bg-red-100 text-red-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
+
 
 // --- Profile Edit Form Modal (Unchanged) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
@@ -247,7 +274,7 @@ const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
 };
 
 
-// --- NEW MODAL COMPONENT FOR SIGNED UPLOAD ---
+// --- MODAL COMPONENT FOR SIGNED UPLOAD (Unchanged) ---
 const SignedDocUploadModal = ({ isOpen, onClose, doc, onUpload, isSigning }) => {
   const [signedFile, setSignedFile] = useState<File | null>(null);
 
@@ -316,12 +343,14 @@ const SignedDocUploadModal = ({ isOpen, onClose, doc, onUpload, isSigning }) => 
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const { addToast } = useToast();
-  const { theme, toggleTheme } = useTheme(); // <-- NEW: Get theme context
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  const [assignments, setAssignments] = useState<any[]>([]);
+  // --- 6. NEW V2: State ---
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
-  const [selectedAssignment, setSelectedAssignment] = useState<any | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<FullAssignment | null>(null);
+  const [isPanelLoading, setIsPanelLoading] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -341,30 +370,21 @@ const EmployeeDashboardPage: React.FC = () => {
   const [isEmploymentDetailsOpen, setIsEmploymentDetailsOpen] = useState(false); 
   
   const [filterStatus, setFilterStatus] = useState('all_active'); 
-  const [sortType, setSortType] = useState('due_date'); // Default to due date
+  const [sortType, setSortType] = useState('due_date');
 
-  // --- NEW: Payday Countdown Logic ---
+  // --- Payday Countdown Logic (Unchanged) ---
   const calculatePayday = useCallback(() => {
     if (!profile?.payday) return 'N/A';
-    
-    // Extract number (e.g., "28th of month" -> 28)
     const dayOfMonth = parseInt(profile.payday.match(/\d+/)?.[0] || '0', 10);
-    if (dayOfMonth === 0) return 'N/A'; // Invalid payday string
-
+    if (dayOfMonth === 0) return 'N/A';
     const today = new Date();
     const todayDate = today.getDate();
-    
     let nextPayday = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
-
     if (todayDate > dayOfMonth) {
-      // Payday for this month has passed, get next month's
       nextPayday.setMonth(nextPayday.getMonth() + 1);
     }
-    
-    // Calculate diff
     const diffTime = nextPayday.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
     if (diffDays === 0) return 'Today!';
     if (diffDays === 1) return 'Tomorrow';
     return `${diffDays} days`;
@@ -375,27 +395,26 @@ const EmployeeDashboardPage: React.FC = () => {
   useEffect(() => {
       setDaysToPay(calculatePayday());
   }, [calculatePayday]);
-  // --- END: Payday Logic ---
 
-  // --- NEW: Assignment Stats Logic ---
+  // --- Assignment Stats Logic (Unchanged, uses new V2 status field) ---
   const assignmentStats = useMemo(() => {
     const total = assignments.length;
-    const pending = assignments.filter(a => a.status === 'pending' || a.status === 'overdue').length;
-    const inProgress = assignments.filter(a => a.status === 'in_progress').length;
-    const inReview = assignments.filter(a => a.status === 'pending_review').length;
-    const completed = assignments.filter(a => a.status === 'completed').length;
+    const pending = assignments.filter(a => a.status === 'Assigned' || a.status === 'Changes_Requested').length;
+    const inProgress = assignments.filter(a => a.status === 'In_Progress').length;
+    const inReview = assignments.filter(a => a.status === 'Submitted').length;
     
-    return { total, pending, inProgress, inReview, completed };
+    return { total, pending, inProgress, inReview };
   }, [assignments]);
-  // --- END: Stats Logic ---
 
+  // --- 7. NEW V2: Data Fetching ---
   const fetchAllData = async () => {
       if (!user) return;
       setLoading(true);
       setError(null);
       try {
+        // Now uses getEmployeeAssignments
         const [assignmentResult, documentResult] = await Promise.all([
-          getAssignmentsForEmployee(user.id),
+          getEmployeeAssignments(user.id),
           getEmployeeDocuments(user.id)
         ]);
 
@@ -471,9 +490,9 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
   
-  // --- REFACTORED: Assignment Filtering and Sorting Logic ---
+  // --- Assignment Filtering and Sorting Logic (Updated for V2) ---
   const filteredAssignments = useMemo(() => {
-    let result = assignments.filter(a => a.status !== 'completed');
+    let result = assignments.filter(a => a.status !== 'Closed' && a.status !== 'Approved' && a.status !== 'Cancelled');
     
     if (filterStatus !== 'all_active') {
         result = result.filter(a => a.status === filterStatus);
@@ -481,7 +500,7 @@ const EmployeeDashboardPage: React.FC = () => {
 
     return result.sort((a, b) => {
       const getPriority = (status) => {
-          const order = { 'overdue': 0, 'pending': 1, 'in_progress': 2, 'pending_review': 3 };
+          const order = { 'Changes_Requested': 0, 'Assigned': 1, 'In_Progress': 2, 'Submitted': 3 };
           return order[status] !== undefined ? order[status] : 10;
       };
       
@@ -490,8 +509,7 @@ const EmployeeDashboardPage: React.FC = () => {
       
       let primarySort = 0;
 
-      if (sortType === 'due_date' || sortType === 'month_year') { // Group Month/Year with Due Date
-          // Primary sort: Due Date (ASC: Closest date first)
+      if (sortType === 'due_date' || sortType === 'month_year') {
           primarySort = dateA - dateB; 
           if (primarySort !== 0) return primarySort;
       } 
@@ -503,7 +521,6 @@ const EmployeeDashboardPage: React.FC = () => {
           if (titleA > titleB) return 1;
       }
       
-      // Secondary sort (or primary if sortType is priority): Status Priority
       return getPriority(a.status) - getPriority(b.status);
     });
   }, [assignments, filterStatus, sortType]);
@@ -520,26 +537,24 @@ const EmployeeDashboardPage: React.FC = () => {
   const startAssignment = assignmentPage * ASSIGNMENTS_PER_PAGE + 1;
   const endAssignment = Math.min(startAssignment + ASSIGNMENTS_PER_PAGE - 1, totalAssignments);
 
-
   // Reset page when filters change
   useEffect(() => {
     setAssignmentPage(0);
   }, [filterStatus, sortType]);
 
 
-  // ... (rest of data fetching logic remains unchanged) ...
+  // --- Data fetching and Realtime (Updated for V2) ---
   useEffect(() => {
     if (!user) return;
 
-    // Use the new fetchAllData function
     fetchAllData();
 
     const channel = supabase
       .channel(`employee_dashboard:${user.id}`)
       .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'assignments' },
+        { event: '*', schema: 'public', table: 'assignments', filter: `assignee_id=eq.${user.id}` },
         async () => {
-          const result = await getAssignmentsForEmployee(user.id);
+          const result = await getEmployeeAssignments(user.id);
           if (!result.error) setAssignments(result.data || []);
         }
       )
@@ -558,47 +573,100 @@ const EmployeeDashboardPage: React.FC = () => {
 
   }, [user, addToast]);
   
-  const handleAssignmentClick = async (assignmentId: string) => {
-    if (selectedAssignment?.id === assignmentId) {
+  // --- 8. NEW V2: Panel Handlers ---
+  const handleAssignmentClick = async (assignment: Assignment) => {
+    if (selectedAssignment?.id === assignment.id) {
       setSelectedAssignment(null);
       return;
     }
 
-    setSelectedAssignment({ id: assignmentId, loading: true });
+    setIsPanelLoading(true);
+    setSelectedAssignment(null);
     try {
-      const { data, error } = await getFullAssignmentDetails(assignmentId);
+      const { data, error } = await getFullAssignmentDetailsV2(assignment.id);
       if (error) throw error;
       setSelectedAssignment(data);
     } catch (err: any) {
       addToast({ type: 'error', title: 'Error', message: 'Could not load assignment details.' });
       setSelectedAssignment(null);
+    } finally {
+      setIsPanelLoading(false);
     }
   };
 
-  const handleUpdateStatus = async (assignmentId: string, status: string) => {
-    setAssignments(prev =>
-      prev.map(a => a.id === assignmentId ? { ...a, status } : a)
-    );
-    if (selectedAssignment?.id === assignmentId) {
-      setSelectedAssignment(prev => prev ? { ...prev, status } : null);
-    }
-
-    const { error } = await updateAssignmentStatus(assignmentId, status);
-    if (error) {
-      addToast({ type: 'error', title: 'Update Failed', message: error.message });
-    } else {
-      addToast({ type: 'success', title: 'Status Updated!' });
-    }
-  };
-
-  const handlePostComment = async (assignmentId: string, content: string) => {
+  const handleUpdateStatus = async (assignmentId: string, newStatus: AssignmentStatus, payload: object = {}) => {
     if (!user) return;
-    const { error } = await postAssignmentComment(assignmentId, user.id, content);
+    
+    // Optimistic update
+    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
+    setAssignments(prev =>
+      prev.map(a => a.id === assignmentId ? { ...a, status: newStatus } : a)
+    );
+    
+    const { error } = await updateAssignmentStatusV2(assignmentId, newStatus, user.id, payload);
     if (error) {
-      addToast({ type: 'error', title: 'Comment Failed', message: error.message });
+      addToast({ type: 'error', title: 'Status Update Failed' });
+      fetchAllData(); // Revert
+    } else {
+      addToast({ type: 'info', title: 'Status Updated' });
+      if(selectedAssignment) {
+        const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+        setSelectedAssignment(data);
+      }
     }
   };
 
+  const handlePostComment = async (comment: string) => {
+    if (!selectedAssignment || !user) return;
+    const { error } = await postAssignmentCommentV2(selectedAssignment.id, user.id, comment);
+    if (error) {
+      addToast({ type: 'error', title: 'Comment Failed to Send' });
+    } else {
+      // Refresh details
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    }
+  };
+  
+  const handleUpdateMilestone = async (milestoneId: string, newStatus: string) => {
+    if (!user) return;
+    const { error } = await updateMilestoneStatus(milestoneId, newStatus, user.id);
+    if (error) {
+      addToast({ type: 'error', title: 'Milestone update failed' });
+    } else {
+      // Refresh details
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    }
+  };
+  
+  const handleUpdateProgress = async (progress: number) => {
+    if (!selectedAssignment || !user) return;
+    // Optimistic
+    setSelectedAssignment(prev => prev ? { ...prev, progress_value: progress } : null);
+    
+    const { error } = await updateAssignmentProgress(selectedAssignment.id, progress, user.id);
+    if (error) {
+      addToast({ type: 'error', title: 'Progress update failed' });
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    }
+  };
+  
+  const handleUploadDeliverable = async (file: File, label: string) => {
+    if (!selectedAssignment || !user) return;
+    try {
+      await uploadAssignmentDeliverable(selectedAssignment.id, file, label, user.id);
+      addToast({ type: 'success', title: 'File Uploaded!' });
+      // Refresh details
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Upload Failed', message: err.message });
+    }
+  };
+
+  // --- Document Handlers (Unchanged) ---
   const handleViewDocument = async (doc: EmployeeDocument) => {
     setViewingPdf(null);
     setViewingPdfTitle(doc.document_name);
@@ -615,12 +683,9 @@ const EmployeeDashboardPage: React.FC = () => {
     setIsSigning(true);
     try {
       const updatedDoc = await uploadSignedEmployeeDocument(doc, file);
-      
-      // Update local state
       setDocuments(prevDocs => 
         prevDocs.map(d => d.id === updatedDoc.id ? updatedDoc : d)
       );
-      
       addToast({ type: 'success', title: 'Upload Successful!', message: `${doc.document_name} has been signed.` });
       setUploadingSignedDoc(null);
     } catch (err: any) {
@@ -630,21 +695,6 @@ const EmployeeDashboardPage: React.FC = () => {
     }
   };
 
-  const handleSignDocument = async () => {
-    addToast({ type: 'info', title: 'Action Disabled', message: 'Document signing is currently disabled in the live demo.' });
-  };
-
-
-  const getStatusProps = (status: string) => {
-    switch (status) {
-      case 'completed': return { icon: CheckCircle, color: 'text-green-500', label: 'Completed' };
-      case 'in_progress': return { icon: Clock, color: 'text-blue-500', label: 'In Progress' };
-      case 'overdue': return { icon: AlertCircle, color: 'text-red-500', label: 'Overdue' };
-      case 'pending': return { icon: List, color: 'text-yellow-500', label: 'Pending' }; 
-      case 'pending_review': return { icon: AlertTriangle, color: 'text-purple-500', label: 'Pending Review' }; 
-      default: return { icon: List, color: 'text-yellow-500', label: status };
-    }
-  };
 
   // Loading skeleton (kept for completeness)
   const LoadingSkeleton = () => (
@@ -690,8 +740,7 @@ const EmployeeDashboardPage: React.FC = () => {
             <span className="hidden sm:inline">Back to Site</span>
           </Link>
           <div className="h-6 w-px bg-gray-200"></div> 
-
-          {/* --- NEW: DARK MODE TOGGLE --- */}
+          
           <button
             onClick={toggleTheme}
             className="p-2 rounded-full text-gray-500 hover:text-[#FF5722] hover:bg-gray-100 transition-colors"
@@ -699,7 +748,6 @@ const EmployeeDashboardPage: React.FC = () => {
           >
             {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
           </button>
-          {/* --- END: TOGGLE --- */}
 
           <button
             onClick={handleLogout}
@@ -740,10 +788,10 @@ const EmployeeDashboardPage: React.FC = () => {
           </div>
           {/* --- END: Hero Section --- */}
           
-          {/* --- NEW: At a Glance Stats --- */}
+          {/* --- At a Glance Stats (Updated for V2) --- */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <StatCard title="Total Assignments" value={assignmentStats.total} icon={List} color="text-gray-500" />
-            <StatCard title="Pending" value={assignmentStats.pending} icon={AlertCircle} color="text-red-500" />
+            <StatCard title="Total Tasks" value={assignmentStats.total} icon={List} color="text-gray-500" />
+            <StatCard title="Pending / Rework" value={assignmentStats.pending} icon={AlertCircle} color="text-red-500" />
             <StatCard title="In Progress" value={assignmentStats.inProgress} icon={Clock} color="text-blue-500" />
             <StatCard title="In Review" value={assignmentStats.inReview} icon={AlertTriangle} color="text-purple-500" />
           </div>
@@ -759,10 +807,10 @@ const EmployeeDashboardPage: React.FC = () => {
               <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-4">
                   <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-3 sm:mb-0">
-                    <List className="text-gray-500" /> Active Assignments ({filteredAssignments.length})
+                    <List className="text-gray-500" /> Active Tasks ({filteredAssignments.length})
                   </h2>
                   
-                  {/* --- Filter and Sort Controls --- */}
+                  {/* --- Filter and Sort Controls (Updated for V2) --- */}
                   <div className="flex space-x-3 items-center">
                       <div className="relative">
                           <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -772,10 +820,10 @@ const EmployeeDashboardPage: React.FC = () => {
                               className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
                           >
                               <option value="all_active">All Active</option>
-                              <option value="overdue">Overdue</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="pending">Pending</option>
-                              <option value="pending_review">Pending Review</option>
+                              <option value="Changes_Requested">Changes Requested</option>
+                              <option value="In_Progress">In Progress</option>
+                              <option value="Assigned">Assigned</option>
+                              <option value="Submitted">Submitted</option>
                           </select>
                           <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
                       </div>
@@ -788,7 +836,6 @@ const EmployeeDashboardPage: React.FC = () => {
                               className="appearance-none block w-full bg-white border border-gray-300 rounded-md py-2 pl-8 pr-8 text-sm text-gray-700 focus:outline-none focus:ring-[#FF5722] focus:border-[#FF5722]"
                           >
                               <option value="due_date">Sort by Date (Default)</option>
-                              <option value="month_year">Sort by Month/Year</option> 
                               <option value="title">Sort by Title</option>
                               <option value="priority">Sort by Status Priority</option>
                           </select>
@@ -813,19 +860,18 @@ const EmployeeDashboardPage: React.FC = () => {
                     <div className="space-y-3">
                       {/* Only render visible assignments */}
                       {visibleAssignments.map(assignment => {
-                        const { icon: Icon, color, label } = getStatusProps(assignment.status);
                         return (
                           <button
                             key={assignment.id}
-                            onClick={() => handleAssignmentClick(assignment.id)}
+                            onClick={() => handleAssignmentClick(assignment)}
                             className={`w-full p-4 bg-gray-50 rounded-lg text-left transition-all border ${
                               selectedAssignment?.id === assignment.id ? 'ring-2 ring-[#FF5722] border-[#FF5722]' : 'hover:bg-gray-100 border-gray-200'
                             }`}
                           >
                             <div className="flex justify-between items-center">
                               <span className="font-semibold text-gray-800">{assignment.title}</span>
-                              <span className={`flex items-center text-xs font-medium gap-1.5 px-3 py-1 rounded-full ${color.replace('text-', 'bg-').replace('500', '100')} ${color}`}>
-                                <Icon size={14} /> {label.replace("_", " ")}
+                              <span className={`flex items-center text-xs font-medium gap-1.5 px-3 py-1 rounded-full capitalize ${getStatusPill(assignment.status)}`}>
+                                {assignment.status.replace("_", " ")}
                               </span>
                             </div>
                             <p className="text-sm text-gray-500 mt-1">Due: {formatSimpleDate(assignment.due_date)}</p>
@@ -871,7 +917,7 @@ const EmployeeDashboardPage: React.FC = () => {
                 )}
               </section>
 
-              {/* Documents Section */}
+              {/* Documents Section (Unchanged) */}
               <section className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
                   <FileText className="text-gray-500" /> Important Documents
@@ -942,10 +988,8 @@ const EmployeeDashboardPage: React.FC = () => {
                 </div>
               </div>
               
-              {/* Employment Card (Collapsible on Mobile, Static on LG+) */}
+              {/* Employment Card (Unchanged) */}
               <div className="bg-white rounded-xl shadow-md border border-gray-200">
-                  
-                  {/* Header: Always visible, acts as toggle bar on mobile (<lg) */}
                   <button
                       onClick={() => setIsEmploymentDetailsOpen(!isEmploymentDetailsOpen)}
                       className="w-full flex justify-between items-center p-6 text-xl font-semibold text-gray-800"
@@ -953,8 +997,6 @@ const EmployeeDashboardPage: React.FC = () => {
                       aria-controls="employment-details-content"
                   >
                       <h2 className="flex items-center gap-2">Employment Details</h2>
-                      
-                      {/* Chevron icon only visible on screens smaller than LG */}
                       <motion.div
                           className="lg:hidden"
                           initial={false}
@@ -964,8 +1006,6 @@ const EmployeeDashboardPage: React.FC = () => {
                           <ChevronDown size={24} className="text-gray-500" />
                       </motion.div>
                   </button>
-
-                  {/* Collapsible Content */}
                   <AnimatePresence initial={false}>
                       {isEmploymentDetailsOpen || (
                           typeof window !== 'undefined' && window.innerWidth >= 1024
@@ -985,9 +1025,7 @@ const EmployeeDashboardPage: React.FC = () => {
                                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
                                   <InfoRow icon={Calendar} label="End Date" value={formatDate(profile.end_date)} />
                                   <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
-                                  {/* --- NEW PAYDAY COUNTDOWN --- */}
                                   <InfoRow icon={Clock} label="Next Payday" value={daysToPay} />
-                                  {/* --- END --- */}
                                   <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
                                   <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
                               </div>
@@ -1002,20 +1040,25 @@ const EmployeeDashboardPage: React.FC = () => {
         </div>
       </main>
 
-      {/* Assignment Detail Panel (kept) */}
-      <EmployeeAssignmentPanel
+      {/* --- 9. NEW V2: Assignment Detail Panel --- */}
+      <EmployeeAssignmentPanelV2
         assignment={selectedAssignment}
         onClose={() => setSelectedAssignment(null)}
         onPostComment={handlePostComment}
         onUpdateStatus={handleUpdateStatus}
+        onUpdateMilestone={handleUpdateMilestone}
+        onUpdateProgress={handleUpdateProgress}
+        onUploadDeliverable={handleUploadDeliverable}
+        getSignedUrl={createStorageSignedUrl}
+        isLoading={isPanelLoading}
       />
       
-      {/* Enhanced PDF Viewer Modal */}
+      {/* Enhanced PDF Viewer Modal (Unchanged) */}
       <AnimatePresence>
         {viewingPdf && <EnhancedPdfViewer pdfUrl={viewingPdf} title={viewingPdfTitle} onClose={() => setViewingPdf(null)} />}
       </AnimatePresence>
 
-      {/* Profile Edit Modal (New) */}
+      {/* Profile Edit Modal (Unchanged) */}
       <ProfileEditModal
         isOpen={isEditingProfile}
         onClose={() => setIsEditingProfile(false)}
@@ -1024,7 +1067,7 @@ const EmployeeDashboardPage: React.FC = () => {
         isSaving={isSavingProfile}
       />
       
-      {/* Signed Doc Upload Modal */}
+      {/* Signed Doc Upload Modal (Unchanged) */}
       <SignedDocUploadModal
         isOpen={!!uploadingSignedDoc}
         onClose={() => setUploadingSignedDoc(null)}
