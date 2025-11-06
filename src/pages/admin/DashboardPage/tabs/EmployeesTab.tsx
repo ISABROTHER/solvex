@@ -417,7 +417,7 @@ const EmployeesTab: React.FC = () => {
     setViewingPdfTitle(title);
   };
   
-  // --- Document Upload Handler (FIXED) ---
+  // --- Document Upload Handler (Unchanged) ---
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDocFile || !newDocName.trim() || !selectedEmployee) {
@@ -443,10 +443,7 @@ const EmployeesTab: React.FC = () => {
       setNewDocRequiresSigning(false);
       setShowDocUpload(false);
       
-    // --- THIS IS THE FIX ---
-    // Changed the "." to "{"
-    } catch (err: any) { 
-    // --- END OF FIX ---
+    } catch (err: any) {
       setDocUploadError(err.message);
       addToast({ type: 'error', title: 'Upload Failed', message: err.message });
     } finally {
