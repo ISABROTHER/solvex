@@ -2,10 +2,14 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 // --- CONTEXT & AUTH IMPORTS ---
-import { AuthProvider, ClientRoute, AdminRoute, EmployeeRoute, MyPage } from './features/auth';
+import { AuthProvider } from './features/auth'; // Cleaned import
 import { CartProvider } from './contexts/CartContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ToastProvider } from './contexts/ToastContext';
+
+// --- NEW AUTH COMPONENTS ---
+import RoleGate from './components/auth/RoleGate';
+import PendingPageGate from './components/auth/PendingPageGate';
 
 // --- LAYOUT IMPORTS ---
 import PublicLayout from './app/layout/PublicLayout';
@@ -25,17 +29,25 @@ import CartPage from './pages/CartPage';
 import SuccessPage from './pages/SuccessPage';
 import CareersPage from './pages/CareersPage';
 import ContactPage from './pages/ContactPage';
+
+// --- AUTH & STATUS PAGES ---
+import LoginPage from './pages/auth/LoginPage'; // New
+import SignupPage from './pages/auth/SignupPage'; // New
 import PendingAccessPage from './pages/PendingAccessPage';
-import AccessDeniedPage from './pages/AccessDeniedPage';
+import AccessDeniedPage from './pages/AccessDeniedPage'; // You may want to remove this or use it
+
+// --- ADMIN PAGES ---
 import DashboardPage from './pages/admin/DashboardPage';
+
+// --- CLIENT PAGES ---
 import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
-// --- NEW CLIENT PAGES ---
 import ProjectsPage from './pages/client/ProjectsPage';
 import ProjectDetailPage from './pages/client/ProjectDetailPage';
 import MessagesPage from './pages/client/MessagesPage';
 import BillingPage from './pages/client/BillingPage';
-// --- (Old client pages removed) ---
+
+// --- EMPLOYEE PAGES ---
 import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
 
 
@@ -55,16 +67,22 @@ function App() {
           <CartProvider>
             <ToastProvider>
               <Routes>
-                {/* Authentication Pages */}
-                <Route path="/my-page" element={<MyPage />} />
-                <Route path="/pending-access" element={<PendingAccessPage />} />
+                {/* New Authentication Pages */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                
+                {/* Status Pages */}
+                <Route path="/pending" element={
+                  <PendingPageGate>
+                    <PendingAccessPage />
+                  </PendingPageGate>
+                } />
                 <Route path="/access-denied" element={<AccessDeniedPage />} />
-
+                
                 {/* Public-Facing Pages */}
                 <Route element={<MainLayout><PublicLayout /></MainLayout>}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/services" element={<ServicesPage />} />
-                  {/* --- THIS WAS THE BROKEN LINE --- */}
                   <Route path="/rentals" element={<RentalsPage />} />
                   <Route path="/rentals/:slug" element={<RentalDetailPage />} />
                   <Route path="/cart" element={<CartPage />} />
@@ -73,37 +91,34 @@ function App() {
                   <Route path="/contact" element={<ContactPage />} />
                 </Route>
 
-                {/* Admin-Only Pages */}
-                <Route element={<AdminRoute />}>
-                  <Route element={<AdminLayout />}>
-                    <Route path="/admin" element={<DashboardPage />} />
-                    <Route path="/dashboard" element={<DashboardPage />} />
-                  </Route>
+                {/* Admin-Only Pages (Using RoleGate) */}
+                <Route element={<RoleGate expectedRole="admin"><AdminLayout /></RoleGate>}>
+                  <Route path="/admin" element={<DashboardPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  {/* Add other admin routes here */}
                 </Route>
 
-                {/* Client-Only Pages (Now checks for approval status) */}
-                <Route element={<ClientRoute />}>
-                  <Route element={<ClientLayout />}>
-                    <Route path="/client" element={<ClientDashboard />} />
-                    <Route path="/client/dashboard" element={<ClientDashboard />} />
-                    <Route path="/client/profile" element={<ProfilePage />} />
-                    
-                    {/* --- UPDATED ROUTES --- */}
-                    <Route path="/client/projects" element={<ProjectsPage />} />
-                    <Route path="/client/projects/:id" element={<ProjectDetailPage />} />
-                    <Route path="/client/messages" element={<MessagesPage />} />
-                    <Route path="/client/billing" element={<BillingPage />} />
-                    
-                    {/* --- REMOVED OLD REQUESTS ROUTES --- */}
-                    
-                  </Route>
+                {/* Client-Only Pages (Using RoleGate) */}
+                <Route element={<RoleGate expectedRole="client"><ClientLayout /></RoleGate>}>
+                  <Route path="/client" element={<ClientDashboard />} />
+                  <Route path="/client/dashboard" element={<ClientDashboard />} />
+                  <Route path="/client/profile" element={<ProfilePage />} />
+                  <Route path="/client/projects" element={<ProjectsPage />} />
+                  <Route path="/client/projects/:id" element={<ProjectDetailPage />} />
+                  <Route path="/client/messages" element={<MessagesPage />} />
+                  <Route path="/client/billing" element={<BillingPage />} />
                 </Route>
 
-                {/* Employee-Only Pages */}
-                <Route element={<EmployeeRoute />}>
-                  <Route path="/employee/dashboard" element={<EmployeeDashboardPage />} />
-                </Route>
+                {/* Employee-Only Pages (Using RoleGate) */}
+                {/* Note: No EmployeeLayout was defined in your App.tsx, so wrapping page directly */}
+                <Route path="/employee/dashboard" element={
+                  <RoleGate expectedRole="employee">
+                    <EmployeeDashboardPage />
+                  </RoleGate>
+                } />
 
+                {/* Removed /my-page and old /pending-access routes */}
+                
                 {/* Fallback Redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
