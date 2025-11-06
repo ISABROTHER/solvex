@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   ShieldCheck,
   List,
+  CheckCircle, // Added CheckCircle for signed documents
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
@@ -139,7 +140,8 @@ const getStatusPill = (status: AssignmentStatus) => {
 
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
-  const { user } = useAuth();
+  // --- 1. GET signOut FROM useAuth ---
+  const { user, signOut } = useAuth();
   const { addToast } = useToast();
   const [employees, setEmployees] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -399,7 +401,12 @@ const EmployeesTab: React.FC = () => {
             if (profileUpdateError) throw profileUpdateError;
             
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
-            addToast({ type: 'warning', title: 'Admin Logout', message: 'You have been logged out. Please log in again.' });
+            addToast({ type: 'info', title: 'Admin Logout', message: 'You will be logged out and returned to the home page.' });
+
+            // --- 2. CALL signOut ---
+            // This logs out the *new employee* session and, per your AuthProvider,
+            // will navigate you back to the HomePage ('/')
+            await signOut();
         }
 
       } else {
@@ -413,10 +420,11 @@ const EmployeesTab: React.FC = () => {
         addToast({ type: 'success', title: 'Employee Updated!' });
       }
       
+      // This code will now only run when *updating* an employee,
+      // because creating one calls signOut() and navigates away.
       setIsModalOpen(false);
       setEditingEmployee(null);
       
-      // Only fetch list if not creating a new user (which logs admin out)
       if (!isNewUser) {
         fetchEmployeeList(); 
       }
@@ -533,7 +541,7 @@ const EmployeesTab: React.FC = () => {
     // Optimistic update
     setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
     setAllAssignments(prev =>
-      prev.map(a => a.id === assignmentId ? { ...a, status: newStatus } : a)
+      prev.map(a => a.id === assignmentId ? { ...a, status: newNIL } : a)
     );
     
     const { error } = await updateAssignmentStatusV2(assignmentId, newStatus, user.id, payload);
