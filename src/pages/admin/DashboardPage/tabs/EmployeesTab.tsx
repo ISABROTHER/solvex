@@ -34,8 +34,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
-// --- 1. IMPORT NEW V2 COMPONENTS ---
-// --- FIX: Corrected file paths to remove "V2" suffix ---
+// --- 1. IMPORT V2 COMPONENTS (with correct paths) ---
 import CreateAssignmentModalV2 from '../components/CreateAssignmentModal'; 
 import AssignmentDetailPanelV2 from '../components/AssignmentDetailPanel';
 import {
@@ -46,7 +45,6 @@ import {
   updateAssignmentStatusV2,
   postAssignmentCommentV2,
   updateMilestoneStatus,
-  uploadAssignmentDeliverable,
   createStorageSignedUrl,
   // --- Other functions ---
   getEmployeeDocuments,
@@ -59,12 +57,10 @@ import {
   // --- 3. IMPORT NEW V2 TYPES ---
   Assignment,
   FullAssignment,
-  AssignmentStatus
+  AssignmentStatus,
+  Profile
 } from '../../../../lib/supabase/operations';
 
-
-// --- TYPE DEFINITIONS ---
-export type Profile = Database['public']['Tables']['profiles']['Row'];
 
 // --- Helper Function ---
 const formatDate = (dateString: string | null) => {
@@ -179,21 +175,26 @@ const EmployeesTab: React.FC = () => {
   const [isPanelLoading, setIsPanelLoading] = useState(false); // For detail panel
 
   const fetchEmployeeList = useCallback(async () => {
+    setLoading(true); // Set loading true at the start of this fetch
     setError(null);
     try {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
+        .select('*') // This query is now fixed by the new RLS policy
         .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
+        
       if (employeesError) throw employeesError;
+      
       setEmployees(employeesData || []);
     } catch (err: any) {
       console.error('Error fetching employee data:', err);
       setError('Failed to load employee data. Check RLS policies.');
+      addToast({ type: 'error', title: 'Loading Failed', message: err.message });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   // --- 6. NEW V2: Function to fetch all assignments ---
   const fetchAllAssignments = useCallback(async () => {
@@ -548,7 +549,7 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  if (loading && employees.length === 0) {
+  if (loading) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
   }
   
