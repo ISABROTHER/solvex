@@ -4,7 +4,8 @@ import { useAuth } from './AuthProvider'; // <-- CORRECTED IMPORT
 import { Loader2 } from 'lucide-react'; // For loading state
 
 const ClientRoute: React.FC = () => {
-  const { isAuthenticated, role, isLoading } = useAuth(); // Get role and loading status
+  // --- UPDATED: Get approval_status ---
+  const { isAuthenticated, role, isLoading, approval_status } = useAuth(); // Get role and loading status
   const location = useLocation();
 
   // Show loading indicator while session/role is being checked initially
@@ -17,20 +18,38 @@ const ClientRoute: React.FC = () => {
     );
   }
 
-  // Redirect to login if not authenticated OR if role is explicitly NOT 'client'
-  // Allow admin role as well? (Optional - adjust if admins should access client routes)
-  // const isAllowedRole = role === 'client' || role === 'admin'; // Example if admin can also access
-  const isAllowedRole = role === 'client'; // Strict client-only access
-
-  if (!isAuthenticated || !isAllowedRole) {
-    console.warn(`ClientRoute: Access DENIED. isAuthenticated: ${isAuthenticated}, Role: ${role}, isLoading: ${isLoading}`);
-    // Redirect them to the login page, passing the current location
+  // 1. Not logged in
+  if (!isAuthenticated) {
+    console.warn(`ClientRoute: Access DENIED. Not authenticated.`);
     return <Navigate to="/my-page" state={{ from: location, defaultTab: 'client' }} replace />;
   }
+  
+  // 2. Logged in, but not a client (e.g., admin, employee)
+  if (role !== 'client') {
+     console.warn(`ClientRoute: Access DENIED. Role is '${role}', not 'client'.`);
+     // Send them back to login, maybe they meant to use another portal
+     return <Navigate to="/my-page" state={{ from: location, defaultTab: role || 'client' }} replace />;
+  }
 
-  // If authenticated and role is allowed, render the child routes
-  console.log("ClientRoute: Access GRANTED.");
-  return <Outlet />;
+  // 3. Logged in as a client, check approval status
+  switch (approval_status) {
+    case 'approved':
+      console.log("ClientRoute: Access GRANTED. Status: 'approved'.");
+      return <Outlet />; // Render the client dashboard
+      
+    case 'pending':
+      console.log("ClientRoute: Access PENDING. Redirecting to /pending-access.");
+      return <Navigate to="/pending-access" replace />;
+      
+    case 'denied':
+      console.log("ClientRoute: Access DENIED. Redirecting to /access-denied.");
+      return <Navigate to="/access-denied" replace />;
+
+    default:
+      // This handles 'null' or any other unexpected status
+      console.warn(`ClientRoute: Unknown approval status: '${approval_status}'. Defaulting to pending.`);
+      return <Navigate to="/pending-access" replace />;
+  }
 };
 
 export default ClientRoute;
