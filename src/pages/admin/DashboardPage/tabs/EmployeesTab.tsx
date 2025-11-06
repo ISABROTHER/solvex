@@ -54,13 +54,13 @@ import {
   getEmployeeDocuments,
   uploadEmployeeDocument,
   deleteEmployeeDocument,
-  createDocumentSignedUrl,
+  createDocumentSignedUrl, // <-- This function is key
   EmployeeDocument, 
   // --- IMPORTED NEW MANAGEMENT FUNCTIONS ---
   deleteEmployeeAccount, 
   blockEmployeeAccess 
 } from '../../../../lib/supabase/operations';
-import EnhancedPdfViewer from '../../../../components/EnhancedPdfViewer';
+import EnhancedPdfViewer from '../../../../components/EnhancedPdfViewer'; // <-- Use the correct viewer
 
 
 // --- TYPE DEFINITIONS ---
@@ -92,8 +92,6 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
     </div>
   </div>
 );
-
-// --- REMOVED OLD PdfViewerModal ---
 
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
@@ -367,11 +365,35 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Document Handlers (Unchanged) ---
-  const handleViewPdf = (url: string, title: string) => {
-    // For admin, just use the public URL
-    setViewingPdf(url);
-    setViewingPdfTitle(title);
+  // --- Document Handlers (CHANGED) ---
+  const handleViewDocument = async (doc: EmployeeDocument, isSignedVersion: boolean = false) => {
+    // 1. Determine which URL to use
+    let urlToUse = isSignedVersion ? doc.signed_storage_url : doc.storage_url;
+    let title = isSignedVersion ? `(SIGNED) ${doc.document_name}` : doc.document_name;
+
+    if (!urlToUse) {
+      addToast({ type: 'error', title: 'File not found' });
+      return;
+    }
+    
+    // 2. Check if it's a public URL or needs signing
+    if (urlToUse.includes('/public/')) {
+      // It's a public URL, but we still need to create a signed URL
+      // because the RLS policies are blocking anonymous access.
+      setViewingPdf(null); // Clear previous
+      setViewingPdfTitle(title);
+      try {
+        // Use the createDocumentSignedUrl function which correctly builds the file path
+        const signedUrl = await createDocumentSignedUrl(doc);
+        setViewingPdf(signedUrl);
+      } catch (err: any) {
+        addToast({ type: 'error', title: 'Could not load document', message: 'Failed to create signed URL.' });
+        setViewingPdfTitle('');
+      }
+    } else {
+      // It's not a public URL (this shouldn't happen with your current upload logic, but good to handle)
+      addToast({ type: 'error', title: 'Invalid URL', message: 'Cannot view this file.' });
+    }
   };
   
   // --- Document Upload Handler (Unchanged) ---
@@ -625,7 +647,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
               
-              {/* Documents Card (Unchanged) */}
+              {/* Documents Card (CHANGED) */}
               <Card title="Documents">
                 <div className="space-y-4">
                   <h4 className="font-medium text-gray-800">Employee Documents</h4>
@@ -665,14 +687,14 @@ const EmployeesTab: React.FC = () => {
                               {/* Right Side: Buttons */}
                               <div className="flex gap-2 sm:flex-shrink-0 w-full sm:w-auto">
                                 <button
-                                  onClick={() => handleViewPdf(doc.storage_url, doc.document_name)}
+                                  onClick={() => handleViewDocument(doc, false)}
                                   className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 hover:bg-gray-100"
                                 >
                                   <Eye size={14} /> View
                                 </button>
                                 {isSigned && (
                                   <button
-                                    onClick={() => handleViewPdf(doc.signed_storage_url!, `(SIGNED) ${doc.document_name}`)}
+                                    onClick={() => handleViewDocument(doc, true)}
                                     className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100"
                                   >
                                     <Eye size={14} /> View Signed
