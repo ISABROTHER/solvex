@@ -6,7 +6,7 @@ import { useAuth } from '../../features/auth/AuthProvider';
 import { Loader2, XCircle, Package, ArrowRight, CheckCircle, Clock, Info } from 'lucide-react';
 import { Database } from '../../lib/supabase/database.types';
 
-type Project = Database['public']['Tables']['projects']['Row'];
+type ClientProject = Database['public']['Tables']['client_projects']['Row'];
 
 // --- New Status Icon Component ---
 const StatusIcon: React.FC<{ status: string | null }> = ({ status }) => {
@@ -24,7 +24,7 @@ const StatusIcon: React.FC<{ status: string | null }> = ({ status }) => {
 };
 
 // --- New Project Card Component ---
-const ProjectCard: React.FC<{ project: Project }> = ({ project }) => {
+const ProjectCard: React.FC<{ project: ClientProject }> = ({ project }) => {
   return (
     <Link
       to={`/client/projects/${project.id}`}
@@ -59,7 +59,7 @@ const ProjectCard: React.FC<{ project: Project }> = ({ project }) => {
 
 const ProjectsPage: React.FC = () => {
   const { user } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ClientProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,9 +70,9 @@ const ProjectsPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        // Fetch only projects linked to this client
+        // --- UPDATED: Fetch from 'client_projects' ---
         const { data, error: fetchError } = await supabase
-          .from('projects')
+          .from('client_projects') // <-- UPDATED
           .select('*')
           .eq('client_id', user.id)
           .order('created_at', { ascending: false });
@@ -137,7 +137,7 @@ const ProjectsPage: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900">My Projects</h1>
         <p className="text-lg text-gray-600 mt-1">
           View the status and tasks for all your active projects.
-        </p>
+        </DynaP>
       </header>
 
       {renderContent()}
