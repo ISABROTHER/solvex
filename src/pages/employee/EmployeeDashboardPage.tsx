@@ -1,6 +1,6 @@
 // src/pages/employee/EmployeeDashboardPage.tsx
 // @ts-nocheck
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'; // Added useCallback
 import { useAuth } from '../../features/auth/AuthProvider';
 import { supabase } from '../../lib/supabase/client';
 import {
@@ -44,8 +44,11 @@ import {
   ArrowDownWideNarrow,
   Eye,
   FileUp,
+  Moon, // <-- NEW IMPORT
+  Sun,  // <-- NEW IMPORT
 } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { useTheme } from '../../contexts/ThemeContext'; // <-- NEW IMPORT
 import EmployeeAssignmentPanel from './EmployeeAssignmentPanel';
 import EnhancedPdfViewer from '../../components/EnhancedPdfViewer';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -79,6 +82,18 @@ const InfoRow: React.FC<{ icon: React.ElementType; label: string; value: string 
   </div>
 );
 
+// --- NEW: Reusable Stat Card Component ---
+const StatCard: React.FC<{ title: string; value: number; icon: React.ElementType; color: string }> = ({ title, value, icon: Icon, color }) => (
+  <div className={`bg-white p-4 rounded-xl shadow-md border border-gray-200 flex items-center gap-4 ${color}`}>
+    <div className={`p-3 rounded-full ${color.replace('text-', 'bg-').replace('500', '100')}`}>
+      <Icon size={20} />
+    </div>
+    <div>
+      <p className="text-2xl font-bold text-gray-800">{value}</p>
+      <p className="text-sm font-medium text-gray-500">{title}</p>
+    </div>
+  </div>
+);
 
 // --- Profile Edit Form Modal (Unchanged) ---
 const ProfileEditModal = ({ isOpen, onClose, profile, onSave, isSaving }) => {
@@ -301,6 +316,7 @@ const SignedDocUploadModal = ({ isOpen, onClose, doc, onUpload, isSigning }) => 
 const EmployeeDashboardPage: React.FC = () => {
   const { user, profile, logout } = useAuth();
   const { addToast } = useToast();
+  const { theme, toggleTheme } = useTheme(); // <-- NEW: Get theme context
   const navigate = useNavigate();
 
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -326,6 +342,52 @@ const EmployeeDashboardPage: React.FC = () => {
   
   const [filterStatus, setFilterStatus] = useState('all_active'); 
   const [sortType, setSortType] = useState('due_date'); // Default to due date
+
+  // --- NEW: Payday Countdown Logic ---
+  const calculatePayday = useCallback(() => {
+    if (!profile?.payday) return 'N/A';
+    
+    // Extract number (e.g., "28th of month" -> 28)
+    const dayOfMonth = parseInt(profile.payday.match(/\d+/)?.[0] || '0', 10);
+    if (dayOfMonth === 0) return 'N/A'; // Invalid payday string
+
+    const today = new Date();
+    const todayDate = today.getDate();
+    
+    let nextPayday = new Date(today.getFullYear(), today.getMonth(), dayOfMonth);
+
+    if (todayDate > dayOfMonth) {
+      // Payday for this month has passed, get next month's
+      nextPayday.setMonth(nextPayday.getMonth() + 1);
+    }
+    
+    // Calculate diff
+    const diffTime = nextPayday.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Today!';
+    if (diffDays === 1) return 'Tomorrow';
+    return `${diffDays} days`;
+  }, [profile?.payday]);
+  
+  const [daysToPay, setDaysToPay] = useState(() => calculatePayday());
+
+  useEffect(() => {
+      setDaysToPay(calculatePayday());
+  }, [calculatePayday]);
+  // --- END: Payday Logic ---
+
+  // --- NEW: Assignment Stats Logic ---
+  const assignmentStats = useMemo(() => {
+    const total = assignments.length;
+    const pending = assignments.filter(a => a.status === 'pending' || a.status === 'overdue').length;
+    const inProgress = assignments.filter(a => a.status === 'in_progress').length;
+    const inReview = assignments.filter(a => a.status === 'pending_review').length;
+    const completed = assignments.filter(a => a.status === 'completed').length;
+    
+    return { total, pending, inProgress, inReview, completed };
+  }, [assignments]);
+  // --- END: Stats Logic ---
 
   const fetchAllData = async () => {
       if (!user) return;
@@ -628,6 +690,17 @@ const EmployeeDashboardPage: React.FC = () => {
             <span className="hidden sm:inline">Back to Site</span>
           </Link>
           <div className="h-6 w-px bg-gray-200"></div> 
+
+          {/* --- NEW: DARK MODE TOGGLE --- */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full text-gray-500 hover:text-[#FF5722] hover:bg-gray-100 transition-colors"
+            title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+          >
+            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          </button>
+          {/* --- END: TOGGLE --- */}
+
           <button
             onClick={handleLogout}
             className="text-gray-500 hover:text-red-600 flex items-center"
@@ -666,6 +739,15 @@ const EmployeeDashboardPage: React.FC = () => {
             </motion.div>
           </div>
           {/* --- END: Hero Section --- */}
+          
+          {/* --- NEW: At a Glance Stats --- */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <StatCard title="Total Assignments" value={assignmentStats.total} icon={List} color="text-gray-500" />
+            <StatCard title="Pending" value={assignmentStats.pending} icon={AlertCircle} color="text-red-500" />
+            <StatCard title="In Progress" value={assignmentStats.inProgress} icon={Clock} color="text-blue-500" />
+            <StatCard title="In Review" value={assignmentStats.inReview} icon={AlertTriangle} color="text-purple-500" />
+          </div>
+          {/* --- END: Stats --- */}
 
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -897,17 +979,18 @@ const EmployeeDashboardPage: React.FC = () => {
                               className="overflow-hidden"
                               id="employment-details-content"
                           >
-                              {/* --- MODIFICATION HERE --- */}
                               <div className="p-6 pt-0 space-y-2">
                                   <InfoRow icon={Briefcase} label="Position" value={profile.position} />
                                   <InfoRow icon={Hash} label="Employee #" value={profile.employee_number} />
                                   <InfoRow icon={Calendar} label="Start Date" value={formatDate(profile.start_date)} />
                                   <InfoRow icon={Calendar} label="End Date" value={formatDate(profile.end_date)} />
                                   <InfoRow icon={DollarSign} label="Salary" value={profile.salary ? `GHS ${profile.salary}` : 'N/A'} />
+                                  {/* --- NEW PAYDAY COUNTDOWN --- */}
+                                  <InfoRow icon={Clock} label="Next Payday" value={daysToPay} />
+                                  {/* --- END --- */}
                                   <InfoRow icon={Building} label="Bank" value={profile.bank_name} />
                                   <InfoRow icon={CreditCard} label="Account #" value={profile.bank_account} />
                               </div>
-                              {/* --- END MODIFICATION --- */}
                           </motion.div>
                       ) : null}
                   </AnimatePresence>
