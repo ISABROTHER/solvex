@@ -35,8 +35,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
 // --- 1. IMPORT NEW V2 COMPONENTS ---
-import CreateAssignmentModalV2 from '../components/CreateAssignmentModalV2'; 
-import AssignmentDetailPanelV2 from '../components/AssignmentDetailPanelV2';
+// --- FIX: Corrected file paths to remove "V2" suffix ---
+import CreateAssignmentModalV2 from '../components/CreateAssignmentModal'; 
+import AssignmentDetailPanelV2 from '../components/AssignmentDetailPanel';
 import {
   // --- 2. IMPORT NEW V2 ASSIGNMENT FUNCTIONS ---
   getAdminAssignments,
