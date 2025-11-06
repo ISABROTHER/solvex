@@ -2,7 +2,6 @@ import React, { createContext, useState, useEffect, ReactNode, useContext } from
 import { supabase } from '../../lib/supabase/client';
 import type { Session, User }  from '@supabase/supabase-js';
 
-// --- No changes to types ---
 type UserRole = 'client' | 'admin' | 'employee' | null;
 type ApprovalStatus = 'pending' | 'approved' | 'denied' | null;
 
@@ -37,7 +36,6 @@ interface AuthState {
 type LoginResult = { success: boolean; role: UserRole; approval_status: ApprovalStatus };
 type SignupResult = { success: boolean; error: string | null };
 
-// --- ADDED refreshUserProfile ---
 interface AuthContextType extends AuthState {
   clientLogin: (email: string, password: string) => Promise<LoginResult>;
   adminLogin: (email: string, password: string) => Promise<LoginResult>;
@@ -48,7 +46,7 @@ interface AuthContextType extends AuthState {
   setError: (error: string | null) => void;
   isRestoring: boolean;
   setRestoring: (isRestoring: boolean) => void;
-  refreshUserProfile: () => Promise<void>; // <-- NEW
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -74,12 +72,11 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  // --- NEW FUNCTION: fetchProfile ---
-  // We extract this logic so it can be re-used
   const fetchProfile = async (userId: string): Promise<{ profile: Profile | null, role: UserRole, status: ApprovalStatus, error: string | null }> => {
     try {
       console.log(`[fetchProfile] Attempting to fetch full profile for ID: ${userId}`);
-      const { data: profile, error: profileError, status }_ = await supabase
+      // --- THIS WAS THE BROKEN LINE ---
+      const { data: profile, error: profileError, status } = await supabase
         .from('profiles')
         .select('*, approval_status, reason_for_access')
         .eq('id', userId)
@@ -169,7 +166,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
   
-  // --- NEW: Function to manually refresh profile data ---
   const refreshUserProfile = async () => {
     console.log("[refreshUserProfile] Manual refresh triggered.");
     if (authState.user?.id) {
@@ -335,7 +331,6 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     }
   };
 
-  // --- ADDED refreshUserProfile to value ---
   const value: AuthContextType = {
     ...authState,
     clientLogin,
@@ -347,7 +342,7 @@ const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     setError,
     isRestoring,
     setRestoring: setIsRestoring,
-    refreshUserProfile, // <-- NEW
+    refreshUserProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
