@@ -27,7 +27,7 @@ import CareersPage from './pages/CareersPage';
 import ContactPage from './pages/ContactPage';
 import PendingAccessPage from './pages/PendingAccessPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
-import DashboardPage from './pages/admin/DashboardPage';
+import DashboardPage from './pages/admin';
 import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
 // --- NEW CLIENT PAGES ---

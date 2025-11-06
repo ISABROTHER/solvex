@@ -17,7 +17,7 @@ import {
   ClipboardList, // Import ClipboardList
   Clock, // Import Clock
 } from 'lucide-react';
-import { Tab } from '../index';
+import { Tab } from '../../index';
 import { supabase } from '../../../../lib/supabase/client'; // Import supabase
 
 interface SideBarProps {

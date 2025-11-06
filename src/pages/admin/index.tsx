@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { supabase } from '../../../lib/supabase/client';
-import SideBar from './components/SideBar';
-import Topbar from './components/Topbar';
+import { supabase } from '../../lib/supabase/client';
+import SideBar from './DashboardPage/components/SideBar';
+import Topbar from './DashboardPage/components/Topbar';
 
 // Import Tab Components
-import HomeTab from './tabs/HomeTab';
-import ClientsTab from './tabs/ClientsTab';
-import EmployeesTab from './tabs/EmployeesTab';
-import ProjectsTab from './tabs/ProjectsTab';
-import ServicesTab from './tabs/ServicesTab';
-import EquipmentTab from './tabs/EquipmentTab';
-import JobsTab from './tabs/JobsTab';
-import ApplicationsTab from './tabs/ApplicationsTab';
-// import AccessRequestsTab from './tabs/AccessRequestsTab'; // --- REMOVED
-import PartnersTab from './tabs/PartnersTab';
-import TeamsTab from './tabs/TeamsTab';
-import SettingsTab from './tabs/SettingsTab';
-import { Database } from '../../../lib/supabase/database.types';
+import HomeTab from './DashboardPage/tabs/HomeTab';
+import ClientsTab from './DashboardPage/tabs/ClientsTab';
+import EmployeesTab from './DashboardPage/tabs/EmployeesTab';
+import ProjectsTab from './DashboardPage/tabs/ProjectsTab';
+import ServicesTab from './DashboardPage/tabs/ServicesTab';
+import EquipmentTab from './DashboardPage/tabs/EquipmentTab';
+import JobsTab from './DashboardPage/tabs/JobsTab';
+import ApplicationsTab from './DashboardPage/tabs/ApplicationsTab';
+// import AccessRequestsTab from './DashboardPage/tabs/AccessRequestsTab'; // --- REMOVED
+import PartnersTab from './DashboardPage/tabs/PartnersTab';
+import TeamsTab from './DashboardPage/tabs/TeamsTab';
+import SettingsTab from './DashboardPage/tabs/SettingsTab';
+import { Database } from '../../lib/supabase/database.types';
 
 // Define the type for a tab
 export interface Tab {
