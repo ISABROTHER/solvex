@@ -32,12 +32,10 @@ import ClientDashboard from './pages/client/DashboardPage';
 import ProfilePage from './pages/client/ProfilePage';
 // --- NEW CLIENT PAGES ---
 import ProjectsPage from './pages/client/ProjectsPage';
+import ProjectDetailPage from './pages/client/ProjectDetailPage'; // --- ADDED
 import MessagesPage from './pages/client/MessagesPage';
 import BillingPage from './pages/client/BillingPage';
-// --- (Keep existing client pages) ---
-import RequestsPage from './pages/client/RequestsPage';
-import RequestDetailPage from './pages/client/RequestDetailPage';
-import NewRequestPage from './pages/client/NewRequestPage';
+// --- (Old client pages removed) ---
 import EmployeeDashboardPage from './pages/employee/EmployeeDashboardPage';
 
 
@@ -66,7 +64,7 @@ function App() {
                 <Route element={<MainLayout><PublicLayout /></MainLayout>}>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/services" element={<ServicesPage />} />
-                  <Route path="/rentals" element={<RentalsPage />} />
+                  <Route path="/rentals"..." />
                   <Route path="/rentals/:slug" element={<RentalDetailPage />} />
                   <Route path="/cart" element={<CartPage />} />
                   <Route path="/success" element={<SuccessPage />} />
@@ -89,17 +87,14 @@ function App() {
                     <Route path="/client/dashboard" element={<ClientDashboard />} />
                     <Route path="/client/profile" element={<ProfilePage />} />
                     
-                    {/* --- ADDED NEW ROUTES --- */}
+                    {/* --- UPDATED ROUTES --- */}
                     <Route path="/client/projects" element={<ProjectsPage />} />
+                    <Route path="/client/projects/:id" element={<ProjectDetailPage />} /> {/* --- ADDED */}
                     <Route path="/client/messages" element={<MessagesPage />} />
                     <Route path="/client/billing" element={<BillingPage />} />
                     
-                    {/* --- KEPT OLD ROUTES (Maybe 'My Projects' replaces 'Requests'?) --- */}
-                    {/* For now, we keep them. We can remove them later. */}
-                    <Route path="/client/requests" element={<RequestsPage />} />
-                    <Route path="/client/requests/new" element={<NewRequestPage />} />
-                    <Route path="/client/new" element={<NewRequestPage />} />
-                    <Route path="/client/requests/:id" element={<RequestDetailPage />} />
+                    {/* --- REMOVED OLD REQUESTS ROUTES --- */}
+                    
                   </Route>
                 </Route>
 
