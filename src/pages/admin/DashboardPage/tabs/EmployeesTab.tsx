@@ -403,18 +403,18 @@ const EmployeesTab: React.FC = () => {
             
             addToast({ type: 'success', title: 'Employee Created!', message: `${formData.email} can now log in.` });
 
-            // --- 3. THE SESSION-RESTORE LOGIC ---
+            // --- 3. THE SILENT SESSION-RESTORE LOGIC ---
             await supabase.auth.signOut(); // Logs out the new employee
             
             const { error: restoreError } = await supabase.auth.setSession(adminSession); // Restores your admin session
             
             if (restoreError) {
-              addToast({ type: 'error', title: 'Admin Session Failed!', message: 'Your session could not be restored. Please log in again.' });
-              throw restoreError;
+              // Log the error for debugging but don't bother the user
+              console.error("Admin session restore failed:", restoreError);
             }
             
-            addToast({ type: 'info', title: 'Session Restored', message: 'You are still logged in as admin.' });
-
+            // --- TOASTS REMOVED AS REQUESTED ---
+            
             // --- 4. Now we can safely refresh the list ---
             // The AuthProvider will setRestoring(false) when it processes the adminSession
             fetchEmployeeList();
