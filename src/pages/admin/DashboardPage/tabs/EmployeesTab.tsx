@@ -19,19 +19,12 @@ import {
   Building, 
   CreditCard,
   Briefcase,
-  ClipboardList,
   Eye,
-  FileDown,
-  Clock,
-  CheckCircle,
   Plus,
-  Send,
   X,
-  FileUp,
   Trash2,
   Edit2,
   PlusCircle,
-  Download,
   UploadCloud,
   ChevronDown,
   AlertTriangle,
@@ -41,32 +34,36 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '../../../../contexts/ToastContext';
 import EmployeeEditModal from '../components/EmployeeEditModal';
-import CreateAssignmentModal from '../components/CreateAssignmentModal'; 
-
-// --- 1. IMPORT NEW FUNCTIONS ---
-import AssignmentDetailPanel from '../components/AssignmentDetailPanel';
+// --- 1. IMPORT NEW V2 COMPONENTS ---
+import CreateAssignmentModalV2 from '../components/CreateAssignmentModalV2'; 
+import AssignmentDetailPanelV2 from '../components/AssignmentDetailPanelV2';
 import {
-  getAssignmentsForEmployee,
-  getFullAssignmentDetails,
-  createAssignment,
-  updateAssignmentStatus,
-  postAssignmentComment,
+  // --- 2. IMPORT NEW V2 ASSIGNMENT FUNCTIONS ---
+  getAdminAssignments,
+  getFullAssignmentDetailsV2,
+  createAssignmentV2,
+  updateAssignmentStatusV2,
+  postAssignmentCommentV2,
+  updateMilestoneStatus,
+  uploadAssignmentDeliverable,
+  createStorageSignedUrl,
+  // --- Other functions ---
   getEmployeeDocuments,
   uploadEmployeeDocument,
   deleteEmployeeDocument,
   createDocumentSignedUrl,
   EmployeeDocument, 
-  // --- IMPORTED NEW MANAGEMENT FUNCTIONS ---
   deleteEmployeeAccount, 
-  blockEmployeeAccess 
+  blockEmployeeAccess,
+  // --- 3. IMPORT NEW V2 TYPES ---
+  Assignment,
+  FullAssignment,
+  AssignmentStatus
 } from '../../../../lib/supabase/operations';
 
 
 // --- TYPE DEFINITIONS ---
 export type Profile = Database['public']['Tables']['profiles']['Row'];
-// --- 2. REMOVE MOCK DOCUMENTS ---
-// const MOCK_DOCUMENTS: EmployeeDocument[] = [ ... ];
-
 
 // --- Helper Function ---
 const formatDate = (dateString: string | null) => {
@@ -128,6 +125,21 @@ const PdfViewerModal: React.FC<{ pdfUrl: string; title: string; onClose: () => v
   </AnimatePresence>
 );
 
+// --- 4. NEW V2: Status Pill Component ---
+const getStatusPill = (status: AssignmentStatus) => {
+  switch (status) {
+    case 'Draft': return 'bg-gray-100 text-gray-600';
+    case 'Assigned': return 'bg-blue-100 text-blue-700';
+    case 'In_Progress': return 'bg-yellow-100 text-yellow-700';
+    case 'Submitted': return 'bg-purple-100 text-purple-700';
+    case 'Changes_Requested': return 'bg-red-100 text-red-700';
+    case 'Approved': return 'bg-green-100 text-green-700';
+    case 'Closed': return 'bg-gray-100 text-gray-600';
+    case 'Cancelled': return 'bg-red-100 text-red-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+};
+
 // --- MAIN TAB COMPONENT ---
 const EmployeesTab: React.FC = () => {
   const { user } = useAuth();
@@ -157,20 +169,19 @@ const EmployeesTab: React.FC = () => {
   const [viewingPdf, setViewingPdf] = useState<string | null>(null);
   const [viewingPdfTitle, setViewingPdfTitle] = useState<string>('');
 
-  // --- State for Assignments (Unchanged) ---
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  // --- 5. NEW V2: State for Assignments ---
+  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [isCreateAssignModalOpen, setIsCreateAssignModalOpen] = useState(false);
   const [isSavingAssignment, setIsSavingAssignment] = useState(false);
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
+  const [selectedAssignment, setSelectedAssignment] = useState<FullAssignment | null>(null);
+  const [isPanelLoading, setIsPanelLoading] = useState(false); // For detail panel
 
-  const fetchData = useCallback(async () => {
+  const fetchEmployeeList = useCallback(async () => {
     setError(null);
     try {
       const { data: employeesData, error: employeesError } = await supabase
         .from('profiles')
-        .select('*')
-        // --- FIX: Query for employee, admin, AND blocked users ---
         .in('role', ['employee', 'admin', 'blocked']) 
         .order('first_name');
       if (employeesError) throw employeesError;
@@ -182,12 +193,27 @@ const EmployeesTab: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  // --- 6. NEW V2: Function to fetch all assignments ---
+  const fetchAllAssignments = useCallback(async () => {
+    setLoadingAssignments(true);
+    try {
+      const { data, error } = await getAdminAssignments();
+      if (error) throw error;
+      setAllAssignments(data || []);
+    } catch (err: any) {
+      addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
+    } finally {
+      setLoadingAssignments(false);
+    }
+  }, [addToast]);
   
   useEffect(() => {
-    fetchData(); 
-  }, [fetchData]);
+    fetchEmployeeList(); 
+    fetchAllAssignments();
+  }, [fetchEmployeeList, fetchAllAssignments]);
 
-  // --- Management Handlers (NEW) ---
+  // --- Management Handlers (Unchanged) ---
   const handleBlockAccess = async (employee: Profile) => {
     if (employee.role === 'admin') {
       addToast({ type: 'error', title: 'Action Denied', message: 'Cannot block an Admin through this panel.' });
@@ -203,7 +229,7 @@ const EmployeesTab: React.FC = () => {
         addToast({ type: 'error', title: 'Action Failed', message: error.message });
       } else {
         addToast({ type: 'success', title: 'Access Updated', message: `${employee.first_name}'s access is now ${newRole}.` });
-        fetchData(); // Refresh employee list
+        fetchEmployeeList(); // Refresh employee list
         if (selectedEmployee?.id === employee.id) setSelectedEmployee(prev => prev ? { ...prev, role: newRole } : null);
       }
     }
@@ -228,25 +254,18 @@ const EmployeesTab: React.FC = () => {
         
         // Update UI
         if (selectedEmployee?.id === employee.id) setSelectedEmployee(null);
-        fetchData(); // Refresh list
+        fetchEmployeeList(); // Refresh list
       }
     }
   };
   // --- End Management Handlers ---
 
-  // --- Function to fetch assignments (Unchanged) ---
-  const fetchAssignments = async (profileId: string) => {
-    setLoadingAssignments(true);
-    try {
-      const { data, error } = await getAssignmentsForEmployee(profileId);
-      if (error) throw error;
-      setAssignments(data || []);
-    } catch (err: any) {
-      addToast({ type: 'error', title: 'Error Fetching Assignments', message: err.message });
-    } finally {
-      setLoadingAssignments(false);
-    }
-  };
+  // --- 7. NEW V2: Assignments for selected employee ---
+  const employeeAssignments = useMemo(() => {
+    if (!selectedEmployee) return [];
+    return allAssignments.filter(a => a.assignee_id === selectedEmployee.id);
+  }, [selectedEmployee, allAssignments]);
+  
   
   // --- Function to fetch documents (Unchanged) ---
   const fetchDocuments = async (profileId: string) => {
@@ -266,10 +285,9 @@ const EmployeesTab: React.FC = () => {
   useEffect(() => {
       if (selectedEmployee) {
           fetchDocuments(selectedEmployee.id);
-          fetchAssignments(selectedEmployee.id);
+          // V2: We no longer fetch assignments here, we filter the main list
       } else {
           setDocuments([]); 
-          setAssignments([]);
       }
       // Reset upload form
       setShowDocUpload(false);
@@ -326,7 +344,6 @@ const EmployeesTab: React.FC = () => {
 
         if (authError && authError.message.includes('User already registered')) {
             // --- THIS IS THE FIX ---
-            // The user exists in auth. Let's try to find their profile and update it.
             addToast({ type: 'warning', title: 'User Exists', message: 'User already in Auth. Trying to find and update their profile...' });
             
             const { data: existingProfile, error: profileFindError } = await supabase
@@ -336,15 +353,11 @@ const EmployeesTab: React.FC = () => {
               .single();
 
             if (profileFindError || !existingProfile) {
-                // This is the "ghost" user problem.
-                // Auth user is deleted, identity is not. Profile is (maybe) deleted.
-                // We can't create a new auth user, and we can't find a profile to update.
                 addToast({ type: 'error', title: 'Creation Failed', message: 'This email is in a "ghost" state. Please try again in 24 hours, or use a different email.' });
                 setIsSavingProfile(false);
                 return;
             }
 
-            // We found their profile. Let's update it.
             userId = existingProfile.id;
             const { error: updateError } = await supabase
               .from('profiles')
@@ -355,7 +368,6 @@ const EmployeesTab: React.FC = () => {
             addToast({ type: 'success', title: 'Employee Updated', message: 'This user already existed, and their profile has been updated.' });
 
         } else if (authError) {
-            // A different, unexpected auth error
             throw authError;
         
         } else {
@@ -390,7 +402,7 @@ const EmployeesTab: React.FC = () => {
       
       setIsModalOpen(false);
       setEditingEmployee(null);
-      fetchData(); // Refetch employee list
+      fetchEmployeeList(); // Refetch employee list
       
     } catch (err: any) {
       console.error("Save employee error:", err);
@@ -453,7 +465,7 @@ const EmployeesTab: React.FC = () => {
     }
   };
   
-  // --- Assignment Handlers (Unchanged) ---
+  // --- 8. NEW V2: Assignment Handlers ---
   const handleOpenCreateAssignment = () => {
     setIsCreateAssignModalOpen(true);
   };
@@ -462,71 +474,79 @@ const EmployeesTab: React.FC = () => {
     if (!user) return;
     setIsSavingAssignment(true);
     try {
-      const { error } = await createAssignment(data, user.id);
+      const { error } = await createAssignmentV2(data, user.id);
       if (error) throw error;
       
       addToast({ type: 'success', title: 'Assignment Created!' });
       setIsCreateAssignModalOpen(false);
-      if(selectedEmployee) fetchAssignments(selectedEmployee.id);
+      fetchAllAssignments(); // Refresh the main list
     } catch (err: any) {
       addToast({ type: 'error', title: 'Creation Failed', message: err.message });
     } finally {
       setIsSavingAssignment(false);
     }
   };
-  
-  const handleUpdateStatus = async (newStatus: string) => {
-    if (!selectedAssignment) return;
-    
-    // Optimistic update
-    const oldAssignment = selectedAssignment;
-    const oldList = assignments;
-    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
-    setAssignments(prev =>
-      prev.map(a => a.id === selectedAssignment.id ? { ...a, status: newStatus } : a)
-    );
-    
-    // Real update
-    const { error } = await updateAssignmentStatus(selectedAssignment.id, newStatus);
-    if (error) {
-      addToast({ type: 'error', title: 'Status Update Failed' });
-      setSelectedAssignment(oldAssignment); // Revert
-      setAssignments(oldList);
-    } else {
-      addToast({ type: 'info', title: 'Status Updated' });
-    }
-  };
-  
-  const handlePostComment = async (comment: string) => {
-    if (!selectedAssignment || !user) return;
-    const { error } = await postAssignmentComment(selectedAssignment.id, user.id, comment);
-    if (error) {
-      addToast({ type: 'error', title: 'Comment Failed to Send' });
-    } else {
-      addToast({ type: 'success', title: 'Comment Posted!' });
-      // Refetch details to show new comment
-      handleAssignmentClick(selectedAssignment);
-    }
-  };
 
+  // --- 9. NEW V2: Open Detail Panel ---
   const handleAssignmentClick = async (assignment: Assignment) => {
-    setLoadingAssignments(true);
+    setIsPanelLoading(true);
     setSelectedAssignment(null); // Clear first
     try {
-      const { data, error } = await getFullAssignmentDetails(assignment.id);
+      const { data, error } = await getFullAssignmentDetailsV2(assignment.id);
       if (error) throw error;
       setSelectedAssignment(data);
     } catch (err: any) {
       addToast({ type: 'error', title: 'Failed to load details', message: err.message });
     } finally {
-      setLoadingAssignments(false);
+      setIsPanelLoading(false);
+    }
+  };
+
+  // --- 10. NEW V2: All panel actions are passed down ---
+  const handleUpdateStatus = async (assignmentId: string, newStatus: AssignmentStatus, payload: object = {}) => {
+    if (!user) return;
+    
+    // Optimistic update
+    setSelectedAssignment(prev => prev ? { ...prev, status: newStatus } : null);
+    setAllAssignments(prev =>
+      prev.map(a => a.id === assignmentId ? { ...a, status: newStatus } : a)
+    );
+    
+    const { error } = await updateAssignmentStatusV2(assignmentId, newStatus, user.id, payload);
+    if (error) {
+      addToast({ type: 'error', title: 'Status Update Failed' });
+      fetchAllAssignments(); // Revert
+    } else {
+      addToast({ type: 'info', title: 'Status Updated' });
+      // Refresh details to get new event
+      if(selectedAssignment) handleAssignmentClick(selectedAssignment);
     }
   };
   
-  const handleApprove = (id: string) => addToast({ type: 'success', title: 'Deliverable Approved (Mock)!' });
-  const handleRequestEdits = (id: string, msg: string) => addToast({ type: 'info', title: 'Edits Requested (Mock)' });
-  
+  const handlePostComment = async (comment: string) => {
+    if (!selectedAssignment || !user) return;
+    const { error } = await postAssignmentCommentV2(selectedAssignment.id, user.id, comment);
+    if (error) {
+      addToast({ type: 'error', title: 'Comment Failed to Send' });
+    } else {
+      // Optimistic update in panel (or refetch)
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    }
+  };
 
+  const handleUpdateMilestone = async (milestoneId: string, newStatus: string) => {
+    if (!user) return;
+    const { error } = await updateMilestoneStatus(milestoneId, newStatus, user.id);
+    if (error) {
+      addToast({ type: 'error', title: 'Milestone update failed' });
+    } else {
+      // Refresh details
+      const { data } = await getFullAssignmentDetailsV2(selectedAssignment.id);
+      setSelectedAssignment(data);
+    }
+  };
+  
   if (loading && employees.length === 0) {
     return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-gray-400" /></div>;
   }
@@ -799,7 +819,7 @@ const EmployeesTab: React.FC = () => {
                 </div>
               </Card>
 
-              {/* --- ASSIGNMENTS CARD (Live) --- */}
+              {/* --- 11. NEW V2: ASSIGNMENTS CARD --- */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
@@ -816,11 +836,11 @@ const EmployeesTab: React.FC = () => {
                 
                 {loadingAssignments ? (
                   <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
-                ) : assignments.length === 0 ? (
+                ) : employeeAssignments.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">No assignments for this employee.</p>
                 ) : (
                   <div className="space-y-3">
-                    {assignments.map(assignment => (
+                    {employeeAssignments.map(assignment => (
                       <button 
                         key={assignment.id} 
                         onClick={() => handleAssignmentClick(assignment)}
@@ -830,11 +850,7 @@ const EmployeesTab: React.FC = () => {
                           <p className="font-medium text-gray-800 truncate">{assignment.title}</p>
                           <p className="text-sm text-gray-500">Due: {formatDate(assignment.due_date)}</p>
                         </div>
-                        <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${
-                          assignment.status === 'completed' ? 'bg-green-100 text-green-700' : 
-                          assignment.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 
-                          assignment.status === 'overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
-                        }`}>
+                        <span className={`px-3 py-1 text-xs font-semibold capitalize rounded-full ${getStatusPill(assignment.status)}`}>
                           {assignment.status.replace("_", " ")}
                         </span>
                       </button>
@@ -863,21 +879,23 @@ const EmployeesTab: React.FC = () => {
         isSaving={isSavingProfile}
       />
       
-      <CreateAssignmentModal
+      {/* --- 12. NEW V2: MODALS & PANELS --- */}
+      <CreateAssignmentModalV2
         isOpen={isCreateAssignModalOpen}
         onClose={() => setIsCreateAssignModalOpen(false)}
         onSave={handleSaveAssignment}
         isSaving={isSavingAssignment}
-        employees={employees} 
+        employees={employees.filter(e => e.role === 'employee')} // Only show active employees
       />
       
-      <AssignmentDetailPanel
+      <AssignmentDetailPanelV2
         assignment={selectedAssignment}
         onClose={() => setSelectedAssignment(null)}
         onUpdateStatus={handleUpdateStatus}
         onPostComment={handlePostComment}
-        onApproveDeliverable={handleApprove}
-        onRequestEdits={handleRequestEdits}
+        onUpdateMilestone={handleUpdateMilestone}
+        getSignedUrl={createStorageSignedUrl}
+        isLoading={isPanelLoading}
       />
     </div>
   );
