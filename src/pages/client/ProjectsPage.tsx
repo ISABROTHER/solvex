@@ -137,7 +137,8 @@ const ProjectsPage: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900">My Projects</h1>
         <p className="text-lg text-gray-600 mt-1">
           View the status and tasks for all your active projects.
-        </DynaP>
+        {/* --- THIS WAS THE BROKEN LINE --- */}
+        </p>
       </header>
 
       {renderContent()}
